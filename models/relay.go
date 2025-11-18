@@ -45,12 +45,22 @@ const (
 )
 
 type RelayNode struct {
-	Address       string     `json:"address" gorm:"index"`
-	Status        NodeStatus `json:"status" gorm:"index"`
-	GPUName       string     `json:"gpu_name" gorm:"index"`
-	GPUVram       uint64     `json:"gpu_vram" gorm:"index"`
-	QOSScore      uint64     `json:"qos_score"`
-	Version       string     `json:"version"`
-	InUseModelIDs []string   `json:"in_use_model_ids"`
-	ModelIDs      []string   `json:"model_ids"`
+	Address                string     `json:"address" gorm:"index"`
+	Status                 NodeStatus `json:"status" gorm:"index"`
+	GPUName                string     `json:"gpu_name" gorm:"index"`
+	GPUVram                uint64     `json:"gpu_vram" gorm:"index"`
+	Version                string     `json:"version"`
+	InUseModelIDs          []string   `json:"in_use_model_ids"`
+	ModelIDs               []string   `json:"model_ids"`
+	StakingScore           float64    `json:"staking_score"`
+	QOSScore               float64    `json:"qos_score"`
+	ProbWeight             float64    `json:"prob_weight"`
+	OperatorStaking        string     `json:"operator_staking"`
+	DelegatorStaking       string     `json:"delegator_staking"`
+	DelegatorShare         uint8      `json:"delegator_share"`
+	DelegatorsNum          int        `json:"delegators_num"`
+	TotalOperatorEarnings  string     `json:"total_operator_earnings"`
+	TodayOperatorEarnings  string     `json:"today_operator_earnings"`
+	TotalDelegatorEarnings string     `json:"total_delegator_earnings"`
+	TodayDelegatorEarnings string     `json:"today_delegator_earnings"`
 }
