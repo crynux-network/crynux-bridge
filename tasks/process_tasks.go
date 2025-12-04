@@ -63,11 +63,11 @@ func createTask(ctx context.Context, task *models.InferenceTask) error {
 	return nil
 }
 
-func getNode(ctx context.Context, address string) (*models.RelayNode, error) {
+func getNode(ctx context.Context, taskIDCommitment string) (*models.SelectedNodeInfo, error) {
 	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	return relay.GetNodeByAddress(callCtx, address)
+	return relay.GetTaskSelectedNodeInfo(callCtx, taskIDCommitment)
 }
 
 func validateSingleTask(ctx context.Context, task *models.InferenceTask) error {
@@ -386,7 +386,7 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 						}
 						time.Sleep(time.Second)
 					}
-					node, err := getNode(ctx, chainTask.SelectedNode)
+					node, err := getNode(ctx, task.TaskIDCommitment)
 					if err != nil {
 						return err
 					}
