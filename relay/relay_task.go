@@ -28,6 +28,10 @@ type GetTaskByCommitmentInput struct {
 	TaskIDCommitment string `json:"task_id_commitment"`
 }
 
+type GetSelectedNodeInfoInput struct {
+	TaskIDCommitment string `json:"task_id_commitment"`
+}
+
 type CreateTaskInput struct {
 	TaskIDCommitment string   `json:"task_id_commitment"`
 	MinVram          uint64   `json:"min_vram"`
@@ -455,4 +459,48 @@ func CheckQuotaForTaskCreator(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func GetTaskSelectedNodeInfo(ctx context.Context, taskIDCommitment string) (*models.SelectedNodeInfo, error) {
+	appConfig := config.GetConfig()
+
+	params := &GetSelectedNodeInfoInput{
+		TaskIDCommitment: taskIDCommitment,
+	}
+
+	timestamp, signature, err := SignData(params, appConfig.Blockchain.Account.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	reqUrl := appConfig.Relay.BaseURL + "/v1/inference_tasks/" + taskIDCommitment + "/selected_node"
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(timeoutCtx, "GET", reqUrl, nil)
+	query := req.URL.Query()
+	query.Add("timestamp", strconv.FormatInt(timestamp, 10))
+	query.Add("signature", signature)
+	req.URL.RawQuery = query.Encode()
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := processRelayResponse(resp); err != nil {
+		log.Errorf("Relay: get selected node info by taskIDCommitment %s error: %v", taskIDCommitment, err)
+		return nil, err
+	}
+
+	node := new(models.SelectedNodeInfo)
+	err = parseRelayResponseData(resp, node)
+	if err != nil {
+		log.Errorf("Relay: get selected node info by taskIDCommitment %s error: %v", taskIDCommitment, err)
+		return nil, err
+	}
+
+	log.Debugf("Relay: get task %s", taskIDCommitment)
+	return node, nil
 }
