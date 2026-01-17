@@ -33,6 +33,9 @@ type CompletionsRequest struct {
 	StreamOptions CReqStreamOptions `json:"stream_options" description:"No use for now. For compatibility with Openai."`
 	Suffix        string            `json:"suffix" description:"No use for now. For compatibility with Openai."`
 	User          string            `json:"user" description:"No use for now. For compatibility with Openai."`
+
+	// params for crynux task
+	MinVram *uint64 `json:"min_vram" description:"mimimal gpu vram required for the crynux task"`
 }
 
 func (cr *CompletionsRequest) SetDefaultValues() {

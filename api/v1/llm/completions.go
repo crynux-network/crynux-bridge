@@ -98,6 +98,9 @@ func Completions(c *gin.Context, in *CompletionsRequest) (*structs.CompletionsRe
 
 	taskType := models.TaskTypeLLM
 	minVram := uint64(24)
+	if in.MinVram != nil {
+		minVram = *in.MinVram
+	}
 	taskFee := uint64(6000000000)
 
 	task := &inference_tasks.TaskInput{
