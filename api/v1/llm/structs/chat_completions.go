@@ -40,10 +40,13 @@ type ChatCompletionsRequest struct {
 	ServiceTier       string                   `json:"service_tier" description:"No use for now. For compatibility with Openai."`
 	Store             bool                     `json:"store" description:"No use for now. For compatibility with Openai."`
 	StreamOptions     *CCReqStreamOptions      `json:"stream_options" description:"No use for now. For compatibility with Openai."`
-	ToolChoice        any 					   `json:"tool_choice" description:"Controls which (if any) tool is called by the model. "`
+	ToolChoice        any                      `json:"tool_choice" description:"Controls which (if any) tool is called by the model. "`
 	Tools             []map[string]interface{} `json:"tools" description:"A list of tools the model may call. "`
 	User              string                   `json:"user" description:"No use for now. For compatibility with Openai."`
 	WebSearchOptions  json.RawMessage          `json:"web_search_options" description:"No use for now. For compatibility with Openai."`
+
+	// params for crynux task
+	MinVram *uint64 `json:"min_vram" description:"mimimal gpu vram required for the crynux task"`
 }
 
 func (ccr *ChatCompletionsRequest) SetDefaultValues() {
@@ -132,12 +135,12 @@ type CCResChoice struct {
 }
 
 type CCResMessage struct {
-	Role        ChatCompletionsRole      `json:"role"`
-	Content     string                   `json:"content"`
-	Refusal     string                   `json:"refusal"`
-	Annotations []interface{}            `json:"annotations"`
-	Audio       interface{}              `json:"audio"`
-	ToolCalls   []ToolCall `json:"tool_calls,omitempty"`
+	Role        ChatCompletionsRole `json:"role"`
+	Content     string              `json:"content"`
+	Refusal     string              `json:"refusal"`
+	Annotations []interface{}       `json:"annotations"`
+	Audio       interface{}         `json:"audio"`
+	ToolCalls   []ToolCall          `json:"tool_calls,omitempty"`
 }
 
 type FunctionCall struct {
