@@ -608,7 +608,7 @@ func processClientTask(ctx context.Context, task *models.InferenceTask) error {
 	return nil
 }
 
-func getUnprocessedTasks(ctx context.Context, excludeTaskIDs []uint) ([]models.InferenceTask, error) {
+func getUnprocessedTasks(ctx context.Context) ([]models.InferenceTask, error) {
 	allTasks := make([]models.InferenceTask, 0)
 
 	limit := 100
@@ -625,11 +625,10 @@ func getUnprocessedTasks(ctx context.Context, excludeTaskIDs []uint) ([]models.I
 				Where("status != ?", models.InferenceTaskEndGroupRefund).
 				Where("status != ?", models.InferenceTaskResultDownloaded).
 				Where("status != ?", models.InferenceTaskNeedCancel).
-				Where("id not in (?)", excludeTaskIDs).
-				Find(&tasks).
 				Order("id ASC").
 				Limit(limit).
 				Offset(offset).
+				Find(&tasks).
 				Error
 			if err != nil {
 				return nil, err
@@ -648,47 +647,12 @@ func getUnprocessedTasks(ctx context.Context, excludeTaskIDs []uint) ([]models.I
 	return allTasks, nil
 }
 
-type syncUintSet struct {
-	mu sync.Mutex
-	set map[uint]struct{}
-}
-
-func NewSyncUintSet() *syncUintSet {
-	return &syncUintSet{
-		mu: sync.Mutex{},
-		set: map[uint]struct{}{},
-	}
-}
-
-func (s *syncUintSet) add(i uint) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.set[i] = struct{}{}
-}
-
-func (s *syncUintSet) remove(i uint) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.set, i)
-}
-
-func (s *syncUintSet) elements() []uint {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	elements := make([]uint, 0)
-	for key := range s.set {
-		elements = append(elements, key)
-	}
-	return elements
-}
-
 // Get unprocessed tasks from database and process them, each task is processed in a goroutine
 func ProcessTasks(ctx context.Context) {
-	set := NewSyncUintSet()
+	var d sync.Map
 	for {
 		// get unprocessed tasks from database
-		tasks, err := getUnprocessedTasks(ctx, set.elements())
+		tasks, err := getUnprocessedTasks(ctx)
 		if err != nil {
 			log.Errorf("ProcessTasks: cannot get unprocessed tasks: %v", err)
 			time.Sleep(time.Duration(mrand.Float64()*1000) * time.Millisecond)
@@ -698,9 +662,12 @@ func ProcessTasks(ctx context.Context) {
 		// process tasks one by one
 		if len(tasks) > 0 {
 			for _, task := range tasks {
-				set.add(task.ID)
+				_, loaded := d.LoadOrStore(task.ID, struct{}{})
+				if loaded {
+					continue
+				}
 				go func(ctx context.Context, task models.InferenceTask) {
-					defer set.remove(task.ID)
+					defer d.Delete(task.ID)
 					log.Infof("ProcessTasks: start processing task %d", task.ID)
 					var ctx1 context.Context
 					var cancel context.CancelFunc
@@ -748,6 +715,8 @@ func ProcessTasks(ctx context.Context) {
 									task.Status != models.InferenceTaskEndSuccess &&
 									task.Status != models.InferenceTaskResultDownloaded {
 									newTask.Status = models.InferenceTaskNeedCancel
+								} else if task.Status == models.InferenceTaskEndSuccess {
+									newTask.Status = models.InferenceTaskEndAborted
 								}
 								if newTask.Status != models.InferenceTaskPending {
 									for {
