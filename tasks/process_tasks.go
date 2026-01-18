@@ -437,7 +437,7 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 			if err != nil {
 				return err
 			}
-			if task.Status == models.InferenceTaskScoreReady || task.Status == models.InferenceTaskErrorReported || task.Status == models.InferenceTaskEndAborted{
+			if task.Status == models.InferenceTaskScoreReady || task.Status == models.InferenceTaskErrorReported || task.Status == models.InferenceTaskEndAborted {
 				break
 			}
 			time.Sleep(time.Second)
@@ -608,34 +608,87 @@ func processClientTask(ctx context.Context, task *models.InferenceTask) error {
 	return nil
 }
 
-// Get unprocessed tasks from database and process them, each task is processed in a goroutine
-func ProcessTasks(ctx context.Context) {
+func getUnprocessedTasks(ctx context.Context, excludeTaskIDs []uint) ([]models.InferenceTask, error) {
+	allTasks := make([]models.InferenceTask, 0)
+
 	limit := 100
-	lastID := uint(0)
+	offset := 0
 
 	for {
-		// get unprocessed tasks from database
-		tasks, err := func(ctx context.Context) ([]models.InferenceTask, error) {
-			var tasks []models.InferenceTask
-
+		tasks, err := func() ([]models.InferenceTask, error) {
 			dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			defer cancel()
+			tasks := make([]models.InferenceTask, 0)
 			err := config.GetDB().WithContext(dbCtx).Model(&models.InferenceTask{}).
 				Where("status != ?", models.InferenceTaskEndAborted).
 				Where("status != ?", models.InferenceTaskEndInvalidated).
 				Where("status != ?", models.InferenceTaskEndGroupRefund).
 				Where("status != ?", models.InferenceTaskResultDownloaded).
 				Where("status != ?", models.InferenceTaskNeedCancel).
-				Where("id > ?", lastID).
+				Where("id not in (?)", excludeTaskIDs).
 				Find(&tasks).
 				Order("id ASC").
 				Limit(limit).
+				Offset(offset).
 				Error
 			if err != nil {
 				return nil, err
 			}
 			return tasks, nil
-		}(ctx)
+		}()
+		if err != nil {
+			return nil, err
+		}
+		if len(tasks) == 0 {
+			break
+		}
+		allTasks = append(allTasks, tasks...)
+		offset += len(tasks)
+	}
+	return allTasks, nil
+}
+
+type syncUintSet struct {
+	mu sync.Mutex
+	set map[uint]struct{}
+}
+
+func NewSyncUintSet() *syncUintSet {
+	return &syncUintSet{
+		mu: sync.Mutex{},
+		set: map[uint]struct{}{},
+	}
+}
+
+func (s *syncUintSet) add(i uint) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.set[i] = struct{}{}
+}
+
+func (s *syncUintSet) remove(i uint) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.set, i)
+}
+
+func (s *syncUintSet) elements() []uint {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	elements := make([]uint, 0)
+	for key := range s.set {
+		elements = append(elements, key)
+	}
+	return elements
+}
+
+// Get unprocessed tasks from database and process them, each task is processed in a goroutine
+func ProcessTasks(ctx context.Context) {
+	set := NewSyncUintSet()
+	for {
+		// get unprocessed tasks from database
+		tasks, err := getUnprocessedTasks(ctx, set.elements())
 		if err != nil {
 			log.Errorf("ProcessTasks: cannot get unprocessed tasks: %v", err)
 			time.Sleep(time.Duration(mrand.Float64()*1000) * time.Millisecond)
@@ -644,10 +697,10 @@ func ProcessTasks(ctx context.Context) {
 
 		// process tasks one by one
 		if len(tasks) > 0 {
-			lastID = tasks[len(tasks)-1].ID
-
 			for _, task := range tasks {
+				set.add(task.ID)
 				go func(ctx context.Context, task models.InferenceTask) {
+					defer set.remove(task.ID)
 					log.Infof("ProcessTasks: start processing task %d", task.ID)
 					var ctx1 context.Context
 					var cancel context.CancelFunc
@@ -661,7 +714,7 @@ func ProcessTasks(ctx context.Context) {
 						}
 						timeout *= 60
 					}
-					duration := time.Duration(timeout) * time.Second + 3 * time.Minute // additional 3 minutes for waiting task to start
+					duration := time.Duration(timeout)*time.Second + 3*time.Minute // additional 3 minutes for waiting task to start
 					deadline := task.CreatedAt.Add(duration)
 					ctx1, cancel = context.WithDeadline(ctx, deadline)
 					defer cancel()
