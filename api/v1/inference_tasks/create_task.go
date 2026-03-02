@@ -91,7 +91,6 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 		}
 	}
 
-
 	result, err := models.ValidateTaskArgsJsonStr(in.TaskArgs, taskType)
 	if err != nil {
 		return nil, response.NewExceptionResponse(err)
@@ -99,6 +98,12 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 
 	if result != nil {
 		return nil, response.NewValidationErrorResponse("task_args", result.Error())
+	}
+
+	if taskType == models.TaskTypeLLM {
+		if err := models.ValidateGPTTaskArgsContentJSON(in.TaskArgs); err != nil {
+			return nil, response.NewValidationErrorResponse("task_args", err.Error())
+		}
 	}
 
 	var minVram uint64
@@ -214,6 +219,6 @@ func CreateTask(c *gin.Context, in *TaskInput) (*TaskResponse, error) {
 	if !allowed {
 		return nil, response.NewValidationErrorResponse("rate_limit", fmt.Sprintf("rate limit exceeded, please wait %.2f seconds", waitTime))
 	}
-	
+
 	return DoCreateTask(ctx, in)
 }

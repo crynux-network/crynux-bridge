@@ -28,7 +28,7 @@ type parsedLlmToolCallArgs struct {
 
 type ChatCompletionsRequest struct {
 	structs.ChatCompletionsRequest
-	Authorization string `header:"Authorization" validate:"required" description:"API key"`
+	Authorization string  `header:"Authorization" validate:"required" description:"API key"`
 	Timeout       *uint64 `json:"timeout,omitempty" description:"Task timeout" validate:"omitempty"`
 }
 
@@ -56,7 +56,11 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (*structs.ChatC
 
 	messages := make([]models.Message, len(in.Messages))
 	for i, m := range in.Messages {
-		messages[i] = utils.CCReqMessageToMessage(m)
+		convertedMessage, err := utils.CCReqMessageToMessage(m)
+		if err != nil {
+			return nil, response.NewValidationErrorResponse("messages", fmt.Sprintf("messages[%d].content: %v", i, err))
+		}
+		messages[i] = convertedMessage
 	}
 
 	generationConfig := &models.GPTGenerationConfig{
@@ -133,9 +137,10 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (*structs.ChatC
 	choices := make([]structs.CCResChoice, len(gptTaskResponse.Choices))
 	for i, choice := range gptTaskResponse.Choices {
 
-		fmt.Println("choice.Message.Content", choice.Message.Content)
+		choiceMessageContent := utils.MessageContentToString(choice.Message.Content)
+		fmt.Println("choice.Message.Content", choiceMessageContent)
 
-		matches := toolCallRegex.FindStringSubmatch(choice.Message.Content)
+		matches := toolCallRegex.FindStringSubmatch(choiceMessageContent)
 		if len(matches) > 1 {
 			potentialJsonString := matches[1]
 			var parsedArgs parsedLlmToolCallArgs

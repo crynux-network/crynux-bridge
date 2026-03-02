@@ -10,20 +10,16 @@ More specifically, the Crynux Bridge:
 
 * Provides simpler APIs to the application to execute tasks using only the task parameters(no blockchain transactions or signatures).
 
-Check out this simple webpage that lets users create images from text prompts. Tasks are sent to the Crynux Bridge API, and the generated image is returned:
-
-[Image Generator Demo on Codepen](https://codepen.io/Luke-Weber/pen/ExBqGrK)
-
 To deploy an instance of the Crynux Bridge and connect your application to it, please follow the tutorial below:
 
-[Deploy Crynux Bridge for Applications](https://docs.crynux.ai/application-development/crynux-bridge)
+[Deploy Crynux Bridge for Applications](https://docs.crynux.io/application-development/crynux-bridge)
 
 ## Build the Docker image from the source code
 
 1. Clone the project
 
 ```shell
-# git clone https://github.com/crynux-ai/crynux-bridge.git
+# git clone https://github.com/crynux-network/crynux-bridge.git
 ```
 
 2. Go to the root folder of the project
@@ -35,7 +31,7 @@ To deploy an instance of the Crynux Bridge and connect your application to it, p
 3. Build the Docker image
 
 ```shell
-# docker build -t crynux-bridge:dev -f .\build\crynux_bridge.Dockerfile . 
+# docker build -t crynux-bridge:dev -f .\build\crynux_bridge.Dockerfile .
 ```
 
 4. Start the container

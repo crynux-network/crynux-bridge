@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Direct GPT Task VLM Example</title>
+  </head>
+  <body>
+    <script>
+      const BRIDGE_ENDPOINT = "https://bridge.crynux.ai";
+      const CLIENT_ID = "replace-with-your-client-id";
+
+      // This direct endpoint expects raw GPT task blocks:
+      // { type: "text", text: "..." } and { type: "image", base64: "..." }.
+      async function createDirectVLMTask(imageBase64Payload) {
+        const requestBody = {
+          client_id: CLIENT_ID,
+          task_type: 1, // 1 = LLM
+          task_args: JSON.stringify({
+            model: "Qwen/Qwen2.5-VL-7B-Instruct",
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: "Describe the image in one sentence." },
+                  { type: "image", base64: imageBase64Payload },
+                ],
+              },
+            ],
+            generation_config: {
+              max_new_tokens: 128,
+              do_sample: true,
+              temperature: 0.7,
+            },
+          }),
+        };
+
+        const res = await fetch(`${BRIDGE_ENDPOINT}/v1/inference_tasks`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Create task failed: ${res.status} ${await res.text()}`);
+        }
+        return await res.json();
+      }
+
+      console.log("Use createDirectVLMTask(base64Payload) in browser console.");
+    </script>
+  </body>
+</html>

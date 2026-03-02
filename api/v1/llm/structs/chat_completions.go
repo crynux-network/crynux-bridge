@@ -1,6 +1,9 @@
 package structs
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 /* Request */
 
@@ -58,12 +61,59 @@ func (ccr *ChatCompletionsRequest) SetDefaultValues() {
 // Chat Completions Request Message
 type CCReqMessage struct {
 	Role       ChatCompletionsRole    `json:"role" validate:"required"`
-	Content    string                 `json:"content" validate:"required"`
+	Content    *CCReqMessageContent   `json:"content" validate:"required"`
 	Name       string                 `json:"name"`
 	Audio      *CCReqMessageAudio     `json:"audio"`
 	Refusal    string                 `json:"refusal"`
 	ToolCalls  []CCReqMessageToolCall `json:"tool_calls"`
 	ToolCallID string                 `json:"tool_call_id"`
+}
+
+// CCReqMessageContent supports OpenAI-compatible union type:
+// - string
+// - array of content parts (text / image_url)
+type CCReqMessageContent struct {
+	Text  *string
+	Parts []CCReqMessageContentPart
+}
+
+func (c *CCReqMessageContent) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		c.Text = nil
+		c.Parts = nil
+		return nil
+	}
+
+	if len(data) == 0 {
+		return fmt.Errorf("content cannot be empty")
+	}
+
+	var strContent string
+	if err := json.Unmarshal(data, &strContent); err == nil {
+		c.Text = &strContent
+		c.Parts = nil
+		return nil
+	}
+
+	var partContent []CCReqMessageContentPart
+	if err := json.Unmarshal(data, &partContent); err == nil {
+		c.Text = nil
+		c.Parts = partContent
+		return nil
+	}
+
+	return fmt.Errorf("content must be a string or an array of content parts")
+}
+
+type CCReqMessageContentPart struct {
+	Type     string                `json:"type" validate:"required"`
+	Text     string                `json:"text,omitempty"`
+	ImageURL *CCReqMessageImageURL `json:"image_url,omitempty"`
+}
+
+type CCReqMessageImageURL struct {
+	URL    string `json:"url" validate:"required"`
+	Detail string `json:"detail,omitempty"`
 }
 
 type ChatCompletionsRole string

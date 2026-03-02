@@ -3,6 +3,10 @@ package utils
 import (
 	"crynux_bridge/api/v1/llm/structs"
 	"crynux_bridge/models"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"strings"
 )
 
 func ChatCompletionsRoleToRole(role structs.ChatCompletionsRole) models.LLMRole {
@@ -50,10 +54,14 @@ func CCReqMessageToolCallToToolCall(ccrMessagetoolCall structs.CCReqMessageToolC
 	return toolCall
 }
 
-func CCReqMessageToMessage(ccrMessage structs.CCReqMessage) models.Message {
+func CCReqMessageToMessage(ccrMessage structs.CCReqMessage) (models.Message, error) {
 	var message models.Message
 	message.Role = ChatCompletionsRoleToRole(ccrMessage.Role)
-	message.Content = ccrMessage.Content
+	content, err := ConvertReqContentToTaskContent(ccrMessage.Content)
+	if err != nil {
+		return models.Message{}, err
+	}
+	message.Content = content
 	message.ToolCallID = ccrMessage.ToolCallID
 
 	if len(ccrMessage.ToolCalls) > 0 {
@@ -70,13 +78,97 @@ func CCReqMessageToMessage(ccrMessage structs.CCReqMessage) models.Message {
 		}
 	}
 
-	return message
+	return message, nil
+}
+
+func ConvertReqContentToTaskContent(content *structs.CCReqMessageContent) (any, error) {
+	if content == nil {
+		return nil, fmt.Errorf("content is required")
+	}
+
+	if content.Text != nil {
+		return *content.Text, nil
+	}
+
+	if len(content.Parts) == 0 {
+		return nil, fmt.Errorf("content must be a string or a non-empty content parts array")
+	}
+
+	blocks := make([]models.MessageContentBlock, 0, len(content.Parts))
+	for i, part := range content.Parts {
+		switch part.Type {
+		case "text":
+			if part.Text == "" {
+				return nil, fmt.Errorf("content part %d: text is required when type is text", i)
+			}
+			blocks = append(blocks, models.MessageContentBlock{
+				Type: "text",
+				Text: part.Text,
+			})
+		case "image_url":
+			if part.ImageURL == nil {
+				return nil, fmt.Errorf("content part %d: image_url is required when type is image_url", i)
+			}
+			base64Payload, err := extractBase64PayloadFromDataURL(part.ImageURL.URL)
+			if err != nil {
+				return nil, fmt.Errorf("content part %d: %w", i, err)
+			}
+			blocks = append(blocks, models.MessageContentBlock{
+				Type:   "image",
+				Base64: base64Payload,
+			})
+		default:
+			return nil, fmt.Errorf("content part %d: unsupported type %q", i, part.Type)
+		}
+	}
+
+	return blocks, nil
+}
+
+func extractBase64PayloadFromDataURL(rawURL string) (string, error) {
+	if rawURL == "" {
+		return "", fmt.Errorf("image_url.url is required")
+	}
+
+	commaIdx := strings.Index(rawURL, ",")
+	if commaIdx <= 0 || commaIdx == len(rawURL)-1 {
+		return "", fmt.Errorf("image_url.url must be a non-empty data URL with base64 payload")
+	}
+
+	metadata := rawURL[:commaIdx]
+	payload := rawURL[commaIdx+1:]
+	if !strings.HasPrefix(strings.ToLower(metadata), "data:") || !strings.Contains(strings.ToLower(metadata), ";base64") {
+		return "", fmt.Errorf("image_url.url must use data:*;base64,<payload> format")
+	}
+
+	if _, err := base64.StdEncoding.DecodeString(payload); err != nil {
+		if _, rawErr := base64.RawStdEncoding.DecodeString(payload); rawErr != nil {
+			return "", fmt.Errorf("image_url.url contains invalid base64 payload")
+		}
+	}
+
+	return payload, nil
+}
+
+func MessageContentToString(content any) string {
+	switch v := content.(type) {
+	case nil:
+		return ""
+	case string:
+		return v
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		return string(b)
+	}
 }
 
 func MessageToCCResMessage(message models.Message) structs.CCResMessage {
 	var ccResMessage structs.CCResMessage
 	ccResMessage.Role = RoleToChatCompletionsRole(message.Role)
-	ccResMessage.Content = message.Content
+	ccResMessage.Content = MessageContentToString(message.Content)
 	// ccResMessage.Refusal = ""
 	// ccResMessage.Annotations = nil
 	// ccResMessage.Audio = nil
@@ -107,7 +199,7 @@ func UsageToCCResUsage(usage models.Usage) structs.CCResUsage {
 func ResponseChoiceToCResChoice(responseChoice models.ResponseChoice) (structs.CResChoice, error) {
 	var cResChoice structs.CResChoice
 	cResChoice.Index = responseChoice.Index
-	cResChoice.Text = responseChoice.Message.Content
+	cResChoice.Text = MessageContentToString(responseChoice.Message.Content)
 	// ccResChoice.LogProbs = ""
 	cResChoice.FinishReason = string(responseChoice.FinishReason)
 	return cResChoice, nil
