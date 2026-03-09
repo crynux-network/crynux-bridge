@@ -1,0 +1,63 @@
+---
+environment: "production"
+db:
+  driver: "mysql"
+  connection: "crynux_bridge:crynuxbridgepass@(mysql:3306)/crynux_bridge?parseTime=true"
+  log:
+    level: "info"
+    output: "/app/data/logs/crynux_bridge_db.log"
+    max_file_size: 100
+    max_days: 30
+    max_file_num: 5
+log:
+  level: "info"
+  output: "/app/data/logs/crynux_bridge.log"
+  max_file_size: 100
+  max_days: 30
+  max_file_num: 5
+http:
+  host: "0.0.0.0"
+  port: "5028"
+data_dir:
+  inference_tasks: "/app/data/inference_tasks"
+  model_images: "/app/data/images/models"
+blockchain:
+  rps: 1
+  start_block_num: 1
+  gas_limit: 8000000
+  gas_price: 10
+  chain_id: 0
+  rpc_endpoint: "https://json-rpc.testnet-dym.crynux.io"
+  account:
+    address: ""
+    private_key_file: "/app/privkey.txt"
+  contracts:
+    netstats: "0xCF83DFC25E93687670AB87d31A24B6A892B9C08c"
+    task: "0xd3e246555302CDcCd06D420681aAB4aBA715c05A"
+    node: "0xFc317b2e4649D5208c5CE6f2968338ef66841642"
+relay:
+  # Use the local relay service started by docker-compose for e2e runs.
+  base_url: "http://crynux_relay:8080"
+task:
+  sd_task_fee: 1000000000
+  sd_xl_task_fee: 2000000000
+  llm_quant_task_fee: 4000000000
+  llm_task_fee: 5000000000
+  repeat_num: 1
+  pending_auto_tasks_limit: 10
+  pending_large_vram_llm_tasks_limit: 2
+  auto_tasks_batch_size: 0
+  default_timeout: 6
+  sd_finetune_timeout: 120
+  task_versions:
+    - "2.8.0"
+  auto_task_version_ratio:
+    - 1.0
+  auto_task_type_ratio:
+    - 1.0
+    - 1.0
+    - 1.0
+task_schema:
+  stable_diffusion_inference: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/stable-diffusion-inference-task.json"
+  gpt_inference: "https://raw.githubusercontent.com/crynux-network/gpt-task/main/schema/gpt-inference-task.json"
+  stable_diffusion_finetune_lora: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/stable-diffusion-finetune-lora-task.json"
