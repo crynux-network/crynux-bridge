@@ -41,9 +41,6 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	defer func() {
 		logOpenAICompatibleExchange("completions", in.Authorization, logRequestPayload, logResponsePayload, err)
 	}()
-	if in.Stream {
-		return nil, response.NewValidationErrorResponse("stream", "streaming mode is not supported yet")
-	}
 
 	// validate request (apiKey)
 	apiKey, err := tools.ValidateAuthorization(ctx, db, in.Authorization)
@@ -161,6 +158,13 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 
 	if err := apiKey.Use(ctx, db); err != nil {
 		return nil, response.NewExceptionResponse(err)
+	}
+
+	if in.Stream {
+		if err := streamCompletionsResponse(c, ccResponse, in.StreamOptions.IncludeUsage); err != nil {
+			return nil, response.NewExceptionResponse(err)
+		}
+		return nil, nil
 	}
 
 	return ccResponse, nil
