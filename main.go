@@ -39,8 +39,8 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	// Check the account balance
-	if err := relay.CheckQuotaForTaskCreator(context.Background()); err != nil {
+	// Check the relay account balance
+	if err := relay.CheckBalanceForTaskCreator(context.Background()); err != nil {
 		log.Fatalln(err)
 	}
 
