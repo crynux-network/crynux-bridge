@@ -26,12 +26,21 @@ type CompletionsRequest struct {
 }
 
 // build TaskInput from CompletionsRequest, create task, wait for task to finish, get task result, then return CompletionsResponse
-func Completions(c *gin.Context, in *CompletionsRequest) (*structs.CompletionsResponse, error) {
+func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.CompletionsResponse, err error) {
 	ctx := c.Request.Context()
 	db := config.GetDB()
 
 	/* 1. Build TaskInput from CompletionsRequest */
 	in.SetDefaultValues() // set default values for some fields
+	logRequestPayload := map[string]any{
+		"request":    in.CompletionsRequest,
+		"timeout":    in.Timeout,
+		"vram_limit": in.VramLimit,
+	}
+	var logResponsePayload any
+	defer func() {
+		logOpenAICompatibleExchange("completions", in.Authorization, logRequestPayload, logResponsePayload, err)
+	}()
 
 	// validate request (apiKey)
 	apiKey, err := tools.ValidateAuthorization(ctx, db, in.Authorization)
@@ -118,6 +127,14 @@ func Completions(c *gin.Context, in *CompletionsRequest) (*structs.CompletionsRe
 	gptTaskResponse, resultDownloadedTask, err := inference_tasks.ProcessGPTTask(ctx, db, task)
 	if err != nil {
 		return nil, err
+	}
+	logResponsePayload = map[string]any{
+		"task": map[string]any{
+			"task_id_commitment": resultDownloadedTask.TaskIDCommitment,
+			"status":             resultDownloadedTask.Status,
+			"task_type":          resultDownloadedTask.TaskType,
+		},
+		"result": gptTaskResponse,
 	}
 
 	/* 3. Wrap GPTTaskResponse into CompletionsResponse and return */

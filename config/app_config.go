@@ -27,6 +27,9 @@ type AppConfig struct {
 		MaxFileSize int    `mapstructure:"max_file_size"`
 		MaxDays     int    `mapstructure:"max_days"`
 		MaxFileNum  int    `mapstructure:"max_file_num"`
+		Features    struct {
+			LLMAPIRequestLogEnabled bool `mapstructure:"llm_api_request_log_enabled"`
+		} `mapstructure:"features"`
 	} `mapstructure:"log"`
 
 	Http struct {

@@ -104,8 +104,17 @@
             }
         }
 
+        function normalizeBaseUrl(baseUrl) {
+            const trimmedBaseUrl = baseUrl.trim().replace(/\/+$/, '');
+            if (/^https?:\/\//i.test(trimmedBaseUrl)) {
+                return trimmedBaseUrl;
+            }
+            return `http://${trimmedBaseUrl}`;
+        }
+
         async function makeApiCall(baseUrl, endpoint, apiKeyInPath, inputDictForSigning, actualBodyParams, signer, method = 'POST') {
-            const url = `http://${baseUrl}/v1/api_key/${apiKeyInPath}${endpoint}`;
+            const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+            const url = `${normalizedBaseUrl}/v1/api_key/${apiKeyInPath}${endpoint}`;
 
             const signedData = await signer.sign(inputDictForSigning);
             const payload = {
@@ -131,7 +140,8 @@
         }
 
         async function generateNewApiKey(baseUrl, signer) {
-            const url = `http://${baseUrl}/v1/api_key`; // No client_id in path
+            const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+            const url = `${normalizedBaseUrl}/v1/api_key`; // No client_id in path
             const inputDictForSigning = {}; // Sign an empty object
             const signedData = await signer.sign(inputDictForSigning);
 

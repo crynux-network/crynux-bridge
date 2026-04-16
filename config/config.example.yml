@@ -15,6 +15,8 @@ log:
   max_file_size: 100
   max_days: 30
   max_file_num: 5
+  features:
+    llm_api_request_log_enabled: false
 http:
   host: "0.0.0.0"
   port: "5028"
