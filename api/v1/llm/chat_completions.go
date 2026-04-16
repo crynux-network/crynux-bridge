@@ -49,6 +49,9 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 	defer func() {
 		logOpenAICompatibleExchange("chat_completions", in.Authorization, logRequestPayload, logResponsePayload, err)
 	}()
+	if in.Stream {
+		return nil, response.NewValidationErrorResponse("stream", "streaming mode is not supported yet")
+	}
 
 	// validate request (apiKey)
 	apiKey, err := tools.ValidateAuthorization(ctx, db, in.Authorization)
