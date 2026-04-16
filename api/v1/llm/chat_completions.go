@@ -30,6 +30,7 @@ type ChatCompletionsRequest struct {
 	structs.ChatCompletionsRequest
 	Authorization string  `header:"Authorization" validate:"required" description:"API key"`
 	Timeout       *uint64 `json:"timeout,omitempty" description:"Task timeout" validate:"omitempty"`
+	VramLimit     *uint64 `path:"vram_limit" description:"Override minimum GPU VRAM in GB from URL path"`
 }
 
 // build TaskInput from ChatCompletionsRequest, create task, wait for task to finish, get task result, then return ChatCompletionsResponse
@@ -108,10 +109,7 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (*structs.ChatC
 	}
 
 	taskType := models.TaskTypeLLM
-	minVram := uint64(24)
-	if in.MinVram != nil {
-		minVram = *in.MinVram
-	}
+	minVram := resolveMinVram(in.MinVram, in.VramLimit)
 	taskFee := uint64(6000000000)
 
 	task := &inference_tasks.TaskInput{

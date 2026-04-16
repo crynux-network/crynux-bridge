@@ -20,8 +20,9 @@ import (
 
 type CompletionsRequest struct {
 	structs.CompletionsRequest
-	Authorization string `header:"Authorization" validate:"required" description:"API key"`
+	Authorization string  `header:"Authorization" validate:"required" description:"API key"`
 	Timeout       *uint64 `json:"timeout,omitempty" description:"Task timeout" validate:"omitempty"`
+	VramLimit     *uint64 `path:"vram_limit" description:"Override minimum GPU VRAM in GB from URL path"`
 }
 
 // build TaskInput from CompletionsRequest, create task, wait for task to finish, get task result, then return CompletionsResponse
@@ -97,10 +98,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (*structs.CompletionsRe
 	}
 
 	taskType := models.TaskTypeLLM
-	minVram := uint64(24)
-	if in.MinVram != nil {
-		minVram = *in.MinVram
-	}
+	minVram := resolveMinVram(in.MinVram, in.VramLimit)
 	taskFee := uint64(6000000000)
 
 	task := &inference_tasks.TaskInput{

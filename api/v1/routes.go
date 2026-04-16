@@ -94,10 +94,22 @@ func InitRoutes(r *fizz.Fizz) {
 		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, tonic.Handler(llm.Completions, 200))
+	llmGroup.POST("/:vram_limit/completions", []fizz.OperationOption{
+		fizz.ID("llm_completions_with_vram_limit"),
+		fizz.Summary("Api for llm with VRAM limit in URL, /:vram_limit/completions"),
+		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
+		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
+	}, tonic.Handler(llm.Completions, 200))
 
 	llmGroup.POST("/chat/completions", []fizz.OperationOption{
 		fizz.ID("llm_chat_completions"),
 		fizz.Summary("Api for openrouter, /chat/completions"),
+		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
+		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
+	}, tonic.Handler(llm.ChatCompletions, 200))
+	llmGroup.POST("/:vram_limit/chat/completions", []fizz.OperationOption{
+		fizz.ID("llm_chat_completions_with_vram_limit"),
+		fizz.Summary("Api for llm with VRAM limit in URL, /:vram_limit/chat/completions"),
 		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, tonic.Handler(llm.ChatCompletions, 200))
