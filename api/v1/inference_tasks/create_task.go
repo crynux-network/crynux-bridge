@@ -135,10 +135,6 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 		return nil, response.NewExceptionResponse(err)
 	}
 
-	taskIDBytes := make([]byte, 32)
-	rand.Read(taskIDBytes)
-	taskID := hexutil.Encode(taskIDBytes)
-
 	var timeout uint64
 	if in.Timeout != nil {
 		timeout = *in.Timeout
@@ -150,6 +146,10 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 
 	tasks := make([]*models.InferenceTask, 0)
 	for i := 0; i < repeatNum; i++ {
+		taskIDBytes := make([]byte, 32)
+		rand.Read(taskIDBytes)
+		taskID := hexutil.Encode(taskIDBytes)
+
 		task := &models.InferenceTask{
 			Client:          *client,
 			ClientTask:      *clientTask,
