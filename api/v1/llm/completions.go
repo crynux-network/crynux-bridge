@@ -11,7 +11,6 @@ import (
 	"crynux_bridge/models"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -45,7 +44,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	// validate request (apiKey)
 	apiKey, err := tools.ValidateAuthorization(ctx, db, in.Authorization)
 	if err != nil {
-		return nil, err
+		return nil, mapLLMAuthorizationError(err)
 	}
 
 	allowed, waitTime, err := ratelimit.APIRateLimiter.CheckRateLimit(ctx, apiKey.ClientID, apiKey.RateLimit, time.Minute)
@@ -53,7 +52,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 		return nil, response.NewExceptionResponse(err)
 	}
 	if !allowed {
-		return nil, response.NewValidationErrorResponse("rate_limit", fmt.Sprintf("rate limit exceeded, please wait %.2f seconds", waitTime))
+		return nil, newRateLimitExceededError(waitTime)
 	}
 
 	messages := make([]models.Message, 1)
@@ -126,7 +125,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	/* 2. Create task, wait until task finish and get task result. Implemented by function ProcessGPTTask */
 	gptTaskResponse, resultDownloadedTask, err := inference_tasks.ProcessGPTTask(ctx, db, task)
 	if err != nil {
-		return nil, err
+		return nil, mapLLMTaskProcessingError(err)
 	}
 	logResponsePayload = map[string]any{
 		"task": map[string]any{
