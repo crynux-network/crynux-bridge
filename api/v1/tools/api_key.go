@@ -77,7 +77,7 @@ func ValidateAPIKey(ctx context.Context, db *gorm.DB, apiKeyStr string) (*models
 	apiKey, err := models.GetAPIKeyByKeyPrefix(ctx, db, keyPrefix)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrAPIKeyInvalid 
+			return nil, ErrAPIKeyInvalid
 		}
 		return nil, err
 	}
@@ -133,18 +133,18 @@ func ValidateAuthorization(ctx context.Context, db *gorm.DB, authorization strin
 	apiKey, err := ValidateAPIKey(ctx, db, apiKeyStr)
 	if err != nil {
 		if errors.Is(err, ErrAPIKeyExpired) {
-			return nil, response.NewValidationErrorResponse("Authorization", "expired")
+			return nil, response.NewValidationErrorResponse("Authorization", "API key has expired")
 		}
 		if errors.Is(err, ErrAPIKeyInvalid) {
-			return nil, response.NewValidationErrorResponse("Authorization", "unauthorized")
+			return nil, response.NewValidationErrorResponse("Authorization", "invalid API key")
 		}
 		return nil, response.NewExceptionResponse(err)
 	}
 	if !slices.Contains(apiKey.Roles, models.RoleAdmin) && !slices.Contains(apiKey.Roles, models.RoleChat) {
-		return nil, response.NewValidationErrorResponse("Authorization", "unauthorized")
+		return nil, response.NewValidationErrorResponse("Authorization", "API key does not have required role: admin or chat")
 	}
 	if apiKey.UseLimit > 0 && apiKey.UsedCount >= apiKey.UseLimit {
-		return nil, response.NewValidationErrorResponse("Authorization", "use limit exceeded")
+		return nil, response.NewValidationErrorResponse("Authorization", "API key quota exceeded")
 	}
 
 	return apiKey, nil

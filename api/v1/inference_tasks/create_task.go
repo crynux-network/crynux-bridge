@@ -8,6 +8,7 @@ import (
 	"crynux_bridge/config"
 	"crynux_bridge/models"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -93,16 +94,19 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 
 	result, err := models.ValidateTaskArgsJsonStr(in.TaskArgs, taskType)
 	if err != nil {
+		if isTaskArgsJSONError(err) {
+			return nil, response.NewValidationErrorResponse("task_args", fmt.Sprintf("task_args must be valid JSON: %v", err))
+		}
 		return nil, response.NewExceptionResponse(err)
 	}
 
 	if result != nil {
-		return nil, response.NewValidationErrorResponse("task_args", result.Error())
+		return nil, response.NewValidationErrorResponse("task_args", fmt.Sprintf("invalid task_args: %s", result.Error()))
 	}
 
 	if taskType == models.TaskTypeLLM {
 		if err := models.ValidateGPTTaskArgsContentJSON(in.TaskArgs); err != nil {
-			return nil, response.NewValidationErrorResponse("task_args", err.Error())
+			return nil, response.NewValidationErrorResponse("task_args", fmt.Sprintf("invalid task_args: %v", err))
 		}
 	}
 
@@ -132,7 +136,7 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 
 	modelIDs, err := models.GetTaskConfigModelIDs(in.TaskArgs, taskType)
 	if err != nil {
-		return nil, response.NewExceptionResponse(err)
+		return nil, response.NewValidationErrorResponse("task_args", fmt.Sprintf("invalid task_args: %v", err))
 	}
 
 	var timeout uint64
@@ -169,6 +173,20 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 	}
 
 	return tasks, nil
+}
+
+func isTaskArgsJSONError(err error) bool {
+	var syntaxErr *json.SyntaxError
+	if errors.As(err, &syntaxErr) {
+		return true
+	}
+
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
+		return true
+	}
+
+	return false
 }
 
 func DoCreateTask(ctx context.Context, in *TaskInput) (*TaskResponse, error) {

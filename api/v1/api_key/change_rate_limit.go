@@ -4,7 +4,6 @@ import (
 	"crynux_bridge/api/v1/response"
 	"crynux_bridge/api/v1/tools"
 	"crynux_bridge/config"
-	"errors"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -40,13 +39,7 @@ func ChangeRateLimit(c *gin.Context, in *ChangeRateLimitInputWithSignature) (*re
 	}
 	apiKey, err := tools.ValidateAPIKey(c.Request.Context(), config.GetDB(), in.APIKey)
 	if err != nil {
-		if errors.Is(err, tools.ErrAPIKeyExpired) {
-			return nil, response.NewValidationErrorResponse("api_key", "expired")
-		}
-		if errors.Is(err, tools.ErrAPIKeyInvalid) {
-			return nil, response.NewValidationErrorResponse("api_key", "invalid")
-		}
-		return nil, response.NewExceptionResponse(err)
+		return nil, mapValidateAPIKeyError(err)
 	}
 
 	if err := tools.ChangeRateLimit(c.Request.Context(), config.GetDB(), apiKey, in.RateLimit); err != nil {

@@ -2,6 +2,9 @@ package response
 
 import (
 	"errors"
+	"fmt"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/loopfz/gadgeto/tonic"
 )
@@ -74,11 +77,11 @@ func TonicErrorResponse(ctx *gin.Context, err error) (int, interface{}) {
 		// We return only the first error
 		for _, err := range validationErr {
 			validationErrorResponse.SetFieldName(err.Field())
-			validationErrorResponse.SetFieldMessage(err.Tag())
+			validationErrorResponse.SetFieldMessage(formatValidationFieldError(err))
 			return 400, validationErrorResponse
 		}
 		validationErrorResponse.SetFieldName(e.GetField())
-		validationErrorResponse.SetFieldMessage(e.GetMessage())
+		validationErrorResponse.SetFieldMessage(formatBindErrorMessage(e.GetField(), e.GetMessage()))
 		return 400, validationErrorResponse
 	}
 
@@ -102,4 +105,54 @@ func TonicRenderResponse(ctx *gin.Context, statusCode int, payload interface{}) 
 	}
 
 	tonic.DefaultRenderHook(ctx, statusCode, payload)
+}
+
+type validationFieldError interface {
+	Field() string
+	Tag() string
+	Param() string
+}
+
+func formatValidationFieldError(err validationFieldError) string {
+	fieldName := err.Field()
+	if fieldName == "" {
+		fieldName = "field"
+	}
+
+	switch err.Tag() {
+	case "required":
+		return fmt.Sprintf("%s is required", fieldName)
+	case "oneof":
+		return fmt.Sprintf("%s must be one of: %s", fieldName, err.Param())
+	case "min":
+		return fmt.Sprintf("%s must be at least %s", fieldName, err.Param())
+	case "max":
+		return fmt.Sprintf("%s must be at most %s", fieldName, err.Param())
+	case "len":
+		return fmt.Sprintf("%s must be exactly %s characters", fieldName, err.Param())
+	case "gt":
+		return fmt.Sprintf("%s must be greater than %s", fieldName, err.Param())
+	case "gte":
+		return fmt.Sprintf("%s must be greater than or equal to %s", fieldName, err.Param())
+	case "lt":
+		return fmt.Sprintf("%s must be less than %s", fieldName, err.Param())
+	case "lte":
+		return fmt.Sprintf("%s must be less than or equal to %s", fieldName, err.Param())
+	default:
+		if err.Param() != "" {
+			return fmt.Sprintf("%s failed %s validation (expected %s)", fieldName, err.Tag(), err.Param())
+		}
+		return fmt.Sprintf("%s failed %s validation", fieldName, err.Tag())
+	}
+}
+
+func formatBindErrorMessage(field, message string) string {
+	trimmedMessage := strings.TrimSpace(message)
+	if trimmedMessage == "" {
+		if strings.TrimSpace(field) == "" {
+			return "invalid request"
+		}
+		return fmt.Sprintf("%s is invalid", field)
+	}
+	return trimmedMessage
 }

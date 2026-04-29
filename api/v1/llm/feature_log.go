@@ -3,6 +3,7 @@ package llm
 import (
 	"crynux_bridge/config"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -39,10 +40,14 @@ func logOpenAICompatibleExchange(api string, authorization string, request any, 
 	apiLabel := normalizeAPILabel(api)
 	maskedAPIKey := maskAuthorizationKey(authorization)
 	timestamp := time.Now().Format(time.RFC3339)
-
-	line := fmt.Sprintf("[%s] [INFO] [LLM API Request] [%s] [API Key %s] request=%s", timestamp, apiLabel, maskedAPIKey, requestText)
+	logLevel := "INFO"
 	if logErr != nil {
-		line = fmt.Sprintf("%s, error=%s", line, sanitizeSingleLine(logErr.Error()))
+		logLevel = "ERROR"
+	}
+
+	line := fmt.Sprintf("[%s] [%s] [LLM API Request] [%s] [API Key %s] request=%s", timestamp, logLevel, apiLabel, maskedAPIKey, requestText)
+	if logErr != nil {
+		line = fmt.Sprintf("%s, error=%s", line, formatLLMAPIError(logErr))
 	} else {
 		line = fmt.Sprintf("%s, response=%s", line, serializeLogValue(response))
 	}
@@ -149,4 +154,29 @@ func serializeLogValue(value any) string {
 
 func sanitizeSingleLine(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(s), "\n", "\\n"), "\r", "\\r")
+}
+
+func formatLLMAPIError(err error) string {
+	var validationErr interface {
+		GetErrorType() string
+		GetFieldName() string
+		GetFieldMessage() string
+	}
+	if errors.As(err, &validationErr) {
+		return fmt.Sprintf(
+			"%s(field=%s, message=%s)",
+			sanitizeSingleLine(validationErr.GetErrorType()),
+			sanitizeSingleLine(validationErr.GetFieldName()),
+			sanitizeSingleLine(validationErr.GetFieldMessage()),
+		)
+	}
+
+	var exceptionErr interface {
+		GetException() string
+	}
+	if errors.As(err, &exceptionErr) {
+		return sanitizeSingleLine(exceptionErr.GetException())
+	}
+
+	return sanitizeSingleLine(err.Error())
 }
