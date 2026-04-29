@@ -16,8 +16,15 @@ import (
 	"gorm.io/gorm"
 )
 
+const defaultLLMTaskWaitTimeout = 3 * time.Minute
+
 func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput) (*models.GPTTaskResponse, *models.InferenceTask, error) {
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	waitTimeout := defaultLLMTaskWaitTimeout
+	if in != nil && in.Timeout != nil && *in.Timeout > 0 {
+		waitTimeout = time.Duration(*in.Timeout) * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, waitTimeout)
 	defer cancel()
 	/* 1. Create GPT task by function CreateTask */
 	taskResponse, err := DoCreateTask(ctx, in)
@@ -33,16 +40,22 @@ func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput) (*models.GP
 	}
 	taskGroups, err := models.WaitAllTaskGroup(ctx, db, tasks)
 	if err != nil {
+		if timeoutErr := mapTaskTimeoutError(err, waitTimeout); timeoutErr != nil {
+			return nil, nil, timeoutErr
+		}
 		return nil, nil, response.NewExceptionResponse(err)
 	}
 	resultDownloadedTask, err := models.WaitResultTask(ctx, db, taskGroups)
 	if err != nil {
+		if timeoutErr := mapTaskTimeoutError(err, waitTimeout); timeoutErr != nil {
+			return nil, nil, timeoutErr
+		}
 		return nil, nil, response.NewExceptionResponse(err)
 	}
 
 	/* 3. Read task result and return */
 	results, err := readGPTTaskResults(resultDownloadedTask)
-	if err != nil { 
+	if err != nil {
 		return nil, nil, response.NewExceptionResponse(err)
 	}
 
@@ -69,10 +82,16 @@ func ProcessSDTask(ctx context.Context, db *gorm.DB, in *TaskInput) ([]string, *
 	}
 	taskGroups, err := models.WaitAllTaskGroup(ctx, db, tasks)
 	if err != nil {
+		if timeoutErr := mapTaskTimeoutError(err, 3*time.Minute); timeoutErr != nil {
+			return nil, nil, timeoutErr
+		}
 		return nil, nil, response.NewExceptionResponse(err)
 	}
 	resultDownloadedTask, err := models.WaitResultTask(ctx, db, taskGroups)
 	if err != nil {
+		if timeoutErr := mapTaskTimeoutError(err, 3*time.Minute); timeoutErr != nil {
+			return nil, nil, timeoutErr
+		}
 		return nil, nil, response.NewExceptionResponse(err)
 	}
 
@@ -100,10 +119,16 @@ func ProcessSDFTLoraTask(ctx context.Context, db *gorm.DB, in *TaskInput) (strin
 	}
 	taskGroups, err := models.WaitAllTaskGroup(ctx, db, tasks)
 	if err != nil {
+		if timeoutErr := mapTaskTimeoutError(err, 0); timeoutErr != nil {
+			return "", nil, timeoutErr
+		}
 		return "", nil, response.NewExceptionResponse(err)
 	}
 	resultDownloadedTask, err := models.WaitResultTask(ctx, db, taskGroups)
 	if err != nil {
+		if timeoutErr := mapTaskTimeoutError(err, 0); timeoutErr != nil {
+			return "", nil, timeoutErr
+		}
 		return "", nil, response.NewExceptionResponse(err)
 	}
 
@@ -197,4 +222,14 @@ func readSDFTLoraTaskResults(task *models.InferenceTask) (string, error) {
 	filename := path.Join(taskFolder, "checkpoint.zip")
 
 	return filename, nil
+}
+
+func mapTaskTimeoutError(err error, waitTimeout time.Duration) error {
+	if errors.Is(err, models.ErrTaskTimeout) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		if waitTimeout > 0 {
+			return response.NewExceptionResponse(fmt.Errorf("task timeout: task did not finish within %s", waitTimeout.String()))
+		}
+		return response.NewExceptionResponse(errors.New("task timeout: task did not finish before the request deadline"))
+	}
+	return nil
 }

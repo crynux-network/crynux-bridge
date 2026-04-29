@@ -241,6 +241,7 @@ func WaitTaskGroup(ctx context.Context, db *gorm.DB, task *InferenceTask) ([]Inf
 }
 
 var ErrTaskEndWithoutResult = errors.New("task end without result downloaded")
+var ErrTaskTimeout = errors.New("task timeout")
 
 func WaitAllTaskGroup(ctx context.Context, db *gorm.DB, tasks []InferenceTask) ([]InferenceTask, error) {
 	var waitGroup sync.WaitGroup
@@ -349,7 +350,10 @@ func WaitResultTask(ctx context.Context, db *gorm.DB, tasks []InferenceTask) (*I
 		case <-ctx.Done():
 			close(doneChan)
 			wg.Wait()
-			return nil, fmt.Errorf("timeout after 3 minutes: %w", ctx.Err())
+			if deadline, ok := ctx.Deadline(); ok {
+				return nil, fmt.Errorf("%w: task did not finish before deadline %s (%v)", ErrTaskTimeout, deadline.Format(time.RFC3339), ctx.Err())
+			}
+			return nil, fmt.Errorf("%w: %v", ErrTaskTimeout, ctx.Err())
 		}
 	}
 
