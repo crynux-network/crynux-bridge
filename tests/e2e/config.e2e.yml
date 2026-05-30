@@ -50,7 +50,7 @@ task:
   default_timeout: 6
   sd_finetune_timeout: 120
   task_versions:
-    - "2.8.0"
+    - "3.1.0"
   auto_task_version_ratio:
     - 1.0
   auto_task_type_ratio:

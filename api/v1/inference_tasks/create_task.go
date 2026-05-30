@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -23,7 +22,7 @@ type TaskInput struct {
 	ClientID        string                `json:"client_id" description:"Client id" validate:"required"`
 	TaskArgs        string                `json:"task_args" description:"Task args" validate:"required"`
 	TaskType        *models.ChainTaskType `json:"task_type" description:"Task type. 0 - SD task, 1 - LLM task, 2 - SD Finetune task" validate:"required"`
-	TaskVersion     *string               `json:"task_version,omitempty" description:"Task version. Default is 2.5.0" validate:"omitempty"`
+	TaskVersion     *string               `json:"task_version,omitempty" description:"Task version. Default is task.task_versions[0]" validate:"omitempty"`
 	MinVram         *uint64               `json:"min_vram,omitempty" description:"Task minimal vram requirement" validate:"omitempty"`
 	RequiredGPU     string                `json:"required_gpu,omitempty" description:"Task required GPU name" validate:"omitempty"`
 	RequiredGPUVram uint64                `json:"required_gpu_vram,omitempty" description:"Task required GPU Vram" validate:"omitempty"`
@@ -44,9 +43,9 @@ func getDefaultMinVram(taskType models.ChainTaskType, taskArgs string) (uint64, 
 			return 0, err
 		}
 		switch baseModel {
-		case "crynux-ai/stable-diffusion-v1-5", "crynux-network/stable-diffusion-v1-5":
+		case "crynux-network/stable-diffusion-v1-5":
 			return 8, nil
-		case "crynux-ai/sdxl-turbo", "crynux-network/sdxl-turbo", "crynux-ai/stable-diffusion-xl-base-1.0":
+		case "crynux-network/sdxl-turbo":
 			return 14, nil
 		default:
 			return 10, nil
@@ -82,14 +81,6 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 	var taskVersion = appConfig.Task.TaskVersions[0]
 	if in.TaskVersion != nil {
 		taskVersion = *in.TaskVersion
-	}
-
-	if taskType == models.TaskTypeSD || taskType == models.TaskTypeSDFTLora {
-		if taskVersion == "2.5.0" {
-			in.TaskArgs = strings.ReplaceAll(in.TaskArgs, "crynux-network/", "crynux-ai/")
-		} else {
-			in.TaskArgs = strings.ReplaceAll(in.TaskArgs, "crynux-ai/", "crynux-network/")
-		}
 	}
 
 	result, err := models.ValidateTaskArgsJsonStr(in.TaskArgs, taskType)
