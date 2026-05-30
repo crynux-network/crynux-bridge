@@ -104,12 +104,6 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 		return nil, response.NewValidationErrorResponse("task_args", fmt.Sprintf("invalid task_args: %s", result.Error()))
 	}
 
-	if taskType == models.TaskTypeLLM {
-		if err := models.ValidateGPTTaskArgsContentJSON(in.TaskArgs); err != nil {
-			return nil, response.NewValidationErrorResponse("task_args", fmt.Sprintf("invalid task_args: %v", err))
-		}
-	}
-
 	var minVram uint64
 
 	if in.MinVram == nil {
