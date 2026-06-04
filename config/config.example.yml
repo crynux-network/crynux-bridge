@@ -26,7 +26,7 @@ data_dir:
 blockchain:
   account:
     address: "0x1cCcAcb47Ed79E7Dd6584693272692585B9B41ef"
-    private_key_file: "privkey.txt"
+    private_key_file: "/app/config/priv_key.txt"
 relay:
   base_url: "https://relay.crynux.io"
 task:
@@ -49,12 +49,6 @@ task:
         min_vram: 14
         fee_cnx: 2.0
       - task_version: "3.1.0"
-        type: "sd"
-        ratio: 1.0
-        model: "crynux-network/stable-diffusion-v1-5"
-        min_vram: 4
-        fee_cnx: 1.0
-      - task_version: "3.1.0"
         type: "llm"
         ratio: 0.5
         model: "Qwen/Qwen2.5-14B"
@@ -75,6 +69,6 @@ task:
 openrouter:
   models_file: "models.json"
 task_schema:
-  stable_diffusion_inference: 'https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/stable-diffusion-inference-task.json'
+  stable_diffusion_inference: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/refs/tags/v3.1.0/schema/stable-diffusion-inference-task.json"
   gpt_inference: "https://raw.githubusercontent.com/crynux-network/gpt-task/refs/tags/v3.1.0/schema/gpt-inference-task.json"
-  stable_diffusion_finetune_lora: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/stable-diffusion-finetune-lora-task.json"
+  stable_diffusion_finetune_lora: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/refs/tags/v3.1.0/schema/stable-diffusion-finetune-lora-task.json"
