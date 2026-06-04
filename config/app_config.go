@@ -43,24 +43,11 @@ type AppConfig struct {
 	} `mapstructure:"data_dir"`
 
 	Blockchain struct {
-		RPS           uint64 `mapstructure:"rps"`
-		RpcEndpoint   string `mapstructure:"rpc_endpoint"`
-		StartBlockNum uint64 `mapstructure:"start_block_num"`
-		GasLimit      uint64 `mapstructure:"gas_limit"`
-		GasPrice      uint64 `mapstructure:"gas_price"`
-		ChainID       uint64 `mapstructure:"chain_id"`
-
 		Account struct {
 			Address        string `mapstructure:"address"`
 			PrivateKey     string `mapstructure:"private_key"`
 			PrivateKeyFile string `mapstructure:"private_key_file"`
 		} `mapstructure:"account"`
-
-		Contracts struct {
-			Netstats string `mapstructure:"netstats"`
-			Task     string `mapstructure:"task"`
-			Node     string `mapstructure:"node"`
-		} `mapstructure:"contracts"`
 	} `mapstructure:"blockchain"`
 
 	Relay struct {
@@ -68,19 +55,15 @@ type AppConfig struct {
 	} `mapstructure:"relay"`
 
 	Task struct {
-		SDTaskFee                     uint64    `mapstructure:"sd_task_fee"`
-		SDXLTaskFee                   uint64    `mapstructure:"sd_xl_task_fee"`
-		LLMTaskFee                    uint64    `mapstructure:"llm_task_fee"`
-		LLMQuantTaskFee               uint64    `mapstructure:"llm_quant_task_fee"`
-		RepeatNum                     int       `mapstructure:"repeat_num"`
-		PendingAutoTasksLimit         uint64    `mapstructure:"pending_auto_tasks_limit"`
-		PendingLargeVramLLMTasksLimit uint64    `mapstructure:"pending_large_vram_llm_tasks_limit"`
-		AutoTasksBatchSize            uint64    `mapstructure:"auto_tasks_batch_size"`
-		DefaultTimeout                uint64    `mapstructure:"default_timeout"`
-		SDFinetuneTimeout             uint64    `mapstructure:"sd_finetune_timeout"`
-		TaskVersions                  []string  `mapstructure:"task_versions"`
-		AutoTaskVersionRatio          []float64 `mapstructure:"auto_task_version_ratio"`
-		AutoTaskTypeRatio             []float64 `mapstructure:"auto_task_type_ratio"`
+		DefaultSDTaskFeeCNX         float64              `mapstructure:"default_sd_task_fee_cnx"`
+		DefaultSDXLTaskFeeCNX       float64              `mapstructure:"default_sd_xl_task_fee_cnx"`
+		DefaultLLMTaskFeeCNX        float64              `mapstructure:"default_llm_task_fee_cnx"`
+		DefaultSDFinetuneTaskFeeCNX float64              `mapstructure:"default_sd_finetune_task_fee_cnx"`
+		RepeatNum                   int                  `mapstructure:"repeat_num"`
+		DefaultTimeout              uint64               `mapstructure:"default_timeout"`
+		SDFinetuneTimeout           uint64               `mapstructure:"sd_finetune_timeout"`
+		DefaultTaskVersion          string               `mapstructure:"default_task_version"`
+		HeartbeatTasks              HeartbeatTasksConfig `mapstructure:"heartbeat_tasks"`
 	} `mapstructure:"task"`
 
 	TaskSchema struct {
@@ -97,4 +80,19 @@ type AppConfig struct {
 		RootAddress    string `mapstructure:"root_address"`
 		RootPrivateKey string `mapstructure:"root_private_key"`
 	} `mapstructure:"test"`
+}
+
+type HeartbeatTasksConfig struct {
+	PendingTasksLimit uint64                `mapstructure:"pending_tasks_limit"`
+	BatchSize         uint64                `mapstructure:"batch_size"`
+	Tasks             []HeartbeatTaskConfig `mapstructure:"tasks"`
+}
+
+type HeartbeatTaskConfig struct {
+	TaskVersion string  `mapstructure:"task_version"`
+	Type        string  `mapstructure:"type"`
+	Ratio       float64 `mapstructure:"ratio"`
+	Model       string  `mapstructure:"model"`
+	MinVram     uint64  `mapstructure:"min_vram"`
+	FeeCNX      float64 `mapstructure:"fee_cnx"`
 }

@@ -22,7 +22,7 @@ services:
       retries: 55
 
   crynux_bridge:
-    image: ghcr.io/crynux-ai/crynux-bridge:latest
+    image: ghcr.io/crynux-network/crynux-bridge:latest
     container_name: crynux_bridge
     volumes:
       - "./data/crynux_bridge:/app/data"

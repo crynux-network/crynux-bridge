@@ -10,7 +10,7 @@ import (
 
 func TestValidateSDTaskArgs(t *testing.T) {
 
-	jsonStr := `{"base_model":"crynux-ai/sdxl-turbo","prompt":"a lazy man sitting on a brown chair","negative_prompt":"","lora":null,"controlnet":null,"task_config":{"image_width":512,"image_height":512,"steps":1,"num_images":1,"seed":70813424,"safety_checker":false,"cfg":0},"scheduler":{"method":"EulerAncestralDiscreteScheduler","args":{"timestep_spacing":"trailing"}}}`
+	jsonStr := `{"base_model":"crynux-network/sdxl-turbo","prompt":"a lazy man sitting on a brown chair","negative_prompt":"","lora":null,"controlnet":null,"task_config":{"image_width":512,"image_height":512,"steps":1,"num_images":1,"seed":70813424,"safety_checker":false,"cfg":0},"scheduler":{"method":"EulerAncestralDiscreteScheduler","args":{"timestep_spacing":"trailing"}}}`
 	sdInferenceTaskSchema, err := jsonschema.Compile("https://raw.githubusercontent.com/crynux-ai/stable-diffusion-task/main/schema/stable-diffusion-inference-task.json")
 
 	if err != nil {

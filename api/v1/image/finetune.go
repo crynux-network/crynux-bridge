@@ -13,14 +13,14 @@ import (
 	"path/filepath"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 type SDFinetuneLoraRequest struct {
 	SDFinetuneLoraTaskParams
-	Authorization string `header:"Authorization" validate:"required" description:"API key"`
+	Authorization string  `header:"Authorization" validate:"required" description:"API key"`
 	Timeout       *uint64 `json:"timeout,omitempty" description:"Task timeout" validate:"omitempty"`
 }
 
@@ -109,15 +109,15 @@ func CreateSDFinetuneLoraTask(c *gin.Context, in *SDFinetuneLoraRequest) (*SDFin
 		if err != nil {
 			return nil, response.NewExceptionResponse(err)
 		}
-	
+
 		if files, ok := form.File["checkpoint"]; ok {
 			if len(files) != 1 {
 				return nil, response.NewValidationErrorResponse("checkpoint", "More than one checkpoint file uploaded")
 			}
-	
+
 			checkpoint := files[0]
 			appConfig := config.GetConfig()
-	
+
 			uuid := uuid.New().String()
 			checkpointFilename := filepath.Join(appConfig.DataDir.InferenceTasks, fmt.Sprintf("%s_checkpoint.zip", uuid))
 			if err = c.SaveUploadedFile(checkpoint, checkpointFilename); err != nil {
@@ -135,14 +135,12 @@ func CreateSDFinetuneLoraTask(c *gin.Context, in *SDFinetuneLoraRequest) (*SDFin
 
 	taskType := models.TaskTypeSDFTLora
 	minVram := uint64(24)
-	taskFee := uint64(15000000000)
 	repeatNum := 1
 	task := &inference_tasks.TaskInput{
 		ClientID:  apiKey.ClientID,
 		TaskArgs:  string(taskArgsStr),
 		TaskType:  &taskType,
 		MinVram:   &minVram,
-		TaskFee:   &taskFee,
 		RepeatNum: &repeatNum,
 		Timeout:   in.Timeout,
 	}
@@ -162,7 +160,7 @@ type GetSDFinetuneLoraTaskRequest struct {
 }
 
 type GetSDFinetuneLoraTaskResult struct {
-	ID uint `json:"id"`
+	ID     uint                    `json:"id"`
 	Status models.ClientTaskStatus `json:"status"`
 }
 
@@ -182,17 +180,15 @@ func GetSDFinetuneLoraTaskStatus(c *gin.Context, in *GetSDFinetuneLoraTaskReques
 
 	return &GetSDFinetuneLoraTaskResponse{
 		Data: &GetSDFinetuneLoraTaskResult{
-			ID: clientTask.ID,	
+			ID:     clientTask.ID,
 			Status: clientTask.Status,
 		},
 	}, nil
 }
 
-
 type DownloadSDFinetuneLoraTaskRequest struct {
-	ID uint `path:"id" json:"id" description:"Task id" validate:"required"`
+	ID            uint   `path:"id" json:"id" description:"Task id" validate:"required"`
 	Authorization string `header:"Authorization" validate:"required" description:"API key"`
-
 }
 
 func DownloadSDFinetuneLoraTaskResult(c *gin.Context, in *DownloadSDFinetuneLoraTaskRequest) error {

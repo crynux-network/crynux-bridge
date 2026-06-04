@@ -26,7 +26,7 @@ type CreateImageRequest struct {
 	Authorization     string  `header:"Authorization" validate:"required" description:"API key"`
 	Prompt            string  `json:"prompt" validate:"required" description:"A text description of the desired image(s)"`
 	Background        string  `json:"background,omitempty" description:"No use for now. For compatibility with Openai."`
-	Model             string  `json:"model,omitempty" default:"crynux-ai/sdxl-turbo" description:"The model to use for image generation. Default is 'crynux-ai/sdxl-turbo'"`
+	Model             string  `json:"model,omitempty" default:"crynux-network/sdxl-turbo" description:"The model to use for image generation. Default is 'crynux-network/sdxl-turbo'"`
 	Moderation        string  `json:"moderation,omitempty" default:"auto" description:"No use for now. For compatibility with Openai."`
 	N                 int     `json:"n,omitempty" default:"1" description:"The number of images to generate. Default is 1"`
 	OutputCompression int     `json:"output_compression,omitempty" default:"100" description:"The compression level for the output image(s). Default is 100. No use for now."`
@@ -44,7 +44,7 @@ func (in *CreateImageRequest) SetDefaultValues() {
 		in.Background = "auto"
 	}
 	if in.Model == "" {
-		in.Model = "crynux-ai/sdxl-turbo"
+		in.Model = "crynux-network/sdxl-turbo"
 	}
 	if in.Moderation == "" {
 		in.Moderation = "auto"
@@ -107,7 +107,7 @@ func streamBase64Encode(filePath string) (string, error) {
 	defer encoder.Close()
 
 	reader := bufio.NewReader(file)
-	chunk := make([]byte, 4096) // 4KB缓冲区
+	chunk := make([]byte, 4096)
 
 	for {
 		n, err := reader.Read(chunk)
@@ -164,18 +164,18 @@ func CreateImage(c *gin.Context, in *CreateImageRequest) (*CreateImageResponse, 
 	height, _ := strconv.Atoi(matches[3])
 
 	var model models.SDModelArgs
-	if in.Model == "stabilityai/sdxl-turbo" {
-		model.Name = "crynux-ai/sdxl-turbo"
-	} else if in.Model == "ruwnayml/stable-diffusion-v1-5" {
-		model.Name = "crynux-ai/stable-diffusion-v1-5"
-	} else if in.Model == "stabilityai/stable-diffusion-xl-base-1.0" {
-		model.Name = "crynux-ai/stable-diffusion-xl-base-1.0"
-	} else {
+	switch in.Model {
+	case "stabilityai/sdxl-turbo":
+		model.Name = "crynux-network/sdxl-turbo"
+	case "ruwnayml/stable-diffusion-v1-5":
+		model.Name = "crynux-network/stable-diffusion-v1-5"
+	case "stabilityai/stable-diffusion-xl-base-1.0":
+		model.Name = "crynux-network/stable-diffusion-xl-base-1.0"
+	default:
 		model.Name = in.Model
 	}
 
-	if in.Model == "crynux-ai/sdxl-turbo" || in.Model == "crynux-ai/stable-diffusion-v1-5" || in.Model == "crynux-ai/stable-diffusion-xl-base-1.0" || 
-		in.Model == "crynux-network/sdxl-turbo" || in.Model == "crynux-network/stable-diffusion-v1-5" || in.Model == "crynux-network/stable-diffusion-xl-base-1.0" {
+	if model.Name == "crynux-network/sdxl-turbo" || model.Name == "crynux-network/stable-diffusion-v1-5" || model.Name == "crynux-network/stable-diffusion-xl-base-1.0" {
 		model.Variant = "fp16"
 	}
 
@@ -188,10 +188,11 @@ func CreateImage(c *gin.Context, in *CreateImageRequest) (*CreateImageResponse, 
 		Seed:          rand.Intn(100000000),
 	}
 
-	if model.Name == "crynux-ai/sdxl-turbo" {
+	switch model.Name {
+	case "crynux-network/sdxl-turbo":
 		taskConfig.Steps = 1
 		taskConfig.Cfg = 0
-	} else if model.Name == "crynux-ai/stable-diffusion-v1-5" {
+	case "crynux-network/stable-diffusion-v1-5":
 		taskConfig.Cfg = 7
 	}
 
@@ -200,7 +201,7 @@ func CreateImage(c *gin.Context, in *CreateImageRequest) (*CreateImageResponse, 
 		Prompt:     in.Prompt,
 		TaskConfig: taskConfig,
 	}
-	if model.Name == "crynux-ai/sdxl-turbo" {
+	if model.Name == "crynux-network/sdxl-turbo" {
 		taskArgs.Scheduler = &models.EulerAncestralDiscrete{
 			TimestepSpacing: "trailing",
 		}

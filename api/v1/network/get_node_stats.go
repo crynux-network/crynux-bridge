@@ -1,11 +1,9 @@
 package network
 
 import (
-	"context"
 	"crynux_bridge/api/v1/response"
-	"crynux_bridge/blockchain"
+	"crynux_bridge/relay"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,30 +17,16 @@ type GetNodeStatsOutput struct {
 	Data NodeStats `json:"data"`
 }
 
-func GetNodeStats(*gin.Context) (*GetNodeStatsOutput, error) {
-
-	netstatsContractInstance := blockchain.GetNetstatsContractInstance()
-
-	totalNodes, err := netstatsContractInstance.TotalNodes(&bind.CallOpts{
-		Pending: false,
-		Context: context.Background(),
-	})
-	if err != nil {
-		return nil, response.NewExceptionResponse(err)
-	}
-
-	availableNodes, err := netstatsContractInstance.AvailableNodes(&bind.CallOpts{
-		Pending: false,
-		Context: context.Background(),
-	})
+func GetNodeStats(c *gin.Context) (*GetNodeStatsOutput, error) {
+	stats, err := relay.GetNodeStats(c.Request.Context())
 	if err != nil {
 		return nil, response.NewExceptionResponse(err)
 	}
 
 	return &GetNodeStatsOutput{
 		Data: NodeStats{
-			NumAvailableNodes: availableNodes.Uint64(),
-			NumTotalNodes:     totalNodes.Uint64(),
+			NumAvailableNodes: stats.AvailableNodes,
+			NumTotalNodes:     stats.TotalNodes,
 		},
 	}, nil
 }

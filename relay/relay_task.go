@@ -59,10 +59,6 @@ type CancelTaskInput struct {
 	Signature        string `json:"signature,omitempty"`
 }
 
-type CheckBalanceInput struct {
-	Address string `json:"address"`
-}
-
 // Parse the "data" field of relay response, and store it in parsedData
 func parseRelayResponseData(resp *http.Response, parsedData any) error {
 	if resp.StatusCode != 200 {
@@ -421,33 +417,12 @@ func CheckBalanceForTaskCreator(ctx context.Context) error {
 
 	address := appConfig.Blockchain.Account.Address
 
-	reqUrl := appConfig.Relay.BaseURL + fmt.Sprintf("/v1/balance/%s", address)
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(timeoutCtx, "GET", reqUrl, nil)
-	resp, err := http.DefaultClient.Do(req)
+	balance, err := GetBalance(ctx, address)
 	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if err := processRelayResponse(resp); err != nil {
 		log.Errorf("Relay: CheckBalanceForTaskCreator failed to fetch relay account balance: %v", err)
 		return err
 	}
-
-	// get and check balance
-	balanceStr := new(string)
-	err = parseRelayResponseData(resp, balanceStr)
-	if err != nil {
-		log.Errorf("Relay: CheckBalanceForTaskCreator failed to parse relay account balance: %v", err)
-	}
-	log.Debugf("Relay: CheckBalanceForTaskCreator relay account balance: %s", *balanceStr)
-
-	balance, ok := big.NewInt(0).SetString(*balanceStr, 10)
-	if !ok {
-		return errors.New("failed to convert balance string to big.Int")
-	}
+	log.Debugf("Relay: CheckBalanceForTaskCreator relay account balance: %s", balance.String())
 
 	ethThreshold := utils.EtherToWei(big.NewInt(500))
 	if balance.Cmp(ethThreshold) != 1 {

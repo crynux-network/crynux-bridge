@@ -56,7 +56,7 @@ func InitRoutes(r *fizz.Fizz) {
 
 	applicationGroup := v1g.Group("application", "Application", "Application related APIs")
 	applicationGroup.GET("/wallet/balance", []fizz.OperationOption{
-		fizz.Summary("Get the balance of the application wallet"),
+		fizz.Summary("Get the Relay Account balance of the application wallet"),
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, tonic.Handler(application.GetWalletBalance, 200))
 

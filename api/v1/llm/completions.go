@@ -107,7 +107,6 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 
 	taskType := models.TaskTypeLLM
 	minVram := resolveMinVram(in.MinVram, in.VramLimit)
-	taskFee := uint64(6000000000)
 
 	task := &inference_tasks.TaskInput{
 		ClientID:        apiKey.ClientID,
@@ -118,7 +117,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 		RequiredGPU:     "",
 		RequiredGPUVram: 0,
 		RepeatNum:       nil,
-		TaskFee:         &taskFee,
+		TaskFee:         nil,
 		Timeout:         in.Timeout,
 	}
 
