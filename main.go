@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crynux_bridge/api"
-	"crynux_bridge/blockchain"
 	"crynux_bridge/config"
 	"crynux_bridge/migrate"
 	"crynux_bridge/relay"
@@ -35,17 +34,13 @@ func main() {
 
 	startDBMigration()
 
-	if err := blockchain.Init(context.Background()); err != nil {
-		log.Fatalln(err)
-	}
-
 	// Check the relay account balance
 	if err := relay.CheckBalanceForTaskCreator(context.Background()); err != nil {
 		log.Fatalln(err)
 	}
 
 	go tasks.ProcessTasks(context.Background())
-	go tasks.AutoCreateTasks(context.Background())
+	go tasks.HeartbeatCreateTasks(context.Background())
 	go tasks.CancelTasks(context.Background())
 	go tasks.ProcessSDFTTasks(context.Background())
 

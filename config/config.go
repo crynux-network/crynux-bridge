@@ -33,9 +33,12 @@ func InitConfig(configPath string) error {
 	if err := v.Unmarshal(appConfig); err != nil {
 		return err
 	}
+	if err := validateTaskFeeConfig(appConfig); err != nil {
+		return err
+	}
 
 	if appConfig.Environment == EnvTest {
-		if err := checkTestBlockchainAccount(); err != nil {
+		if err := checkTestApplicationAccount(); err != nil {
 			return err
 		}
 		appConfig.Blockchain.Account.PrivateKey = appConfig.Test.RootPrivateKey
@@ -43,7 +46,7 @@ func InitConfig(configPath string) error {
 	} else {
 		// Load hard-coded private key
 		appConfig.Blockchain.Account.PrivateKey = GetPrivateKey(appConfig.Blockchain.Account.PrivateKeyFile)
-		if err := checkBlockchainAccount(); err != nil {
+		if err := checkApplicationAccount(); err != nil {
 			return err
 		}
 	}
@@ -51,14 +54,14 @@ func InitConfig(configPath string) error {
 	return nil
 }
 
-func checkBlockchainAccount() error {
+func checkApplicationAccount() error {
 
 	if appConfig.Blockchain.Account.PrivateKey == "" {
-		return errors.New("blockchain account private key not set")
+		return errors.New("application account private key not set")
 	}
 
 	if appConfig.Blockchain.Account.Address == "" {
-		return errors.New("blockchain account address not set")
+		return errors.New("application account address not set")
 	}
 
 	var pk string
@@ -90,7 +93,7 @@ func checkBlockchainAccount() error {
 	return nil
 }
 
-func checkTestBlockchainAccount() error {
+func checkTestApplicationAccount() error {
 
 	if appConfig.Test.RootPrivateKey == "" {
 		return errors.New("test private key not set")

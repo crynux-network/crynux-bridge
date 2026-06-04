@@ -1,13 +1,11 @@
 package application
 
 import (
-	"context"
 	"crynux_bridge/api/v1/response"
-	"crynux_bridge/blockchain"
 	"crynux_bridge/config"
+	"crynux_bridge/relay"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,18 +19,10 @@ type GetWalletBalanceResponse struct {
 	Data *WalletBalance `json:"data"`
 }
 
-func GetWalletBalance(_ *gin.Context) (*GetWalletBalanceResponse, error) {
+func GetWalletBalance(c *gin.Context) (*GetWalletBalanceResponse, error) {
 	appConfig := config.GetConfig()
-	applicationWalletAddress := common.HexToAddress(appConfig.Blockchain.Account.Address)
 
-	client := blockchain.GetRpcClient()
-
-	balance, err := client.BalanceAt(
-		context.Background(),
-		applicationWalletAddress,
-		nil,
-	)
-
+	balance, err := relay.GetBalance(c.Request.Context(), appConfig.Blockchain.Account.Address)
 	if err != nil {
 		return nil, response.NewExceptionResponse(err)
 	}

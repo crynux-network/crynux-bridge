@@ -22,7 +22,7 @@ type TaskInput struct {
 	ClientID        string                `json:"client_id" description:"Client id" validate:"required"`
 	TaskArgs        string                `json:"task_args" description:"Task args" validate:"required"`
 	TaskType        *models.ChainTaskType `json:"task_type" description:"Task type. 0 - SD task, 1 - LLM task, 2 - SD Finetune task" validate:"required"`
-	TaskVersion     *string               `json:"task_version,omitempty" description:"Task version. Default is task.task_versions[0]" validate:"omitempty"`
+	TaskVersion     *string               `json:"task_version,omitempty" description:"Task version. Default is task.default_task_version" validate:"omitempty"`
 	MinVram         *uint64               `json:"min_vram,omitempty" description:"Task minimal vram requirement" validate:"omitempty"`
 	RequiredGPU     string                `json:"required_gpu,omitempty" description:"Task required GPU name" validate:"omitempty"`
 	RequiredGPUVram uint64                `json:"required_gpu_vram,omitempty" description:"Task required GPU Vram" validate:"omitempty"`
@@ -67,18 +67,37 @@ func getTaskSize(taskType models.ChainTaskType, taskArgs string) (uint64, error)
 	}
 }
 
-func getTaskFee(taskType models.ChainTaskType, baseTaskFee, cap uint64) uint64 {
-	if taskType == models.TaskTypeSD {
-		return baseTaskFee * cap
-	} else {
-		return baseTaskFee * cap
+func getDefaultTaskFeeGWei(taskType models.ChainTaskType, taskArgs string, appConfig *config.AppConfig) (uint64, error) {
+	var feeCNX float64
+	switch taskType {
+	case models.TaskTypeSD:
+		baseModel, err := models.GetSDTaskConfigBaseModel(taskArgs)
+		if err != nil {
+			return 0, err
+		}
+		if baseModel == "crynux-network/sdxl-turbo" {
+			feeCNX = appConfig.Task.DefaultSDXLTaskFeeCNX
+		} else {
+			feeCNX = appConfig.Task.DefaultSDTaskFeeCNX
+		}
+	case models.TaskTypeLLM:
+		feeCNX = appConfig.Task.DefaultLLMTaskFeeCNX
+	case models.TaskTypeSDFTLora:
+		feeCNX = appConfig.Task.DefaultSDFinetuneTaskFeeCNX
+	default:
+		return 0, fmt.Errorf("unsupported task type %d", taskType)
 	}
+	return config.CNXToGWei(feeCNX)
+}
+
+func getTaskFee(baseTaskFee, cap uint64) uint64 {
+	return baseTaskFee * cap
 }
 
 func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientTask, appConfig *config.AppConfig) ([]*models.InferenceTask, error) {
 	taskType := *in.TaskType
 
-	var taskVersion = appConfig.Task.TaskVersions[0]
+	var taskVersion = appConfig.Task.DefaultTaskVersion
 	if in.TaskVersion != nil {
 		taskVersion = *in.TaskVersion
 	}
@@ -110,9 +129,12 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 	if in.TaskFee != nil {
 		baseTaskFee = *in.TaskFee
 	} else {
-		baseTaskFee = 5000000000
+		baseTaskFee, err = getDefaultTaskFeeGWei(taskType, in.TaskArgs, appConfig)
+		if err != nil {
+			return nil, response.NewExceptionResponse(err)
+		}
 	}
-	taskFee := getTaskFee(taskType, baseTaskFee, taskSize) // unit: GWei
+	taskFee := getTaskFee(baseTaskFee, taskSize)
 
 	repeatNum := appConfig.Task.RepeatNum
 	if in.RepeatNum != nil {

@@ -119,7 +119,6 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 
 	taskType := models.TaskTypeLLM
 	minVram := resolveMinVram(in.MinVram, in.VramLimit)
-	taskFee := uint64(6000000000)
 
 	task := &inference_tasks.TaskInput{
 		ClientID:        apiKey.ClientID,
@@ -130,7 +129,7 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 		RequiredGPU:     "",
 		RequiredGPUVram: 0,
 		RepeatNum:       nil,
-		TaskFee:         &taskFee,
+		TaskFee:         nil,
 		Timeout:         in.Timeout,
 	}
 
