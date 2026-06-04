@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/spf13/viper"
-	"strings"
 )
 
 var appConfig *AppConfig
@@ -38,6 +37,7 @@ func InitConfig(configPath string) error {
 	}
 
 	if appConfig.Environment == EnvTest {
+		appConfig.Test.RootPrivateKey = NormalizePrivateKey(appConfig.Test.RootPrivateKey)
 		if err := checkTestApplicationAccount(); err != nil {
 			return err
 		}
@@ -64,12 +64,7 @@ func checkApplicationAccount() error {
 		return errors.New("application account address not set")
 	}
 
-	var pk string
-	if strings.HasPrefix(appConfig.Blockchain.Account.PrivateKey, "0x") {
-		pk = appConfig.Blockchain.Account.PrivateKey[2:]
-	} else {
-		pk = appConfig.Blockchain.Account.PrivateKey
-	}
+	pk := NormalizePrivateKey(appConfig.Blockchain.Account.PrivateKey)
 
 	// Check private key and address
 	privateKey, err := crypto.HexToECDSA(pk)
@@ -103,12 +98,7 @@ func checkTestApplicationAccount() error {
 		return errors.New("test account address not set")
 	}
 
-	var testPk string
-	if strings.HasPrefix(appConfig.Test.RootPrivateKey, "0x") {
-		testPk = appConfig.Test.RootPrivateKey[2:]
-	} else {
-		testPk = appConfig.Test.RootPrivateKey
-	}
+	testPk := NormalizePrivateKey(appConfig.Test.RootPrivateKey)
 
 	testRootPrivateKey, err := crypto.HexToECDSA(testPk)
 	if err != nil {

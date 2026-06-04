@@ -6,12 +6,20 @@ import (
 	"strings"
 )
 
+func NormalizePrivateKey(privateKey string) string {
+	pk := strings.TrimSpace(privateKey)
+	if strings.HasPrefix(pk, "0x") || strings.HasPrefix(pk, "0X") {
+		return pk[2:]
+	}
+	return pk
+}
+
 func GetPrivateKey(file string) string {
 	b, err := os.ReadFile(file)
 	if err != nil {
 		panic(err)
 	}
-	return strings.TrimSpace(string(b))
+	return NormalizePrivateKey(string(b))
 }
 
 func DeleteBlockchainPrivateKeyFileAfterRead() error {
