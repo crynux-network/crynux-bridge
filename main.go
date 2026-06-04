@@ -38,6 +38,9 @@ func main() {
 	if err := relay.CheckBalanceForTaskCreator(context.Background()); err != nil {
 		log.Fatalln(err)
 	}
+	if err := config.DeleteBlockchainPrivateKeyFileAfterRead(); err != nil {
+		log.Fatalln(err)
+	}
 
 	go tasks.ProcessTasks(context.Background())
 	go tasks.HeartbeatCreateTasks(context.Background())
