@@ -186,6 +186,8 @@ func heartbeatCreateTasks(ctx context.Context) error {
 
 	clientID := "heartbeat-task"
 	client := models.Client{ClientId: clientID}
+	currentHour := time.Now().Truncate(time.Hour)
+	tasksCreatedInHour := uint64(0)
 
 	if err := func() error {
 		dbCtx, cancel := context.WithTimeout(ctx, time.Second)
@@ -206,6 +208,27 @@ func heartbeatCreateTasks(ctx context.Context) error {
 	for {
 		batchSize := int(appConfig.Task.HeartbeatTasks.BatchSize)
 		if batchSize > 0 {
+			now := time.Now()
+			hour := now.Truncate(time.Hour)
+			if hour.After(currentHour) {
+				currentHour = hour
+				tasksCreatedInHour = 0
+			}
+
+			maxTasksPerHour := appConfig.Task.HeartbeatTasks.MaxTasksPerHour
+			if maxTasksPerHour > 0 {
+				if tasksCreatedInHour >= maxTasksPerHour {
+					log.Infof("HeartbeatTask: max tasks per hour reached: %d", maxTasksPerHour)
+					time.Sleep(2 * time.Second)
+					continue
+				}
+
+				remainingTasks := maxTasksPerHour - tasksCreatedInHour
+				if uint64(batchSize) > remainingTasks {
+					batchSize = int(remainingTasks)
+				}
+			}
+
 			tasks := make([]*models.InferenceTask, 0, batchSize)
 			cnt, err := getPendingHeartbeatTasksCount(ctx, client)
 			if err != nil {
@@ -248,6 +271,7 @@ func heartbeatCreateTasks(ctx context.Context) error {
 				log.Errorf("HeartbeatTask: cannot save heartbeat tasks: %v", err)
 				return err
 			}
+			tasksCreatedInHour += uint64(len(tasks))
 		}
 		time.Sleep(2 * time.Second)
 	}
