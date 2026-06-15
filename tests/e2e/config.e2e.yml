@@ -40,6 +40,7 @@ task:
   heartbeat_tasks:
     pending_tasks_limit: 10
     batch_size: 0
+    max_tasks_per_hour: 0
     tasks:
       - task_version: "3.1.0"
         type: "sd"

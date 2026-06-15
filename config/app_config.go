@@ -85,6 +85,7 @@ type AppConfig struct {
 type HeartbeatTasksConfig struct {
 	PendingTasksLimit uint64                `mapstructure:"pending_tasks_limit"`
 	BatchSize         uint64                `mapstructure:"batch_size"`
+	MaxTasksPerHour   uint64                `mapstructure:"max_tasks_per_hour"`
 	Tasks             []HeartbeatTaskConfig `mapstructure:"tasks"`
 }
 
