@@ -62,8 +62,8 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	}
 
 	generationConfig := &models.GPTGenerationConfig{
-		DoSample:           true,
-		Temperature:        in.Temperature,
+		DoSample:           false,
+		Temperature:        0,
 		NumReturnSequences: in.N,
 	}
 	if in.MaxTokens != nil {
