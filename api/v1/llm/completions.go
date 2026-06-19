@@ -138,6 +138,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	/* 3. Wrap GPTTaskResponse into CompletionsResponse and return */
 	choices := make([]structs.CResChoice, len(gptTaskResponse.Choices))
 	for i, c := range gptTaskResponse.Choices {
+		c.Message.Content = stripThinkingContent(utils.MessageContentToString(c.Message.Content))
 		choice, err := utils.ResponseChoiceToCResChoice(c)
 		if err != nil {
 			return nil, response.NewExceptionResponse(err)

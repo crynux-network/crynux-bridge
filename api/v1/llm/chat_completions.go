@@ -12,19 +12,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
-
-var toolCallRegex = regexp.MustCompile(`<tool_call>\s*({[\s\S]*?})\s*</tool_call>`)
-
-type parsedLlmToolCallArgs struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"` // Keep arguments as raw JSON to convert back to string easily
-}
 
 type ChatCompletionsRequest struct {
 	structs.ChatCompletionsRequest
@@ -107,6 +99,7 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 		Messages:         messages,
 		Tools:            in.Tools,
 		GenerationConfig: generationConfig,
+		TemplateArgs:     buildLLMTemplateArgs(in.Model, in.Tools),
 		Seed:             in.Seed,
 		DType:            dtype,
 		// QuantizeBits:     structs.QuantizeBits8,
@@ -152,52 +145,24 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 	for i, choice := range gptTaskResponse.Choices {
 
 		choiceMessageContent := utils.MessageContentToString(choice.Message.Content)
-		fmt.Println("choice.Message.Content", choiceMessageContent)
+		cleanContent, parsedToolCalls := normalizeAssistantContent(choiceMessageContent)
+		choice.Message.Content = cleanContent
 
-		matches := toolCallRegex.FindStringSubmatch(choiceMessageContent)
-		if len(matches) > 1 {
-			potentialJsonString := matches[1]
-			var parsedArgs parsedLlmToolCallArgs
-			if err := json.Unmarshal([]byte(potentialJsonString), &parsedArgs); err == nil {
-				// Successfully parsed the LLM's tool call structure
-				choice.Message.Content = "" // Clear content for tool calls
-				choice.FinishReason = models.FinishReasonToolCalls
-
-				var finalArgumentsString string
-				var tempStr string
-				// Attempt to unmarshal Arguments as a JSON string first.
-				// This handles cases where arguments are double-encoded as a string.
-				if err := json.Unmarshal(parsedArgs.Arguments, &tempStr); err == nil {
-					// If successful, parsedArgs.Arguments was a JSON string,
-					// and tempStr is its unescaped content.
-					finalArgumentsString = tempStr
-				} else {
-					// If not a JSON string (e.g., it's a JSON object/array directly),
-					// use its direct string representation.
-					finalArgumentsString = string(parsedArgs.Arguments)
-				}
-
-				toolCallInstance := structs.ToolCall{
-					Id:   fmt.Sprintf("call_%s_choice%d_tool0", resultDownloadedTask.TaskIDCommitment, i),
+		if len(parsedToolCalls) > 0 {
+			choice.FinishReason = models.FinishReasonToolCalls
+			choice.Message.ToolCalls = make([]structs.ToolCall, len(parsedToolCalls))
+			for toolIdx, parsedToolCall := range parsedToolCalls {
+				choice.Message.ToolCalls[toolIdx] = structs.ToolCall{
+					Id:   fmt.Sprintf("call_%s_choice%d_tool%d", resultDownloadedTask.TaskIDCommitment, i, toolIdx),
 					Type: "function",
 					Function: structs.FunctionCall{
-						Name:      parsedArgs.Name,
-						Arguments: finalArgumentsString,
+						Name:      parsedToolCall.Name,
+						Arguments: parsedToolCall.Arguments,
 					},
 				}
-				choice.Message.ToolCalls = []structs.ToolCall{toolCallInstance}
-			} else {
-				// JSON parsing failed, treat as regular text. Original content is already there.
-				// Set a default finish reason if not already set by LLM response processing for non-tool-call cases
-				if choice.FinishReason == "" {
-					choice.FinishReason = models.FinishReasonStop
-				}
 			}
-		} else {
-			// No tool call tag found, ensure default finish reason
-			if choice.FinishReason == "" {
-				choice.FinishReason = models.FinishReasonStop
-			}
+		} else if choice.FinishReason == "" {
+			choice.FinishReason = models.FinishReasonStop
 		}
 
 		choices[i] = utils.ResponseChoiceToCCResChoice(choice)
