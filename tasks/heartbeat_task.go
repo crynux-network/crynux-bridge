@@ -152,8 +152,8 @@ func buildLLMHeartbeatTaskArgs(model string) (string, error) {
 		"tools": nil,
 		"generation_config": map[string]interface{}{
 			"max_new_tokens":     250,
-			"do_sample":          true,
-			"temperature":        0.8,
+			"do_sample":          false,
+			"temperature":        0,
 			"repetition_penalty": 1.1,
 		},
 		"seed":  rand.Intn(100000000),
