@@ -31,6 +31,7 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 	db := config.GetDB()
 
 	/* 1. Build TaskInput from ChatCompletionsRequest */
+	requestStart := time.Now()
 	in.SetDefaultValues() // set default values for some fields
 	logRequestPayload := map[string]any{
 		"request":    in.ChatCompletionsRequest,
@@ -39,7 +40,15 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 	}
 	var logResponsePayload any
 	defer func() {
-		logOpenAICompatibleExchange("chat_completions", in.Authorization, logRequestPayload, logResponsePayload, err)
+		logOpenAICompatibleExchange("chat_completions", in.Authorization, logRequestPayload, logResponsePayload, err, time.Since(requestStart).Seconds())
+	}()
+	toolCallRequestHasTools := len(in.Tools) > 0
+	toolCallMatched := false
+	var toolCallLogResponsePayload any
+	defer func() {
+		if toolCallRequestHasTools {
+			logOpenAICompatibleToolCallExchange("chat_completions", in.Authorization, logRequestPayload, toolCallLogResponsePayload, toolCallMatched, err, time.Since(requestStart).Seconds())
+		}
 	}()
 
 	// validate request (apiKey)
@@ -149,6 +158,7 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 		choice.Message.Content = cleanContent
 
 		if len(parsedToolCalls) > 0 {
+			toolCallMatched = true
 			choice.FinishReason = models.FinishReasonToolCalls
 			choice.Message.ToolCalls = make([]structs.ToolCall, len(parsedToolCalls))
 			for toolIdx, parsedToolCall := range parsedToolCalls {
@@ -176,6 +186,7 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 		// Object:  "text",
 		// ServiceTier: "",
 	}
+	toolCallLogResponsePayload = ccResponse
 
 	if err := apiKey.Use(ctx, db); err != nil {
 		return nil, response.NewExceptionResponse(err)

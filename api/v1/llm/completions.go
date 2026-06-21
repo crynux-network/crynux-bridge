@@ -30,6 +30,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	db := config.GetDB()
 
 	/* 1. Build TaskInput from CompletionsRequest */
+	requestStart := time.Now()
 	in.SetDefaultValues() // set default values for some fields
 	logRequestPayload := map[string]any{
 		"request":    in.CompletionsRequest,
@@ -38,7 +39,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	}
 	var logResponsePayload any
 	defer func() {
-		logOpenAICompatibleExchange("completions", in.Authorization, logRequestPayload, logResponsePayload, err)
+		logOpenAICompatibleExchange("completions", in.Authorization, logRequestPayload, logResponsePayload, err, time.Since(requestStart).Seconds())
 	}()
 
 	// validate request (apiKey)

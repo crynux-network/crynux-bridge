@@ -17,6 +17,7 @@ log:
   max_file_num: 5
   features:
     llm_api_request_log_enabled: false
+    llm_api_request_log_toolcall_enabled: false
 http:
   host: "0.0.0.0"
   port: "5028"

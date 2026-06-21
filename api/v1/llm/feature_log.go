@@ -16,39 +16,86 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-const defaultLLMAPIRequestLogPath = "/app/data/logs/crynux_bridge_llm_api_requests.log"
+const (
+	llmFeatureAPIRequests       = "llm_api_requests"
+	llmFeatureAPIRequestTools   = "llm_api_request_toolcalls"
+	llmFeatureLogLevelInfo      = "INFO"
+	llmFeatureLogLevelError     = "ERROR"
+	llmFeatureLogInfoFileLevel  = "info"
+	llmFeatureLogErrorFileLevel = "error"
+)
 
 var (
-	llmFeatureLogWriter     io.Writer
-	initLLMFeatureLogWriter sync.Once
-	llmFeatureLogWriterErr  error
+	llmFeatureLogWriters    = map[string]io.Writer{}
+	llmFeatureLogWriterLock sync.Mutex
 	llmFeatureLogWriteLock  sync.Mutex
 )
 
-func logOpenAICompatibleExchange(api string, authorization string, request any, response any, logErr error) {
+func logOpenAICompatibleExchange(api string, authorization string, request any, response any, logErr error, elapsedSeconds float64) {
 	if !isLLMAPIRequestLogEnabled() {
 		return
 	}
 
-	writer, err := getLLMFeatureLogWriter()
+	logLevel := llmFeatureLogLevelInfo
+	if logErr != nil {
+		logLevel = llmFeatureLogLevelError
+	}
+
+	writer, err := getLLMFeatureLogWriter(llmFeatureAPIRequests, logLevel)
 	if err != nil {
 		logrus.WithError(err).Error("failed to initialize llm feature log writer")
 		return
 	}
 
-	requestText := serializeLogValue(request)
+	requestText := serializeLogValue(sanitizeLLMRequestLogPayload(request))
 	apiLabel := normalizeAPILabel(api)
 	maskedAPIKey := maskAuthorizationKey(authorization)
 	timestamp := time.Now().Format(time.RFC3339)
-	logLevel := "INFO"
-	if logErr != nil {
-		logLevel = "ERROR"
-	}
 
-	line := fmt.Sprintf("[%s] [%s] [LLM API Request] [%s] [API Key %s] request=%s", timestamp, logLevel, apiLabel, maskedAPIKey, requestText)
+	line := fmt.Sprintf("[%s] [%s] [LLM API Request] [%s] [API Key %s] duration_seconds=%.3f, request=%s", timestamp, logLevel, apiLabel, maskedAPIKey, elapsedSeconds, requestText)
 	if logErr != nil {
 		line = fmt.Sprintf("%s, error=%s", line, formatLLMAPIError(logErr))
 	} else {
+		line = fmt.Sprintf("%s, response=%s", line, serializeLogValue(response))
+	}
+
+	llmFeatureLogWriteLock.Lock()
+	defer llmFeatureLogWriteLock.Unlock()
+	if _, err := io.WriteString(writer, line+"\n"); err != nil {
+		logrus.WithError(err).Error("failed to write llm feature log")
+	}
+}
+
+func logOpenAICompatibleToolCallExchange(api string, authorization string, request any, response any, matchedToolCall bool, logErr error, elapsedSeconds float64) {
+	if !isLLMAPIRequestToolCallLogEnabled() {
+		return
+	}
+
+	logLevel := llmFeatureLogLevelInfo
+	logErrorText := ""
+	if logErr != nil {
+		logLevel = llmFeatureLogLevelError
+		logErrorText = formatLLMAPIError(logErr)
+	} else if !matchedToolCall {
+		logLevel = llmFeatureLogLevelError
+		logErrorText = "no tool call matched in llm response"
+	}
+
+	writer, err := getLLMFeatureLogWriter(llmFeatureAPIRequestTools, logLevel)
+	if err != nil {
+		logrus.WithError(err).Error("failed to initialize llm feature log writer")
+		return
+	}
+
+	requestText := serializeLogValue(sanitizeLLMRequestLogPayload(request))
+	apiLabel := normalizeAPILabel(api)
+	maskedAPIKey := maskAuthorizationKey(authorization)
+	timestamp := time.Now().Format(time.RFC3339)
+	line := fmt.Sprintf("[%s] [%s] [LLM API Request Tool Call] [%s] [API Key %s] duration_seconds=%.3f, request=%s, tool_call_matched=%t", timestamp, logLevel, apiLabel, maskedAPIKey, elapsedSeconds, requestText, matchedToolCall)
+	if logErrorText != "" {
+		line = fmt.Sprintf("%s, error=%s", line, logErrorText)
+	}
+	if response != nil {
 		line = fmt.Sprintf("%s, response=%s", line, serializeLogValue(response))
 	}
 
@@ -64,31 +111,49 @@ func isLLMAPIRequestLogEnabled() bool {
 	return appConfig != nil && appConfig.Log.Features.LLMAPIRequestLogEnabled
 }
 
-func getLLMFeatureLogWriter() (io.Writer, error) {
-	initLLMFeatureLogWriter.Do(func() {
-		appConfig := config.GetConfig()
+func isLLMAPIRequestToolCallLogEnabled() bool {
+	appConfig := config.GetConfig()
+	return appConfig != nil && appConfig.Log.Features.LLMAPIRequestLogToolCallEnabled
+}
 
-		outputPath := defaultLLMAPIRequestLogPath
-		if appConfig != nil && appConfig.Log.Output != "" && appConfig.Log.Output != "stdout" && appConfig.Log.Output != "stderr" {
-			outputPath = filepath.Join(filepath.Dir(appConfig.Log.Output), "crynux_bridge_llm_api_requests.log")
-		}
+func getLLMFeatureLogWriter(feature string, logLevel string) (io.Writer, error) {
+	fileLevel := llmFeatureLogInfoFileLevel
+	if logLevel == llmFeatureLogLevelError {
+		fileLevel = llmFeatureLogErrorFileLevel
+	}
+	key := feature + "." + fileLevel
 
-		if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
-			llmFeatureLogWriterErr = err
-			return
-		}
+	llmFeatureLogWriterLock.Lock()
+	defer llmFeatureLogWriterLock.Unlock()
 
-		fileWriter := &lumberjack.Logger{
-			Filename:   outputPath,
-			MaxSize:    getLogRotateMaxSize(appConfig),
-			MaxAge:     getLogRotateMaxDays(appConfig),
-			MaxBackups: getLogRotateMaxFiles(appConfig),
-			Compress:   true,
-		}
-		llmFeatureLogWriter = fileWriter
-	})
+	if writer, ok := llmFeatureLogWriters[key]; ok {
+		return writer, nil
+	}
 
-	return llmFeatureLogWriter, llmFeatureLogWriterErr
+	appConfig := config.GetConfig()
+	outputPath := getLLMFeatureLogPath(appConfig, feature, fileLevel)
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return nil, err
+	}
+
+	fileWriter := &lumberjack.Logger{
+		Filename:   outputPath,
+		MaxSize:    getLogRotateMaxSize(appConfig),
+		MaxAge:     getLogRotateMaxDays(appConfig),
+		MaxBackups: getLogRotateMaxFiles(appConfig),
+		Compress:   true,
+	}
+	llmFeatureLogWriters[key] = fileWriter
+
+	return fileWriter, nil
+}
+
+func getLLMFeatureLogPath(appConfig *config.AppConfig, feature string, fileLevel string) string {
+	filename := fmt.Sprintf("crynux_bridge_%s.%s.log", feature, fileLevel)
+	if appConfig != nil && appConfig.Log.Output != "" && appConfig.Log.Output != "stdout" && appConfig.Log.Output != "stderr" {
+		return filepath.Join(filepath.Dir(appConfig.Log.Output), filename)
+	}
+	return filepath.Join("/app/data/logs", filename)
 }
 
 func getLogRotateMaxSize(appConfig *config.AppConfig) int {
@@ -150,6 +215,74 @@ func serializeLogValue(value any) string {
 		return sanitizeSingleLine(fmt.Sprintf("%v", value))
 	}
 	return sanitizeSingleLine(string(b))
+}
+
+func sanitizeLLMRequestLogPayload(value any) any {
+	return sanitizeJSONLikeValue(value)
+}
+
+func sanitizeJSONLikeValue(value any) any {
+	b, err := json.Marshal(value)
+	if err != nil {
+		return value
+	}
+
+	var decoded any
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		return value
+	}
+	return sanitizeDecodedLogValue(decoded)
+}
+
+func sanitizeDecodedLogValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		sanitized := make(map[string]any, len(typed))
+		for key, child := range typed {
+			lowerKey := strings.ToLower(key)
+			if lowerKey == "tools" {
+				sanitized["tools_count"] = countLogArrayItems(child)
+				continue
+			}
+			if isPromptLogField(lowerKey) {
+				if text, ok := child.(string); ok {
+					sanitized[key] = abbreviateLogText(text)
+					continue
+				}
+			}
+			sanitized[key] = sanitizeDecodedLogValue(child)
+		}
+		return sanitized
+	case []any:
+		sanitized := make([]any, len(typed))
+		for i, child := range typed {
+			sanitized[i] = sanitizeDecodedLogValue(child)
+		}
+		return sanitized
+	default:
+		return value
+	}
+}
+
+func countLogArrayItems(value any) int {
+	items, ok := value.([]any)
+	if !ok {
+		return 0
+	}
+	return len(items)
+}
+
+func isPromptLogField(key string) bool {
+	return key == "prompt" || key == "content" || key == "text"
+}
+
+func abbreviateLogText(text string) string {
+	const keepRunes = 100
+	runes := []rune(text)
+	if len(runes) <= keepRunes*2 {
+		return text
+	}
+	return string(runes[:keepRunes]) + "..." + string(runes[len(runes)-keepRunes:])
 }
 
 func sanitizeSingleLine(s string) string {

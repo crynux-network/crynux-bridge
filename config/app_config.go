@@ -28,7 +28,8 @@ type AppConfig struct {
 		MaxDays     int    `mapstructure:"max_days"`
 		MaxFileNum  int    `mapstructure:"max_file_num"`
 		Features    struct {
-			LLMAPIRequestLogEnabled bool `mapstructure:"llm_api_request_log_enabled"`
+			LLMAPIRequestLogEnabled         bool `mapstructure:"llm_api_request_log_enabled"`
+			LLMAPIRequestLogToolCallEnabled bool `mapstructure:"llm_api_request_log_toolcall_enabled"`
 		} `mapstructure:"features"`
 	} `mapstructure:"log"`
 
