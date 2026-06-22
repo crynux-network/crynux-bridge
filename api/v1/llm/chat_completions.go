@@ -39,15 +39,16 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 		"vram_limit": in.VramLimit,
 	}
 	var logResponsePayload any
+	taskIDCommitment := ""
 	defer func() {
-		logOpenAICompatibleExchange("chat_completions", in.Authorization, logRequestPayload, logResponsePayload, err, time.Since(requestStart).Seconds())
+		logOpenAICompatibleExchange("chat_completions", in.Authorization, taskIDCommitment, logRequestPayload, logResponsePayload, err, time.Since(requestStart).Seconds())
 	}()
 	toolCallRequestHasTools := len(in.Tools) > 0
 	toolCallMatched := false
 	var toolCallLogResponsePayload any
 	defer func() {
 		if toolCallRequestHasTools {
-			logOpenAICompatibleToolCallExchange("chat_completions", in.Authorization, logRequestPayload, toolCallLogResponsePayload, toolCallMatched, err, time.Since(requestStart).Seconds())
+			logOpenAICompatibleToolCallExchange("chat_completions", in.Authorization, taskIDCommitment, logRequestPayload, toolCallLogResponsePayload, toolCallMatched, err, time.Since(requestStart).Seconds())
 		}
 	}()
 
@@ -140,6 +141,7 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 	if err != nil {
 		return nil, mapLLMTaskProcessingError(err)
 	}
+	taskIDCommitment = resultDownloadedTask.TaskIDCommitment
 	logResponsePayload = map[string]any{
 		"task": map[string]any{
 			"task_id_commitment": resultDownloadedTask.TaskIDCommitment,

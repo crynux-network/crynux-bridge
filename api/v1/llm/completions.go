@@ -38,8 +38,9 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 		"vram_limit": in.VramLimit,
 	}
 	var logResponsePayload any
+	taskIDCommitment := ""
 	defer func() {
-		logOpenAICompatibleExchange("completions", in.Authorization, logRequestPayload, logResponsePayload, err, time.Since(requestStart).Seconds())
+		logOpenAICompatibleExchange("completions", in.Authorization, taskIDCommitment, logRequestPayload, logResponsePayload, err, time.Since(requestStart).Seconds())
 	}()
 
 	// validate request (apiKey)
@@ -127,6 +128,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	if err != nil {
 		return nil, mapLLMTaskProcessingError(err)
 	}
+	taskIDCommitment = resultDownloadedTask.TaskIDCommitment
 	logResponsePayload = map[string]any{
 		"task": map[string]any{
 			"task_id_commitment": resultDownloadedTask.TaskIDCommitment,

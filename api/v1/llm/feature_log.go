@@ -23,6 +23,7 @@ const (
 	llmFeatureLogLevelError     = "ERROR"
 	llmFeatureLogInfoFileLevel  = "info"
 	llmFeatureLogErrorFileLevel = "error"
+	llmFeatureLogEntrySeparator = "\n\n"
 )
 
 var (
@@ -31,7 +32,7 @@ var (
 	llmFeatureLogWriteLock  sync.Mutex
 )
 
-func logOpenAICompatibleExchange(api string, authorization string, request any, response any, logErr error, elapsedSeconds float64) {
+func logOpenAICompatibleExchange(api string, authorization string, taskIDCommitment string, request any, response any, logErr error, elapsedSeconds float64) {
 	if !isLLMAPIRequestLogEnabled() {
 		return
 	}
@@ -52,7 +53,7 @@ func logOpenAICompatibleExchange(api string, authorization string, request any, 
 	maskedAPIKey := maskAuthorizationKey(authorization)
 	timestamp := time.Now().Format(time.RFC3339)
 
-	line := fmt.Sprintf("[%s] [%s] [LLM API Request] [%s] [API Key %s] duration_seconds=%.3f, request=%s", timestamp, logLevel, apiLabel, maskedAPIKey, elapsedSeconds, requestText)
+	line := fmt.Sprintf("[%s] [%s] [LLM API Request] [%s] [API Key %s] [Task ID Commitment: %s] duration_seconds=%.3f, request=%s", timestamp, logLevel, apiLabel, maskedAPIKey, taskIDCommitment, elapsedSeconds, requestText)
 	if logErr != nil {
 		line = fmt.Sprintf("%s, error=%s", line, formatLLMAPIError(logErr))
 	} else {
@@ -61,12 +62,12 @@ func logOpenAICompatibleExchange(api string, authorization string, request any, 
 
 	llmFeatureLogWriteLock.Lock()
 	defer llmFeatureLogWriteLock.Unlock()
-	if _, err := io.WriteString(writer, line+"\n"); err != nil {
+	if _, err := io.WriteString(writer, line+llmFeatureLogEntrySeparator); err != nil {
 		logrus.WithError(err).Error("failed to write llm feature log")
 	}
 }
 
-func logOpenAICompatibleToolCallExchange(api string, authorization string, request any, response any, matchedToolCall bool, logErr error, elapsedSeconds float64) {
+func logOpenAICompatibleToolCallExchange(api string, authorization string, taskIDCommitment string, request any, response any, matchedToolCall bool, logErr error, elapsedSeconds float64) {
 	if !isLLMAPIRequestToolCallLogEnabled() {
 		return
 	}
@@ -91,7 +92,7 @@ func logOpenAICompatibleToolCallExchange(api string, authorization string, reque
 	apiLabel := normalizeAPILabel(api)
 	maskedAPIKey := maskAuthorizationKey(authorization)
 	timestamp := time.Now().Format(time.RFC3339)
-	line := fmt.Sprintf("[%s] [%s] [LLM API Request Tool Call] [%s] [API Key %s] duration_seconds=%.3f, request=%s, tool_call_matched=%t", timestamp, logLevel, apiLabel, maskedAPIKey, elapsedSeconds, requestText, matchedToolCall)
+	line := fmt.Sprintf("[%s] [%s] [LLM API Request Tool Call] [%s] [API Key %s] [Task ID Commitment: %s] duration_seconds=%.3f, request=%s, tool_call_matched=%t", timestamp, logLevel, apiLabel, maskedAPIKey, taskIDCommitment, elapsedSeconds, requestText, matchedToolCall)
 	if logErrorText != "" {
 		line = fmt.Sprintf("%s, error=%s", line, logErrorText)
 	}
@@ -101,7 +102,7 @@ func logOpenAICompatibleToolCallExchange(api string, authorization string, reque
 
 	llmFeatureLogWriteLock.Lock()
 	defer llmFeatureLogWriteLock.Unlock()
-	if _, err := io.WriteString(writer, line+"\n"); err != nil {
+	if _, err := io.WriteString(writer, line+llmFeatureLogEntrySeparator); err != nil {
 		logrus.WithError(err).Error("failed to write llm feature log")
 	}
 }
