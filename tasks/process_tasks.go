@@ -6,7 +6,6 @@ import (
 	"crynux_bridge/models"
 	"crynux_bridge/relay"
 	"crynux_bridge/utils"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	mrand "math/rand"
@@ -18,7 +17,6 @@ import (
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/crypto"
 	log "github.com/sirupsen/logrus"
 	"github.com/vechain/go-ecvrf"
 	"gorm.io/gorm"
@@ -39,18 +37,6 @@ func vrfProve(privateKey, samplingSeed []byte) ([]byte, []byte, error) {
 		return nil, nil, err
 	}
 	return beta, pi, nil
-}
-
-func generateTaskIDCommitment(taskID string) (string, string) {
-	taskIDBytes := hexutil.MustDecode(taskID)
-	nonceBytes := make([]byte, 32)
-	rand.Read(nonceBytes)
-	nonce := hexutil.Encode(nonceBytes)
-
-	taskIDCommitmentBytes := crypto.Keccak256(append(taskIDBytes, nonceBytes...))
-	taskIDCommitment := hexutil.Encode(taskIDCommitmentBytes)
-
-	return nonce, taskIDCommitment
 }
 
 func createTask(ctx context.Context, task *models.InferenceTask) error {
@@ -309,7 +295,7 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 	// 3. Update task status to InferenceTaskCreated
 	if task.Status == models.InferenceTaskPending {
 		if len(task.TaskIDCommitment) == 0 {
-			nonce, taskIDCommitment := generateTaskIDCommitment(task.TaskID)
+			nonce, taskIDCommitment := models.GenerateTaskIDCommitment(task.TaskID)
 			newTask := &models.InferenceTask{
 				Nonce:            nonce,
 				TaskIDCommitment: taskIDCommitment,

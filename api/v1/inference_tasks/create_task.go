@@ -160,21 +160,24 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 		taskIDBytes := make([]byte, 32)
 		rand.Read(taskIDBytes)
 		taskID := hexutil.Encode(taskIDBytes)
+		nonce, taskIDCommitment := models.GenerateTaskIDCommitment(taskID)
 
 		task := &models.InferenceTask{
-			Client:          *client,
-			ClientTask:      *clientTask,
-			TaskArgs:        in.TaskArgs,
-			TaskType:        taskType,
-			TaskModelIDs:    modelIDs,
-			TaskVersion:     taskVersion,
-			TaskFee:         taskFee,
-			MinVram:         minVram,
-			RequiredGPU:     in.RequiredGPU,
-			RequiredGPUVram: in.RequiredGPUVram,
-			TaskSize:        taskSize,
-			TaskID:          taskID,
-			Timeout:         timeout,
+			Client:           *client,
+			ClientTask:       *clientTask,
+			TaskArgs:         in.TaskArgs,
+			TaskType:         taskType,
+			TaskModelIDs:     modelIDs,
+			TaskVersion:      taskVersion,
+			TaskFee:          taskFee,
+			MinVram:          minVram,
+			RequiredGPU:      in.RequiredGPU,
+			RequiredGPUVram:  in.RequiredGPUVram,
+			TaskSize:         taskSize,
+			TaskID:           taskID,
+			TaskIDCommitment: taskIDCommitment,
+			Nonce:            nonce,
+			Timeout:          timeout,
 		}
 		tasks = append(tasks, task)
 	}

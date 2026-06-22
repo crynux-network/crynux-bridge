@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"crynux_bridge/utils"
+	"crypto/rand"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -141,6 +142,18 @@ type InferenceTask struct {
 func (t *InferenceTask) BeforeCreate(*gorm.DB) error {
 	t.Status = InferenceTaskPending
 	return nil
+}
+
+func GenerateTaskIDCommitment(taskID string) (string, string) {
+	taskIDBytes := hexutil.MustDecode(taskID)
+	nonceBytes := make([]byte, 32)
+	rand.Read(nonceBytes)
+	nonce := hexutil.Encode(nonceBytes)
+
+	taskIDCommitmentBytes := crypto.Keccak256(append(taskIDBytes, nonceBytes...))
+	taskIDCommitment := hexutil.Encode(taskIDCommitmentBytes)
+
+	return nonce, taskIDCommitment
 }
 
 func (task *InferenceTask) Finished() bool {
