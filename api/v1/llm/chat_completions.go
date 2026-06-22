@@ -137,11 +137,15 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 	}
 
 	/* 2. Create task, wait until task finish and get task result. Implemented by function ProcessGPTTask */
-	gptTaskResponse, resultDownloadedTask, err := inference_tasks.ProcessGPTTask(ctx, db, task)
+	gptTaskResponse, resultDownloadedTask, err := inference_tasks.ProcessGPTTask(ctx, db, task, func(createdTask *models.InferenceTask) {
+		taskIDCommitment = createdTask.TaskIDCommitment
+	})
+	if resultDownloadedTask != nil {
+		taskIDCommitment = resultDownloadedTask.TaskIDCommitment
+	}
 	if err != nil {
 		return nil, mapLLMTaskProcessingError(err)
 	}
-	taskIDCommitment = resultDownloadedTask.TaskIDCommitment
 	logResponsePayload = map[string]any{
 		"task": map[string]any{
 			"task_id_commitment": resultDownloadedTask.TaskIDCommitment,

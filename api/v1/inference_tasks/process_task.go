@@ -18,7 +18,7 @@ import (
 
 const defaultLLMTaskWaitTimeout = 3 * time.Minute
 
-func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput) (*models.GPTTaskResponse, *models.InferenceTask, error) {
+func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTaskCreated ...func(*models.InferenceTask)) (*models.GPTTaskResponse, *models.InferenceTask, error) {
 	waitTimeout := defaultLLMTaskWaitTimeout
 	if in != nil && in.Timeout != nil && *in.Timeout > 0 {
 		waitTimeout = time.Duration(*in.Timeout) * time.Second
@@ -38,25 +38,31 @@ func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput) (*models.GP
 		err := errors.New("no task created")
 		return nil, nil, response.NewExceptionResponse(err)
 	}
+	createdTask := &tasks[0]
+	for _, callback := range onTaskCreated {
+		if callback != nil {
+			callback(createdTask)
+		}
+	}
 	taskGroups, err := models.WaitAllTaskGroup(ctx, db, tasks)
 	if err != nil {
 		if timeoutErr := mapTaskTimeoutError(err, waitTimeout); timeoutErr != nil {
-			return nil, nil, timeoutErr
+			return nil, createdTask, timeoutErr
 		}
-		return nil, nil, response.NewExceptionResponse(err)
+		return nil, createdTask, response.NewExceptionResponse(err)
 	}
 	resultDownloadedTask, err := models.WaitResultTask(ctx, db, taskGroups)
 	if err != nil {
 		if timeoutErr := mapTaskTimeoutError(err, waitTimeout); timeoutErr != nil {
-			return nil, nil, timeoutErr
+			return nil, createdTask, timeoutErr
 		}
-		return nil, nil, response.NewExceptionResponse(err)
+		return nil, createdTask, response.NewExceptionResponse(err)
 	}
 
 	/* 3. Read task result and return */
 	results, err := readGPTTaskResults(resultDownloadedTask)
 	if err != nil {
-		return nil, nil, response.NewExceptionResponse(err)
+		return nil, resultDownloadedTask, response.NewExceptionResponse(err)
 	}
 
 	// without stream, the response is a single object, i.e. results[0]
