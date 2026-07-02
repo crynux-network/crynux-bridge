@@ -35,7 +35,7 @@ type CompletionsRequest struct {
 	User          string            `json:"user" description:"No use for now. For compatibility with Openai."`
 
 	// params for crynux task
-	MinVram *uint64 `json:"min_vram" description:"mimimal gpu vram required for the crynux task"`
+	VramLimit *uint64 `json:"vram_limit" description:"Minimum GPU VRAM in GB required for the Crynux task"`
 }
 
 func (cr *CompletionsRequest) SetDefaultValues() {

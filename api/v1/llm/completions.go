@@ -21,7 +21,7 @@ type CompletionsRequest struct {
 	structs.CompletionsRequest
 	Authorization string  `header:"Authorization" validate:"required" description:"API key"`
 	Timeout       *uint64 `json:"timeout,omitempty" description:"Task timeout" validate:"omitempty"`
-	VramLimit     *uint64 `path:"vram_limit" description:"Override minimum GPU VRAM in GB from URL path"`
+	PathVramLimit string  `path:"vram_limit" description:"Override minimum GPU VRAM in GB from URL path"`
 }
 
 // build TaskInput from CompletionsRequest, create task, wait for task to finish, get task result, then return CompletionsResponse
@@ -33,9 +33,9 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	requestStart := time.Now()
 	in.SetDefaultValues() // set default values for some fields
 	logRequestPayload := map[string]any{
-		"request":    in.CompletionsRequest,
-		"timeout":    in.Timeout,
-		"vram_limit": in.VramLimit,
+		"request":         in.CompletionsRequest,
+		"timeout":         in.Timeout,
+		"path_vram_limit": in.PathVramLimit,
 	}
 	var logResponsePayload any
 	taskIDCommitment := ""
@@ -108,7 +108,10 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	}
 
 	taskType := models.TaskTypeLLM
-	minVram := resolveMinVram(in.MinVram, in.VramLimit)
+	minVram, err := resolveMinVram(in.VramLimit, in.PathVramLimit)
+	if err != nil {
+		return nil, response.NewValidationErrorResponse("vram_limit", err.Error())
+	}
 
 	task := &inference_tasks.TaskInput{
 		ClientID:        apiKey.ClientID,

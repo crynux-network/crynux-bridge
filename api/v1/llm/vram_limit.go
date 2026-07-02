@@ -1,12 +1,25 @@
 package llm
 
-func resolveMinVram(bodyMinVram, pathVramLimit *uint64) uint64 {
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+func resolveMinVram(bodyVramLimit *uint64, pathVramLimit string) (uint64, error) {
 	minVram := uint64(24)
-	if bodyMinVram != nil {
-		minVram = *bodyMinVram
+	if bodyVramLimit != nil {
+		minVram = *bodyVramLimit
 	}
-	if pathVramLimit != nil {
-		minVram = *pathVramLimit
+
+	trimmedPathVramLimit := strings.TrimSpace(pathVramLimit)
+	if trimmedPathVramLimit == "" {
+		return minVram, nil
 	}
-	return minVram
+
+	pathMinVram, err := strconv.ParseUint(trimmedPathVramLimit, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("vram_limit must be an unsigned integer")
+	}
+	return pathMinVram, nil
 }
