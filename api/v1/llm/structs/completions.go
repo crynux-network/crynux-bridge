@@ -3,21 +3,22 @@ package structs
 /* Request */
 
 type CompletionsRequest struct {
-	Model             string             `json:"model" validate:"required" description:"Huggingface model ID used to generate the response"`
-	Prompt            string             `json:"prompt" validate:"required" description:"The prompt to generate a completion for"`
-	Stream            bool               `json:"stream" description:"Enable streaming of results."` // default to false
-	MaxTokens         *int               `json:"max_tokens" description:"Maximum number of tokens "`
-	Temperature       float64            `json:"temperature" description:"Sampling temperature (range: [0, 2])."`
-	Seed              int                `json:"seed" description:"Seed for deterministic outputs."`
-	TopP              *float64           `json:"top_p" description:"Top-p sampling value (range: (0, 1])."`
-	TopK              *int               `json:"top_k" description:"Top-k sampling value (range: [1, Infinity))."`
-	FrequencyPenalty  *float64           `json:"frequency_penalty" description:"Frequency penalty (range: [-2, 2])."`
-	PresencePenalty   *float64           `json:"presence_penalty" description:"Presence penalty (range: [-2, 2])."`
-	RepetitionPenalty *float64           `json:"repetition_penalty" description:"Repetition penalty (range: [0, 2])."`
-	LogitBias         map[string]float64 `json:"logit_bias" description:"Mapping of token IDs to bias values."`
-	TopLogprobs       int                `json:"top_logprobs" description:"Number of top log probabilities to return."`
-	MinP              *float64           `json:"min_p" description:"Minimum probability threshold (range: [0, 1])."`
-	TopA              *float64           `json:"top_a" description:"Alternate top sampling parameter (range: [0, 1])."`
+	Model               string             `json:"model" validate:"required" description:"Huggingface model ID used to generate the response"`
+	Prompt              string             `json:"prompt" validate:"required" description:"The prompt to generate a completion for"`
+	Stream              bool               `json:"stream" description:"Enable streaming of results."` // default to false
+	MaxTokens           *int               `json:"max_tokens" description:"Maximum number of tokens "`
+	MaxCompletionTokens *int               `json:"max_completion_tokens" description:"Maximum number of completion tokens "`
+	Temperature         float64            `json:"temperature" description:"Sampling temperature (range: [0, 2])."`
+	Seed                int                `json:"seed" description:"Seed for deterministic outputs."`
+	TopP                *float64           `json:"top_p" description:"Top-p sampling value (range: (0, 1])."`
+	TopK                *int               `json:"top_k" description:"Top-k sampling value (range: [1, Infinity))."`
+	FrequencyPenalty    *float64           `json:"frequency_penalty" description:"Frequency penalty (range: [-2, 2])."`
+	PresencePenalty     *float64           `json:"presence_penalty" description:"Presence penalty (range: [-2, 2])."`
+	RepetitionPenalty   *float64           `json:"repetition_penalty" description:"Repetition penalty (range: [0, 2])."`
+	LogitBias           map[string]float64 `json:"logit_bias" description:"Mapping of token IDs to bias values."`
+	TopLogprobs         int                `json:"top_logprobs" description:"Number of top log probabilities to return."`
+	MinP                *float64           `json:"min_p" description:"Minimum probability threshold (range: [0, 1])."`
+	TopA                *float64           `json:"top_a" description:"Alternate top sampling parameter (range: [0, 1])."`
 
 	// Transforms []string `json:"transforms"` // openrouter only
 	// Models     []string `json:"models"`

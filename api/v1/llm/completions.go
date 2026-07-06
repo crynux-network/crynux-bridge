@@ -68,8 +68,12 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 		Temperature:        0,
 		NumReturnSequences: in.N,
 	}
+	maxNewTokens := in.MaxCompletionTokens
 	if in.MaxTokens != nil {
-		generationConfig.MaxNewTokens = *in.MaxTokens
+		maxNewTokens = in.MaxTokens
+	}
+	if maxNewTokens != nil {
+		generationConfig.MaxNewTokens = *maxNewTokens
 	}
 	if in.TopP != nil {
 		generationConfig.TopP = *in.TopP
