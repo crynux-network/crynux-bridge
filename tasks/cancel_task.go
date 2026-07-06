@@ -5,6 +5,7 @@ import (
 	"crynux_bridge/config"
 	"crynux_bridge/models"
 	"crynux_bridge/relay"
+	"crynux_bridge/tasktrace"
 	"errors"
 	"strings"
 	"time"
@@ -18,12 +19,17 @@ func cancelTask(ctx context.Context, task *models.InferenceTask) error {
 	newTask := &models.InferenceTask{}
 	// If task is not uploaded yet, cancel it directly
 	if len(task.TaskIDCommitment) == 0 {
+		tasktrace.RecordEvent(task, "task_cancel_started", nil)
 		newTask.Status = models.InferenceTaskEndAborted
 		newTask.AbortReason = models.TaskAbortTimeout
 		if err := task.Update(ctx, config.GetDB(), newTask); err != nil {
 			log.Errorf("CancelTasks: cannot save task %d status: %v", task.ID, err)
 			return err
 		}
+		task.Status = newTask.Status
+		tasktrace.RecordEvent(task, "task_cancelled", map[string]any{
+			"abort_reason": newTask.AbortReason,
+		})
 		log.Infof("CancelTasks: task %d canceled successfully", task.ID)
 		return nil
 	}
@@ -33,12 +39,19 @@ func cancelTask(ctx context.Context, task *models.InferenceTask) error {
 		var relayErr relay.RelayError
 		if errors.As(err, &relayErr) && strings.Contains(relayErr.ErrorMessage, "Task not found") {
 			log.Infof("CancelTasks: task %d not found", task.ID)
+			tasktrace.RecordEvent(task, "task_cancel_started", map[string]any{
+				"reason": "relay_task_not_found",
+			})
 			newTask.Status = models.InferenceTaskEndAborted
 			newTask.AbortReason = models.TaskAbortTimeout
 			if err := task.Update(ctx, config.GetDB(), newTask); err != nil {
 				log.Errorf("CancelTasks: cannot save task %d status: %v", task.ID, err)
 				return err
 			}
+			task.Status = newTask.Status
+			tasktrace.RecordEvent(task, "task_cancelled", map[string]any{
+				"abort_reason": newTask.AbortReason,
+			})
 			log.Infof("CancelTasks: task %d canceled successfully", task.ID)
 			return nil
 		}
@@ -60,6 +73,7 @@ func cancelTask(ctx context.Context, task *models.InferenceTask) error {
 		newTask.Status = models.InferenceTaskEndAborted
 		newTask.AbortReason = models.TaskAbortReason(chainTask.AbortReason)
 	} else {
+		tasktrace.RecordEvent(task, "task_cancel_started", nil)
 		if err := relay.CancelTask(ctx, task, models.TaskAbortTimeout); err != nil {
 			log.Errorf("CancelTasks: cannot cancel task %d : %v", task.ID, err)
 			return err
@@ -71,6 +85,11 @@ func cancelTask(ctx context.Context, task *models.InferenceTask) error {
 		log.Errorf("CancelTasks: cannot save task %d status: %v", task.ID, err)
 		return err
 	}
+	task.Status = newTask.Status
+	tasktrace.RecordEvent(task, "task_cancelled", map[string]any{
+		"abort_reason": newTask.AbortReason,
+		"chain_status": chainTaskStatus,
+	})
 	log.Infof("CancelTasks: task %d canceled successfully", task.ID)
 	return nil
 }

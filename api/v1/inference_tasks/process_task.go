@@ -18,7 +18,9 @@ import (
 
 const defaultLLMTaskWaitTimeout = 3 * time.Minute
 
-func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTaskCreated ...func(*models.InferenceTask)) (*models.GPTTaskResponse, *models.InferenceTask, error) {
+type TasksCreatedCallback func([]models.InferenceTask)
+
+func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTasksCreated ...TasksCreatedCallback) (*models.GPTTaskResponse, *models.InferenceTask, error) {
 	waitTimeout := defaultLLMTaskWaitTimeout
 	if in != nil && in.Timeout != nil && *in.Timeout > 0 {
 		waitTimeout = time.Duration(*in.Timeout) * time.Second
@@ -39,9 +41,9 @@ func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTaskCreat
 		return nil, nil, response.NewExceptionResponse(err)
 	}
 	createdTask := &tasks[0]
-	for _, callback := range onTaskCreated {
+	for _, callback := range onTasksCreated {
 		if callback != nil {
-			callback(createdTask)
+			callback(tasks)
 		}
 	}
 	taskGroups, err := models.WaitAllTaskGroup(ctx, db, tasks)
@@ -71,7 +73,7 @@ func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTaskCreat
 	return &gptTaskResponse, resultDownloadedTask, nil
 }
 
-func ProcessSDTask(ctx context.Context, db *gorm.DB, in *TaskInput) ([]string, *models.InferenceTask, error) {
+func ProcessSDTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTasksCreated ...TasksCreatedCallback) ([]string, *models.InferenceTask, error) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	/* 1. Create SD task by function CreateTask */
@@ -85,6 +87,11 @@ func ProcessSDTask(ctx context.Context, db *gorm.DB, in *TaskInput) ([]string, *
 	if len(tasks) == 0 {
 		err := errors.New("no task created")
 		return nil, nil, response.NewExceptionResponse(err)
+	}
+	for _, callback := range onTasksCreated {
+		if callback != nil {
+			callback(tasks)
+		}
 	}
 	taskGroups, err := models.WaitAllTaskGroup(ctx, db, tasks)
 	if err != nil {

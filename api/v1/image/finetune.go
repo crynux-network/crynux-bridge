@@ -7,6 +7,7 @@ import (
 	"crynux_bridge/api/v1/tools"
 	"crynux_bridge/config"
 	"crynux_bridge/models"
+	"crynux_bridge/tasktrace"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -29,9 +30,14 @@ type SDFinetuneLoraTaskResponse struct {
 	Data *models.ClientTask `json:"data"`
 }
 
-func CreateSDFinetuneLoraTask(c *gin.Context, in *SDFinetuneLoraRequest) (*SDFinetuneLoraTaskResponse, error) {
+func CreateSDFinetuneLoraTask(c *gin.Context, in *SDFinetuneLoraRequest) (res *SDFinetuneLoraTaskResponse, err error) {
 	ctx := c.Request.Context()
 	db := config.GetDB()
+	requestStart := time.Now()
+	var tracePrimaryTaskIDCommitment string
+	defer func() {
+		tasktrace.FinishTrace(tracePrimaryTaskIDCommitment, res, err, nil)
+	}()
 
 	// validate request (apiKey)
 	apiKey, err := tools.ValidateAuthorization(ctx, db, in.Authorization)
@@ -150,9 +156,23 @@ func CreateSDFinetuneLoraTask(c *gin.Context, in *SDFinetuneLoraRequest) (*SDFin
 		return nil, err
 	}
 
-	return &SDFinetuneLoraTaskResponse{
+	requestPayload := *in
+	requestPayload.Authorization = ""
+	tracePrimaryTaskIDCommitment = tasktrace.StartTrace(tasktrace.StartTraceInput{
+		Source:      tasktrace.SourceImageFinetune,
+		Endpoint:    c.FullPath(),
+		ClientID:    apiKey.ClientID,
+		Model:       in.ModelName,
+		TaskType:    &taskType,
+		Request:     requestPayload,
+		RequestTime: requestStart,
+		Tasks:       taskResponse.Data.InferenceTasks,
+	}, config.GetConfig().Admin.TaskTraceMaxTasks)
+
+	res = &SDFinetuneLoraTaskResponse{
 		Data: taskResponse.Data,
-	}, nil
+	}
+	return res, nil
 }
 
 type GetSDFinetuneLoraTaskRequest struct {

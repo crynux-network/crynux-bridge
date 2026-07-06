@@ -9,6 +9,7 @@ import (
 	"crynux_bridge/api/v1/tools"
 	"crynux_bridge/config"
 	"crynux_bridge/models"
+	"crynux_bridge/tasktrace"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -127,9 +128,15 @@ func streamBase64Encode(filePath string) (string, error) {
 	return buf.String(), nil
 }
 
-func CreateImage(c *gin.Context, in *CreateImageRequest) (*CreateImageResponse, error) {
+func CreateImage(c *gin.Context, in *CreateImageRequest) (res *CreateImageResponse, err error) {
 	ctx := c.Request.Context()
 	db := config.GetDB()
+	requestStart := time.Now()
+	var tracePrimaryTaskIDCommitment string
+	var resultDownloadedTask *models.InferenceTask
+	defer func() {
+		tasktrace.FinishTrace(tracePrimaryTaskIDCommitment, res, err, resultDownloadedTask)
+	}()
 
 	// validate request (apiKey)
 	apiKey, err := tools.ValidateAuthorization(ctx, db, in.Authorization)
@@ -219,7 +226,23 @@ func CreateImage(c *gin.Context, in *CreateImageRequest) (*CreateImageResponse, 
 		TaskType: &taskType,
 	}
 
-	resultFiles, _, err := inference_tasks.ProcessSDTask(ctx, db, task)
+	requestPayload := *in
+	requestPayload.Authorization = ""
+	resultFiles, resultDownloadedTask, err := inference_tasks.ProcessSDTask(ctx, db, task, func(createdTasks []models.InferenceTask) {
+		if len(createdTasks) == 0 {
+			return
+		}
+		tracePrimaryTaskIDCommitment = tasktrace.StartTrace(tasktrace.StartTraceInput{
+			Source:      tasktrace.SourceImageGeneration,
+			Endpoint:    c.FullPath(),
+			ClientID:    apiKey.ClientID,
+			Model:       in.Model,
+			TaskType:    &taskType,
+			Request:     requestPayload,
+			RequestTime: requestStart,
+			Tasks:       createdTasks,
+		}, config.GetConfig().Admin.TaskTraceMaxTasks)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -243,9 +266,10 @@ func CreateImage(c *gin.Context, in *CreateImageRequest) (*CreateImageResponse, 
 
 	wg.Wait()
 
-	return &CreateImageResponse{
+	res = &CreateImageResponse{
 		Created: time.Now().Unix(),
 		Data:    b64results,
 		Usage:   CreateImageUsage{},
-	}, nil
+	}
+	return res, nil
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crynux_bridge/config"
 	"crynux_bridge/models"
+	"crynux_bridge/tasktrace"
 	"crypto/rand"
 	"errors"
 	"os"
@@ -100,7 +101,7 @@ func ProcessSDFTTasks(ctx context.Context) {
 						err = processSDFTTaskWithRetry(ctx, task, inferenceTask)
 						if err != nil {
 							log.Errorf("ProcessSDFTTasks: cannot process task %d: %v", task.ID, err)
-						}	
+						}
 					}()
 				}
 			}(ctx, task)
@@ -234,6 +235,7 @@ func processResultDownloadedSDFTTask(ctx context.Context, clientTask *models.Cli
 		if err := clientTask.Update(ctx, config.GetDB(), clientTask); err != nil {
 			return err
 		}
+		tasktrace.RecordEvent(task, "finetune_result_ready", nil)
 		return nil
 	} else {
 		// sd ft task is not finished, create a new task with the same client task id and task args, except the checkpoint file
@@ -267,6 +269,11 @@ func processResultDownloadedSDFTTask(ctx context.Context, clientTask *models.Cli
 			log.Errorf("processSDFTTasks: cannot save new task %s: %v", newTaskID, err)
 			return err
 		}
+		tasktrace.RegisterTask(task, newTask, "retry")
+		tasktrace.RecordEvent(task, "finetune_retry_task_created", map[string]any{
+			"new_task_local_id": newTask.ID,
+			"new_task_id":       newTask.TaskID,
+		})
 
 		return nil
 	}
@@ -308,6 +315,11 @@ func processFailedSDFTTask(ctx context.Context, clientTask *models.ClientTask, t
 	if err != nil {
 		return err
 	}
+	tasktrace.RegisterTask(task, newTask, "retry")
+	tasktrace.RecordEvent(task, "finetune_retry_task_created", map[string]any{
+		"new_task_local_id": newTask.ID,
+		"new_task_id":       newTask.TaskID,
+	})
 
 	return nil
 }

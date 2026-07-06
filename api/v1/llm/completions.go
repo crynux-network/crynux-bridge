@@ -9,6 +9,7 @@ import (
 	"crynux_bridge/api/v1/tools"
 	"crynux_bridge/config"
 	"crynux_bridge/models"
+	"crynux_bridge/tasktrace"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -38,9 +39,13 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 		"path_vram_limit": in.PathVramLimit,
 	}
 	var logResponsePayload any
+	var traceResponsePayload any
+	var tracePrimaryTaskIDCommitment string
+	var resultDownloadedTask *models.InferenceTask
 	taskIDCommitment := ""
 	defer func() {
 		logOpenAICompatibleExchange("completions", in.Authorization, taskIDCommitment, logRequestPayload, logResponsePayload, err, time.Since(requestStart).Seconds())
+		tasktrace.FinishTrace(tracePrimaryTaskIDCommitment, traceResponsePayload, err, resultDownloadedTask)
 	}()
 
 	// validate request (apiKey)
@@ -131,8 +136,21 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	}
 
 	/* 2. Create task, wait until task finish and get task result. Implemented by function ProcessGPTTask */
-	gptTaskResponse, resultDownloadedTask, err := inference_tasks.ProcessGPTTask(ctx, db, task, func(createdTask *models.InferenceTask) {
-		taskIDCommitment = createdTask.TaskIDCommitment
+	gptTaskResponse, resultDownloadedTask, err := inference_tasks.ProcessGPTTask(ctx, db, task, func(createdTasks []models.InferenceTask) {
+		if len(createdTasks) == 0 {
+			return
+		}
+		taskIDCommitment = createdTasks[0].TaskIDCommitment
+		tracePrimaryTaskIDCommitment = tasktrace.StartTrace(tasktrace.StartTraceInput{
+			Source:      tasktrace.SourceOpenAICompletions,
+			Endpoint:    c.FullPath(),
+			ClientID:    apiKey.ClientID,
+			Model:       in.Model,
+			TaskType:    &taskType,
+			Request:     logRequestPayload,
+			RequestTime: requestStart,
+			Tasks:       createdTasks,
+		}, config.GetConfig().Admin.TaskTraceMaxTasks)
 	})
 	if resultDownloadedTask != nil {
 		taskIDCommitment = resultDownloadedTask.TaskIDCommitment
@@ -168,6 +186,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 		// Object:  "text",
 		// SystemFingerprint: resultDownloadedTask.SystemFingerprint,
 	}
+	traceResponsePayload = ccResponse
 
 	if err := apiKey.Use(ctx, db); err != nil {
 		return nil, response.NewExceptionResponse(err)

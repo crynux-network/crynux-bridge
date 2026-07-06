@@ -33,6 +33,11 @@ type AppConfig struct {
 		} `mapstructure:"features"`
 	} `mapstructure:"log"`
 
+	Admin struct {
+		AuthToken         string `mapstructure:"auth_token"`
+		TaskTraceMaxTasks int    `mapstructure:"task_trace_max_tasks"`
+	} `mapstructure:"admin"`
+
 	Http struct {
 		Host string `mapstructure:"host"`
 		Port string `mapstructure:"port"`

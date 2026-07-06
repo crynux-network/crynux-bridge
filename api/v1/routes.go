@@ -1,12 +1,14 @@
 package v1
 
 import (
+	"crynux_bridge/api/v1/admin"
 	apikey "crynux_bridge/api/v1/api_key"
 	"crynux_bridge/api/v1/application"
 	"crynux_bridge/api/v1/count"
 	"crynux_bridge/api/v1/image"
 	"crynux_bridge/api/v1/inference_tasks"
 	"crynux_bridge/api/v1/llm"
+	"crynux_bridge/api/v1/middleware"
 	"crynux_bridge/api/v1/models"
 	"crynux_bridge/api/v1/network"
 	"crynux_bridge/api/v1/response"
@@ -164,4 +166,36 @@ func InitRoutes(r *fizz.Fizz) {
 		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, tonic.Handler(apikey.ChangeRateLimit, 200))
+
+	adminGroup := v1g.Group("admin", "Admin", "Admin APIs")
+	adminTasksGroup := adminGroup.Group("tasks", "Admin task traces", "Admin task trace APIs")
+	adminTasksGroup.GET("", []fizz.OperationOption{
+		fizz.ID("admin_task_traces"),
+		fizz.Summary("List recent API-created task traces"),
+		fizz.Response("401", "unauthorized", response.ErrorResponse{}, nil, nil),
+		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
+	}, middleware.AdminAuthMiddleware(), tonic.Handler(admin.ListTaskTraces, 200))
+	adminTasksGroup.GET("/:task_id_commitment/trace", []fizz.OperationOption{
+		fizz.ID("admin_task_trace"),
+		fizz.Summary("Get an API-created task trace"),
+		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
+		fizz.Response("401", "unauthorized", response.ErrorResponse{}, nil, nil),
+		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
+	}, middleware.AdminAuthMiddleware(), tonic.Handler(admin.GetTaskTrace, 200))
+
+	adminLLMGroup := adminGroup.Group("llm", "Admin LLM traces", "Admin LLM trace APIs")
+	adminLLMTasksGroup := adminLLMGroup.Group("tasks", "Admin OpenAI LLM task traces", "Admin OpenAI LLM task trace APIs")
+	adminLLMTasksGroup.GET("", []fizz.OperationOption{
+		fizz.ID("admin_llm_task_traces"),
+		fizz.Summary("List recent OpenAI-compatible LLM task traces"),
+		fizz.Response("401", "unauthorized", response.ErrorResponse{}, nil, nil),
+		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
+	}, middleware.AdminAuthMiddleware(), tonic.Handler(admin.ListOpenAILLMTaskTraces, 200))
+	adminLLMTasksGroup.GET("/:task_id_commitment/trace", []fizz.OperationOption{
+		fizz.ID("admin_llm_task_trace"),
+		fizz.Summary("Get an OpenAI-compatible LLM task trace"),
+		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
+		fizz.Response("401", "unauthorized", response.ErrorResponse{}, nil, nil),
+		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
+	}, middleware.AdminAuthMiddleware(), tonic.Handler(admin.GetOpenAILLMTaskTrace, 200))
 }

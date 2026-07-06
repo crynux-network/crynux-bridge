@@ -7,10 +7,12 @@ import (
 	"crynux_bridge/api/v1/tools"
 	"crynux_bridge/config"
 	"crynux_bridge/models"
+	"crynux_bridge/tasktrace"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -238,6 +240,7 @@ func DoCreateTask(ctx context.Context, in *TaskInput) (*TaskResponse, error) {
 
 func CreateTask(c *gin.Context, in *TaskInput) (*TaskResponse, error) {
 	ctx := c.Request.Context()
+	requestStart := time.Now()
 
 	// check rate limit
 	allowed, waitTime, err := ratelimit.APIRateLimiter.CheckRateLimit(ctx, in.ClientID, 20, time.Minute)
@@ -248,5 +251,28 @@ func CreateTask(c *gin.Context, in *TaskInput) (*TaskResponse, error) {
 		return nil, response.NewValidationErrorResponse("rate_limit", fmt.Sprintf("rate limit exceeded, please wait %.2f seconds", waitTime))
 	}
 
-	return DoCreateTask(ctx, in)
+	taskResponse, err := DoCreateTask(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	tasks := taskResponse.Data.InferenceTasks
+	primaryTaskIDCommitment := tasktrace.StartTrace(tasktrace.StartTraceInput{
+		Source:      tasktrace.SourceDirectInferenceTask,
+		Endpoint:    "/v1/inference_tasks",
+		ClientID:    in.ClientID,
+		Model:       traceModelIDs(tasks),
+		TaskType:    in.TaskType,
+		Request:     in,
+		RequestTime: requestStart,
+		Tasks:       tasks,
+	}, config.GetConfig().Admin.TaskTraceMaxTasks)
+	tasktrace.FinishTrace(primaryTaskIDCommitment, taskResponse, nil, nil)
+	return taskResponse, nil
+}
+
+func traceModelIDs(tasks []models.InferenceTask) string {
+	if len(tasks) == 0 {
+		return ""
+	}
+	return strings.Join(tasks[0].TaskModelIDs, ",")
 }

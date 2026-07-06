@@ -5,6 +5,7 @@ import (
 	"crynux_bridge/config"
 	"crynux_bridge/models"
 	"crynux_bridge/relay"
+	"crynux_bridge/tasktrace"
 	"crynux_bridge/utils"
 	"errors"
 	"fmt"
@@ -94,6 +95,7 @@ func syncTask(ctx context.Context, task *models.InferenceTask) (*models.RelayTas
 	}
 
 	changed := false
+	statusChanged := false
 	newTask := &models.InferenceTask{}
 	chainTaskStatus := models.ChainTaskStatus(chainTask.Status)
 	abortReason := models.TaskAbortReason(chainTask.AbortReason)
@@ -102,6 +104,7 @@ func syncTask(ctx context.Context, task *models.InferenceTask) (*models.RelayTas
 	if task.Status == models.InferenceTaskPending {
 		newTask.Status = models.InferenceTaskCreated
 		changed = true
+		statusChanged = true
 	}
 
 	if abortReason != task.AbortReason {
@@ -117,52 +120,69 @@ func syncTask(ctx context.Context, task *models.InferenceTask) (*models.RelayTas
 		if task.Status != models.InferenceTaskStarted {
 			newTask.Status = models.InferenceTaskStarted
 			changed = true
+			statusChanged = true
 		}
 	} else if chainTaskStatus == models.ChainTaskParametersUploaded {
 		if task.Status != models.InferenceTaskParamsUploaded {
 			newTask.Status = models.InferenceTaskParamsUploaded
 			changed = true
+			statusChanged = true
 		}
 	} else if chainTaskStatus == models.ChainTaskScoreReady {
 		if task.Status != models.InferenceTaskScoreReady {
 			newTask.Status = models.InferenceTaskScoreReady
 			changed = true
+			statusChanged = true
 		}
 	} else if chainTaskStatus == models.ChainTaskErrorReported {
 		if task.Status != models.InferenceTaskErrorReported {
 			newTask.Status = models.InferenceTaskErrorReported
 			changed = true
+			statusChanged = true
 		}
 	} else if chainTaskStatus == models.ChainTaskValidated || chainTaskStatus == models.ChainTaskGroupValidated {
 		if task.Status != models.InferenceTaskValidated {
 			newTask.Status = models.InferenceTaskValidated
 			changed = true
+			statusChanged = true
 		}
 	} else if chainTaskStatus == models.ChainTaskEndAborted {
 		if task.Status != models.InferenceTaskEndAborted {
 			newTask.Status = models.InferenceTaskEndAborted
 			changed = true
+			statusChanged = true
 		}
 	} else if chainTaskStatus == models.ChainTaskEndInvalidated {
 		if task.Status != models.InferenceTaskEndInvalidated {
 			newTask.Status = models.InferenceTaskEndInvalidated
 			changed = true
+			statusChanged = true
 		}
 	} else if chainTaskStatus == models.ChainTaskEndGroupRefund {
 		if task.Status != models.InferenceTaskEndGroupRefund {
 			newTask.Status = models.InferenceTaskEndGroupRefund
 			changed = true
+			statusChanged = true
 		}
 	} else if chainTaskStatus == models.ChainTaskEndSuccess || chainTaskStatus == models.ChainTaskEndGroupSuccess {
 		if task.Status != models.InferenceTaskEndSuccess {
 			newTask.Status = models.InferenceTaskEndSuccess
 			changed = true
+			statusChanged = true
 		}
 	}
 
 	if changed {
 		if err := task.Update(ctx, config.GetDB(), newTask); err != nil {
 			return nil, err
+		}
+		if statusChanged {
+			task.Status = newTask.Status
+			tasktrace.RecordEvent(task, taskStatusEventName(newTask.Status), map[string]any{
+				"chain_status": chainTaskStatus,
+				"abort_reason": abortReason,
+				"task_error":   taskError,
+			})
 		}
 	}
 	return chainTask, nil
@@ -282,6 +302,7 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 	if err := task.Sync(ctx, config.GetDB()); err != nil {
 		return err
 	}
+	tasktrace.RecordEvent(task, "worker_processing_started", nil)
 
 	// sync task from relay
 	_, err := syncTask(ctx, task)
@@ -303,8 +324,11 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 			if err := task.Update(ctx, config.GetDB(), newTask); err != nil {
 				return err
 			}
+			task.Nonce = nonce
+			task.TaskIDCommitment = taskIDCommitment
 		}
 
+		tasktrace.RecordEvent(task, "relay_task_create_submitted", nil)
 		if err := createTask(ctx, task); err != nil {
 			return err
 		}
@@ -315,6 +339,8 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 		if err := task.Update(ctx, config.GetDB(), newTask); err != nil {
 			return err
 		}
+		task.Status = models.InferenceTaskCreated
+		tasktrace.RecordEvent(task, "relay_task_created", nil)
 		log.Infof("ProcessTasks: create task %d ", task.ID)
 	}
 
@@ -416,6 +442,12 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 		if err != nil {
 			return err
 		}
+		if len(subTasks) > 0 {
+			tasktrace.RegisterTasks(task, dereferenceTasks(subTasks), "validation")
+			tasktrace.RecordEvent(task, "validation_tasks_created", map[string]any{
+				"validation_task_count": len(subTasks),
+			})
+		}
 
 		// wait task status to be score-ready or error reported
 		for {
@@ -476,6 +508,9 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 
 		// validate task
 		if needValidate {
+			tasktrace.RecordEvent(task, "validation_submitted", map[string]any{
+				"task_group_size": len(taskGroup),
+			})
 			if len(taskGroup) == 1 {
 				if err := validateSingleTask(ctx, task); err != nil {
 					return err
@@ -519,6 +554,7 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 
 	// download task result
 	if task.Status == models.InferenceTaskEndSuccess {
+		tasktrace.RecordEvent(task, "result_download_started", nil)
 		err := downloadTaskResult(ctx, task)
 		if err != nil {
 			return err
@@ -529,6 +565,8 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 		if err := task.Update(ctx, config.GetDB(), newTask); err != nil {
 			return err
 		}
+		task.Status = models.InferenceTaskResultDownloaded
+		tasktrace.RecordEvent(task, "result_downloaded", nil)
 		log.Infof("ProcessTasks: download results of task %d", task.ID)
 	}
 
@@ -538,6 +576,47 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 	}
 
 	return nil
+}
+
+func taskStatusEventName(status models.TaskStatus) string {
+	switch status {
+	case models.InferenceTaskCreated:
+		return "relay_task_created_observed"
+	case models.InferenceTaskStarted:
+		return "task_started"
+	case models.InferenceTaskParamsUploaded:
+		return "parameters_uploaded"
+	case models.InferenceTaskScoreReady:
+		return "score_ready"
+	case models.InferenceTaskErrorReported:
+		return "error_reported"
+	case models.InferenceTaskValidated:
+		return "validation_passed"
+	case models.InferenceTaskEndAborted:
+		return "task_aborted"
+	case models.InferenceTaskEndGroupRefund:
+		return "task_group_refunded"
+	case models.InferenceTaskEndInvalidated:
+		return "task_invalidated"
+	case models.InferenceTaskEndSuccess:
+		return "task_execution_succeeded"
+	case models.InferenceTaskResultDownloaded:
+		return "result_downloaded"
+	case models.InferenceTaskNeedCancel:
+		return "task_needs_cancel"
+	default:
+		return fmt.Sprintf("status_%d", status)
+	}
+}
+
+func dereferenceTasks(tasks []*models.InferenceTask) []models.InferenceTask {
+	result := make([]models.InferenceTask, 0, len(tasks))
+	for _, task := range tasks {
+		if task != nil {
+			result = append(result, *task)
+		}
+	}
+	return result
 }
 
 func processClientTask(ctx context.Context, task *models.InferenceTask) error {
@@ -710,6 +789,10 @@ func ProcessTasks(ctx context.Context) {
 											log.Errorf("ProcessTasks: save task %d error %v", task.ID, err)
 											time.Sleep(2 * time.Second)
 										} else {
+											task.Status = newTask.Status
+											tasktrace.RecordEvent(&task, "task_timeout", map[string]any{
+												"new_status": taskStatusEventName(newTask.Status),
+											})
 											break
 										}
 										if err := processClientTask(ctx, &task); err != nil {

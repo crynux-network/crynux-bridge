@@ -18,6 +18,9 @@ log:
   features:
     llm_api_request_log_enabled: false
     llm_api_request_log_toolcall_enabled: false
+admin:
+  auth_token: ""
+  task_trace_max_tasks: 100
 http:
   host: "0.0.0.0"
   port: "5028"
