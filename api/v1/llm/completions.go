@@ -73,10 +73,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 		Temperature:        0,
 		NumReturnSequences: in.N,
 	}
-	maxNewTokens := in.MaxCompletionTokens
-	if in.MaxTokens != nil {
-		maxNewTokens = in.MaxTokens
-	}
+	maxNewTokens := resolveMaxNewTokens(in.MaxTokens, in.MaxCompletionTokens, config.GetConfig().Task.DefaultLLMMaxCompletionTokens)
 	if maxNewTokens != nil {
 		generationConfig.MaxNewTokens = *maxNewTokens
 	}

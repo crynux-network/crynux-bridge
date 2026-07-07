@@ -61,15 +61,16 @@ type AppConfig struct {
 	} `mapstructure:"relay"`
 
 	Task struct {
-		DefaultSDTaskFeeCNX         float64              `mapstructure:"default_sd_task_fee_cnx"`
-		DefaultSDXLTaskFeeCNX       float64              `mapstructure:"default_sd_xl_task_fee_cnx"`
-		DefaultLLMTaskFeeCNX        float64              `mapstructure:"default_llm_task_fee_cnx"`
-		DefaultSDFinetuneTaskFeeCNX float64              `mapstructure:"default_sd_finetune_task_fee_cnx"`
-		RepeatNum                   int                  `mapstructure:"repeat_num"`
-		DefaultTimeout              uint64               `mapstructure:"default_timeout"`
-		SDFinetuneTimeout           uint64               `mapstructure:"sd_finetune_timeout"`
-		DefaultTaskVersion          string               `mapstructure:"default_task_version"`
-		HeartbeatTasks              HeartbeatTasksConfig `mapstructure:"heartbeat_tasks"`
+		DefaultSDTaskFeeCNX           float64              `mapstructure:"default_sd_task_fee_cnx"`
+		DefaultSDXLTaskFeeCNX         float64              `mapstructure:"default_sd_xl_task_fee_cnx"`
+		DefaultLLMTaskFeeCNX          float64              `mapstructure:"default_llm_task_fee_cnx"`
+		DefaultLLMMaxCompletionTokens int                  `mapstructure:"default_llm_max_completion_tokens"`
+		DefaultSDFinetuneTaskFeeCNX   float64              `mapstructure:"default_sd_finetune_task_fee_cnx"`
+		RepeatNum                     int                  `mapstructure:"repeat_num"`
+		DefaultTimeout                uint64               `mapstructure:"default_timeout"`
+		SDFinetuneTimeout             uint64               `mapstructure:"sd_finetune_timeout"`
+		DefaultTaskVersion            string               `mapstructure:"default_task_version"`
+		HeartbeatTasks                HeartbeatTasksConfig `mapstructure:"heartbeat_tasks"`
 	} `mapstructure:"task"`
 
 	TaskSchema struct {

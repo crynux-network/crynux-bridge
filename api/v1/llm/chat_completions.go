@@ -85,10 +85,7 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 		Temperature:        0,
 		NumReturnSequences: in.N,
 	}
-	maxNewTokens := in.MaxCompletionTokens
-	if in.MaxTokens != nil {
-		maxNewTokens = in.MaxTokens
-	}
+	maxNewTokens := resolveMaxNewTokens(in.MaxTokens, in.MaxCompletionTokens, config.GetConfig().Task.DefaultLLMMaxCompletionTokens)
 	if maxNewTokens != nil {
 		generationConfig.MaxNewTokens = *maxNewTokens
 	}

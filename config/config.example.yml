@@ -37,6 +37,7 @@ task:
   default_sd_task_fee_cnx: 1.0
   default_sd_xl_task_fee_cnx: 2.0
   default_llm_task_fee_cnx: 5.0
+  default_llm_max_completion_tokens: 3000
   default_sd_finetune_task_fee_cnx: 15.0
   repeat_num: 1
   default_timeout: 6
