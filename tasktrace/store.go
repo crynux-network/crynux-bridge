@@ -85,13 +85,14 @@ type MissingData struct {
 }
 
 type store struct {
-	mu          sync.Mutex
-	maxTraces   int
-	order       []string
-	traces      map[string]*traceRecord
-	taskIndex   map[string]string
-	localIndex  map[uint]string
-	clientIndex map[uint]string
+	mu                  sync.Mutex
+	maxTraces           int
+	order               []string
+	traces              map[string]*traceRecord
+	taskCommitmentIndex map[string]string
+	taskIDIndex         map[string]string
+	localIndex          map[uint]string
+	clientIndex         map[uint]string
 }
 
 type traceRecord struct {
@@ -105,10 +106,11 @@ var defaultStore = newStore()
 
 func newStore() *store {
 	return &store{
-		traces:      make(map[string]*traceRecord),
-		taskIndex:   make(map[string]string),
-		localIndex:  make(map[uint]string),
-		clientIndex: make(map[uint]string),
+		traces:              make(map[string]*traceRecord),
+		taskCommitmentIndex: make(map[string]string),
+		taskIDIndex:         make(map[string]string),
+		localIndex:          make(map[uint]string),
+		clientIndex:         make(map[uint]string),
 	}
 }
 
@@ -139,8 +141,8 @@ func ListTraces(limit int, openAIOnly bool) []Trace {
 	return defaultStore.listTraces(limit, openAIOnly)
 }
 
-func GetTrace(taskIDCommitment string) (Trace, bool) {
-	return defaultStore.getTrace(taskIDCommitment)
+func GetTrace(taskID string) (Trace, bool) {
+	return defaultStore.getTrace(taskID)
 }
 
 func ResetForTest() {
@@ -290,13 +292,13 @@ func (s *store) listTraces(limit int, openAIOnly bool) []Trace {
 	return result
 }
 
-func (s *store) getTrace(taskIDCommitment string) (Trace, bool) {
+func (s *store) getTrace(taskID string) (Trace, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	primary := taskIDCommitment
-	if mapped, ok := s.taskIndex[taskIDCommitment]; ok {
-		primary = mapped
+	primary, ok := s.taskIDIndex[taskID]
+	if !ok {
+		return Trace{}, false
 	}
 	record, ok := s.traces[primary]
 	if !ok {
@@ -321,7 +323,10 @@ func (s *store) addTasks(record *traceRecord, primary string, tasks []models.Inf
 		}
 
 		if task.TaskIDCommitment != "" {
-			s.taskIndex[task.TaskIDCommitment] = primary
+			s.taskCommitmentIndex[task.TaskIDCommitment] = primary
+		}
+		if task.TaskID != "" {
+			s.taskIDIndex[task.TaskID] = primary
 		}
 		if task.ID != 0 {
 			s.localIndex[task.ID] = primary
@@ -336,7 +341,12 @@ func (s *store) addTasks(record *traceRecord, primary string, tasks []models.Inf
 
 func (s *store) primaryForTaskLocked(task *models.InferenceTask) string {
 	if task.TaskIDCommitment != "" {
-		if primary, ok := s.taskIndex[task.TaskIDCommitment]; ok {
+		if primary, ok := s.taskCommitmentIndex[task.TaskIDCommitment]; ok {
+			return primary
+		}
+	}
+	if task.TaskID != "" {
+		if primary, ok := s.taskIDIndex[task.TaskID]; ok {
 			return primary
 		}
 	}
@@ -364,7 +374,10 @@ func (s *store) evictLocked() {
 		}
 		for _, task := range record.tasks {
 			if task.TaskIDCommitment != "" {
-				delete(s.taskIndex, task.TaskIDCommitment)
+				delete(s.taskCommitmentIndex, task.TaskIDCommitment)
+			}
+			if task.TaskID != "" {
+				delete(s.taskIDIndex, task.TaskID)
 			}
 			if task.LocalID != 0 {
 				delete(s.localIndex, task.LocalID)

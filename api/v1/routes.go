@@ -175,7 +175,7 @@ func InitRoutes(r *fizz.Fizz) {
 		fizz.Response("401", "unauthorized", response.ErrorResponse{}, nil, nil),
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, middleware.AdminAuthMiddleware(), tonic.Handler(admin.ListTaskTraces, 200))
-	adminTasksGroup.GET("/:task_id_commitment/trace", []fizz.OperationOption{
+	adminTasksGroup.GET("/:task_id/trace", []fizz.OperationOption{
 		fizz.ID("admin_task_trace"),
 		fizz.Summary("Get an API-created task trace"),
 		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
@@ -191,7 +191,7 @@ func InitRoutes(r *fizz.Fizz) {
 		fizz.Response("401", "unauthorized", response.ErrorResponse{}, nil, nil),
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, middleware.AdminAuthMiddleware(), tonic.Handler(admin.ListOpenAILLMTaskTraces, 200))
-	adminLLMTasksGroup.GET("/:task_id_commitment/trace", []fizz.OperationOption{
+	adminLLMTasksGroup.GET("/:task_id/trace", []fizz.OperationOption{
 		fizz.ID("admin_llm_task_trace"),
 		fizz.Summary("Get an OpenAI-compatible LLM task trace"),
 		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),

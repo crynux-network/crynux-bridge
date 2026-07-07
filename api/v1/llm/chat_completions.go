@@ -209,7 +209,7 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 		choices[i] = utils.ResponseChoiceToCCResChoice(choice)
 	}
 	ccResponse := &structs.ChatCompletionsResponse{
-		Id:      resultDownloadedTask.TaskIDCommitment,
+		Id:      resultDownloadedTask.TaskID,
 		Created: resultDownloadedTask.CreatedAt.Unix(),
 		Model:   gptTaskResponse.Model,
 		Choices: choices,

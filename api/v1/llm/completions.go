@@ -178,7 +178,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 		choices[i] = choice
 	}
 	ccResponse := &structs.CompletionsResponse{
-		Id:      resultDownloadedTask.TaskIDCommitment,
+		Id:      resultDownloadedTask.TaskID,
 		Created: resultDownloadedTask.CreatedAt.Unix(),
 		Model:   gptTaskResponse.Model,
 		Choices: choices,

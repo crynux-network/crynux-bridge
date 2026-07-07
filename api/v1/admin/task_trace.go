@@ -12,7 +12,7 @@ type ListTaskTracesRequest struct {
 }
 
 type GetTaskTraceRequest struct {
-	TaskIDCommitment string `path:"task_id_commitment" json:"task_id_commitment" validate:"required"`
+	TaskID string `path:"task_id" json:"task_id" validate:"required"`
 }
 
 type ListTaskTracesResponse struct {
@@ -38,9 +38,9 @@ func ListOpenAILLMTaskTraces(c *gin.Context, in *ListTaskTracesRequest) (*ListTa
 }
 
 func GetTaskTrace(c *gin.Context, in *GetTaskTraceRequest) (*GetTaskTraceResponse, error) {
-	trace, ok := tasktrace.GetTrace(in.TaskIDCommitment)
+	trace, ok := tasktrace.GetTrace(in.TaskID)
 	if !ok {
-		return nil, response.NewValidationErrorResponse("task_id_commitment", "task trace not found")
+		return nil, response.NewValidationErrorResponse("task_id", "task trace not found")
 	}
 	return &GetTaskTraceResponse{
 		Data: &trace,
@@ -48,12 +48,12 @@ func GetTaskTrace(c *gin.Context, in *GetTaskTraceRequest) (*GetTaskTraceRespons
 }
 
 func GetOpenAILLMTaskTrace(c *gin.Context, in *GetTaskTraceRequest) (*GetTaskTraceResponse, error) {
-	trace, ok := tasktrace.GetTrace(in.TaskIDCommitment)
+	trace, ok := tasktrace.GetTrace(in.TaskID)
 	if !ok {
-		return nil, response.NewValidationErrorResponse("task_id_commitment", "task trace not found")
+		return nil, response.NewValidationErrorResponse("task_id", "task trace not found")
 	}
 	if trace.Source != tasktrace.SourceOpenAIChatCompletions && trace.Source != tasktrace.SourceOpenAICompletions {
-		return nil, response.NewValidationErrorResponse("task_id_commitment", "OpenAI LLM task trace not found")
+		return nil, response.NewValidationErrorResponse("task_id", "OpenAI LLM task trace not found")
 	}
 	return &GetTaskTraceResponse{
 		Data: &trace,

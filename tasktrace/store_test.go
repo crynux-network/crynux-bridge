@@ -15,7 +15,7 @@ func TestStoreKeepsMostRecentTraces(t *testing.T) {
 		task := models.InferenceTask{
 			RootModel: models.RootModel{ID: uint(i + 1), CreatedAt: time.Unix(int64(i), 0)},
 			TaskType:  taskType,
-			TaskID:    "0xtask",
+			TaskID:    string(rune('x' + i)),
 		}
 		task.TaskIDCommitment = string(rune('a' + i))
 		StartTrace(StartTraceInput{
@@ -72,9 +72,9 @@ func TestStoreIndexesRelatedTasksAndRecordsEvents(t *testing.T) {
 	RecordEvent(&validationTask, "result_downloaded", map[string]any{"file_count": 1})
 	FinishTrace(primary, map[string]any{"id": "0xvalidation"}, errors.New("sample error"), &validationTask)
 
-	trace, ok := GetTrace("0xvalidation")
+	trace, ok := GetTrace("0xshared")
 	if !ok {
-		t.Fatal("expected trace lookup by validation task commitment")
+		t.Fatal("expected trace lookup by raw task ID")
 	}
 	if trace.PrimaryTaskIDCommitment != "0xprimary" {
 		t.Fatalf("unexpected primary commitment %s", trace.PrimaryTaskIDCommitment)
