@@ -120,7 +120,15 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 		DType:            dtype,
 		// QuantizeBits:     structs.QuantizeBits8,
 	}
-	taskArgsStr, err := json.Marshal(taskArgs)
+	taskMessages := any(messages)
+	if shouldAdaptQwenXMLToolCallMessages(in.Model, in.Tools) {
+		taskMessages, err = buildQwenXMLToolCallMessages(messages)
+		if err != nil {
+			return nil, response.NewValidationErrorResponse("messages", err.Error())
+		}
+	}
+	taskArgsPayload := buildLLMTaskArgsPayload(taskArgs, taskMessages)
+	taskArgsStr, err := json.Marshal(taskArgsPayload)
 	if err != nil {
 		err := errors.New("failed to marshal taskArgs")
 		return nil, response.NewExceptionResponse(err)
