@@ -309,6 +309,12 @@ func WaitResultTask(ctx context.Context, db *gorm.DB, tasks []InferenceTask) (*I
 	resultChan := make(chan *InferenceTask, len(tasks))
 	errChan := make(chan error, len(tasks))
 	doneChan := make(chan struct{})
+	var closeDoneOnce sync.Once
+	closeDone := func() {
+		closeDoneOnce.Do(func() {
+			close(doneChan)
+		})
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(tasks))
@@ -333,7 +339,7 @@ func WaitResultTask(ctx context.Context, db *gorm.DB, tasks []InferenceTask) (*I
 				if status == InferenceTaskResultDownloaded {
 					select {
 					case resultChan <- t:
-						close(doneChan)
+						closeDone()
 					case <-doneChan:
 					}
 					return
@@ -361,7 +367,7 @@ func WaitResultTask(ctx context.Context, db *gorm.DB, tasks []InferenceTask) (*I
 			}()
 			return result, nil
 		case <-ctx.Done():
-			close(doneChan)
+			closeDone()
 			wg.Wait()
 			if deadline, ok := ctx.Deadline(); ok {
 				return nil, fmt.Errorf("%w: task did not finish before deadline %s (%v)", ErrTaskTimeout, deadline.Format(time.RFC3339), ctx.Err())
