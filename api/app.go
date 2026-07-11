@@ -43,6 +43,7 @@ func GetHttpApplication(appConfig *config.AppConfig) *gin.Engine {
 	fizzEngine.Generator().UseFullSchemaNames(false)
 
 	// Initialize our own handlers
+	tonic.SetBindHook(tonic.DefaultBindingHookMaxBodyBytes(appConfig.Http.MaxBodyBytes))
 	tonic.SetErrorHook(TonicResponseErrorHook)
 	tonic.SetRenderHook(TonicRenderHook, "")
 	tonic.RegisterTagNameFunc(func(fld reflect.StructField) string {

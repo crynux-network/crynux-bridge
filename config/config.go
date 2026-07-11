@@ -35,6 +35,9 @@ func InitConfig(configPath string) error {
 	if err := validateTaskFeeConfig(appConfig); err != nil {
 		return err
 	}
+	if appConfig.Http.MaxBodyBytes <= 0 {
+		return errors.New("http.max_body_bytes must be set to a positive value")
+	}
 
 	if appConfig.Environment == EnvTest {
 		appConfig.Test.RootPrivateKey = NormalizePrivateKey(appConfig.Test.RootPrivateKey)

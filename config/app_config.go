@@ -39,8 +39,9 @@ type AppConfig struct {
 	} `mapstructure:"admin"`
 
 	Http struct {
-		Host string `mapstructure:"host"`
-		Port string `mapstructure:"port"`
+		Host         string `mapstructure:"host"`
+		Port         string `mapstructure:"port"`
+		MaxBodyBytes int64  `mapstructure:"max_body_bytes"`
 	} `mapstructure:"http"`
 
 	DataDir struct {

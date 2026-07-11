@@ -21,6 +21,7 @@ admin:
 http:
   host: "0.0.0.0"
   port: "5028"
+  max_body_bytes: 2097152
 data_dir:
   inference_tasks: "/app/data/inference_tasks"
   model_images: "/app/data/images/models"
