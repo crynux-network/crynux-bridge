@@ -53,30 +53,35 @@ task:
         model: "crynux-network/sdxl-turbo"
         min_vram: 14
         fee_cnx: 2.0
+        timeout_minutes: 6
       - task_version: "3.1.0"
         type: "sd"
         ratio: 1.0
         model: "crynux-network/stable-diffusion-v1-5"
         min_vram: 4
         fee_cnx: 1.0
+        timeout_minutes: 6
       - task_version: "3.1.0"
         type: "llm"
         ratio: 0.5
         model: "Qwen/Qwen2.5-14B"
         min_vram: 32
         fee_cnx: 20.0
+        timeout_minutes: 10
       - task_version: "3.1.0"
         type: "llm"
         ratio: 0.5
         model: "Qwen/Qwen2.5-32B"
         min_vram: 60
         fee_cnx: 40.0
+        timeout_minutes: 15
       - task_version: "3.1.0"
         type: "llm"
         ratio: 1.0
         model: "Qwen/Qwen2.5-7B"
         min_vram: 24
         fee_cnx: 5.0
+        timeout_minutes: 6
 task_schema:
   stable_diffusion_inference: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/stable-diffusion-inference-task.json"
   gpt_inference: "https://raw.githubusercontent.com/crynux-network/gpt-task/refs/tags/v3.1.0/schema/gpt-inference-task.json"

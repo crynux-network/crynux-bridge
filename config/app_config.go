@@ -98,10 +98,11 @@ type HeartbeatTasksConfig struct {
 }
 
 type HeartbeatTaskConfig struct {
-	TaskVersion string  `mapstructure:"task_version"`
-	Type        string  `mapstructure:"type"`
-	Ratio       float64 `mapstructure:"ratio"`
-	Model       string  `mapstructure:"model"`
-	MinVram     uint64  `mapstructure:"min_vram"`
-	FeeCNX      float64 `mapstructure:"fee_cnx"`
+	TaskVersion    string  `mapstructure:"task_version"`
+	Type           string  `mapstructure:"type"`
+	Ratio          float64 `mapstructure:"ratio"`
+	Model          string  `mapstructure:"model"`
+	MinVram        uint64  `mapstructure:"min_vram"`
+	FeeCNX         float64 `mapstructure:"fee_cnx"`
+	TimeoutMinutes uint64  `mapstructure:"timeout_minutes"`
 }

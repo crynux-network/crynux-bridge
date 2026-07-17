@@ -50,6 +50,7 @@ func generateHeartbeatTask(client models.Client) (*models.InferenceTask, error) 
 		TaskFee:      taskFee,
 		TaskSize:     1,
 		TaskID:       taskID,
+		Timeout:      heartbeatTaskConfig.TimeoutMinutes * 60,
 	}
 	return task, nil
 }
