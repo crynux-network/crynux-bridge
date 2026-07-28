@@ -80,19 +80,31 @@ func selectHeartbeatTaskConfig(heartbeatTaskConfigs []config.HeartbeatTaskConfig
 }
 
 func buildHeartbeatTaskArgs(heartbeatTaskConfig config.HeartbeatTaskConfig) (string, models.ChainTaskType, error) {
+	prompt, useDefault, err := selectHeartbeatPrompt(heartbeatTaskConfig.Prompts)
+	if err != nil {
+		return "", 0, err
+	}
+
 	switch strings.ToLower(heartbeatTaskConfig.Type) {
 	case "sd":
-		taskArgs, err := buildSDHeartbeatTaskArgs(heartbeatTaskConfig.Model)
+		taskArgs, err := buildSDHeartbeatTaskArgs(heartbeatTaskConfig.Model, prompt, useDefault)
 		return taskArgs, models.TaskTypeSD, err
 	case "llm":
-		taskArgs, err := buildLLMHeartbeatTaskArgs(heartbeatTaskConfig.Model)
+		taskArgs, err := buildLLMHeartbeatTaskArgs(heartbeatTaskConfig.Model, prompt, useDefault)
 		return taskArgs, models.TaskTypeLLM, err
 	default:
 		return "", 0, fmt.Errorf("unsupported heartbeat task type %q", heartbeatTaskConfig.Type)
 	}
 }
 
-func buildSDHeartbeatTaskArgs(model string) (string, error) {
+func selectHeartbeatPrompt(prompts []config.HeartbeatPromptConfig) (config.HeartbeatPromptConfig, bool, error) {
+	if len(prompts) == 0 {
+		return config.HeartbeatPromptConfig{}, true, nil
+	}
+	return prompts[rand.Intn(len(prompts))], false, nil
+}
+
+func buildSDHeartbeatTaskArgs(model string, prompt config.HeartbeatPromptConfig, useDefault bool) (string, error) {
 	seed := rand.Intn(100000000)
 	baseModel := map[string]interface{}{
 		"name":    model,
@@ -101,10 +113,16 @@ func buildSDHeartbeatTaskArgs(model string) (string, error) {
 
 	var taskArgs map[string]interface{}
 	if model == "crynux-network/sdxl-turbo" {
+		promptText := "Self-portrait oil painting,a beautiful cyborg with golden hair,8k"
+		negativePrompt := ""
+		if !useDefault {
+			promptText = prompt.Text
+			negativePrompt = prompt.NegativePrompt
+		}
 		taskArgs = map[string]interface{}{
 			"base_model":      baseModel,
-			"prompt":          "Self-portrait oil painting,a beautiful cyborg with golden hair,8k",
-			"negative_prompt": "",
+			"prompt":          promptText,
+			"negative_prompt": negativePrompt,
 			"scheduler": map[string]interface{}{
 				"method": "EulerAncestralDiscreteScheduler",
 				"args": map[string]interface{}{
@@ -120,10 +138,16 @@ func buildSDHeartbeatTaskArgs(model string) (string, error) {
 			},
 		}
 	} else {
+		promptText := "best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, faded ash gray messy bun hair+, border light, depth of field, looking at viewer, closeup"
+		negativePrompt := "paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, age spot, glans"
+		if !useDefault {
+			promptText = prompt.Text
+			negativePrompt = prompt.NegativePrompt
+		}
 		taskArgs = map[string]interface{}{
 			"base_model":      baseModel,
-			"prompt":          "best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, faded ash gray messy bun hair+, border light, depth of field, looking at viewer, closeup",
-			"negative_prompt": "paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, age spot, glans",
+			"prompt":          promptText,
+			"negative_prompt": negativePrompt,
 			"task_config": map[string]interface{}{
 				"num_images":     1,
 				"seed":           seed,
@@ -141,13 +165,22 @@ func buildSDHeartbeatTaskArgs(model string) (string, error) {
 	return string(taskArgsBytes), nil
 }
 
-func buildLLMHeartbeatTaskArgs(model string) (string, error) {
+func buildLLMHeartbeatTaskArgs(model string, prompt config.HeartbeatPromptConfig, useDefault bool) (string, error) {
+	var content any = "I want to create an AI agent. Any suggestions?"
+	if !useDefault {
+		var err error
+		content, err = buildLLMHeartbeatMessageContent(prompt)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	taskArgs := map[string]interface{}{
 		"model": model,
-		"messages": []map[string]string{
+		"messages": []map[string]interface{}{
 			{
 				"role":    "user",
-				"content": "I want to create an AI agent. Any suggestions?",
+				"content": content,
 			},
 		},
 		"tools": nil,
@@ -166,6 +199,33 @@ func buildLLMHeartbeatTaskArgs(model string) (string, error) {
 		return "", err
 	}
 	return string(taskArgsBytes), nil
+}
+
+func buildLLMHeartbeatMessageContent(prompt config.HeartbeatPromptConfig) (any, error) {
+	if len(prompt.Content) > 0 {
+		blocks := make([]models.MessageContentBlock, 0, len(prompt.Content))
+		for _, block := range prompt.Content {
+			switch block.Type {
+			case "text":
+				blocks = append(blocks, models.MessageContentBlock{
+					Type: "text",
+					Text: block.Text,
+				})
+			case "image":
+				blocks = append(blocks, models.MessageContentBlock{
+					Type:   "image",
+					Base64: block.Base64,
+				})
+			default:
+				return nil, fmt.Errorf("unsupported content block type %q", block.Type)
+			}
+		}
+		return blocks, nil
+	}
+	if strings.TrimSpace(prompt.Text) == "" {
+		return nil, errors.New("heartbeat prompt text is empty")
+	}
+	return prompt.Text, nil
 }
 
 func getPendingHeartbeatTasksCount(ctx context.Context, client models.Client) (uint64, error) {

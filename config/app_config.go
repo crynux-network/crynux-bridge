@@ -97,12 +97,25 @@ type HeartbeatTasksConfig struct {
 	Tasks             []HeartbeatTaskConfig `mapstructure:"tasks"`
 }
 
+type HeartbeatContentBlock struct {
+	Type   string `mapstructure:"type"`
+	Text   string `mapstructure:"text"`
+	Base64 string `mapstructure:"base64"`
+}
+
+type HeartbeatPromptConfig struct {
+	Text           string                  `mapstructure:"text"`
+	NegativePrompt string                  `mapstructure:"negative_prompt"`
+	Content        []HeartbeatContentBlock `mapstructure:"content"`
+}
+
 type HeartbeatTaskConfig struct {
-	TaskVersion    string  `mapstructure:"task_version"`
-	Type           string  `mapstructure:"type"`
-	Ratio          float64 `mapstructure:"ratio"`
-	Model          string  `mapstructure:"model"`
-	MinVram        uint64  `mapstructure:"min_vram"`
-	FeeCNX         float64 `mapstructure:"fee_cnx"`
-	TimeoutMinutes uint64  `mapstructure:"timeout_minutes"`
+	TaskVersion    string                  `mapstructure:"task_version"`
+	Type           string                  `mapstructure:"type"`
+	Ratio          float64                 `mapstructure:"ratio"`
+	Model          string                  `mapstructure:"model"`
+	MinVram        uint64                  `mapstructure:"min_vram"`
+	FeeCNX         float64                 `mapstructure:"fee_cnx"`
+	TimeoutMinutes uint64                  `mapstructure:"timeout_minutes"`
+	Prompts        []HeartbeatPromptConfig `mapstructure:"prompts"`
 }

@@ -1,3 +1,8 @@
+## Document Index
+
+- `heartbeat_tasks.md`: Heartbeat background task creation, backpressure limits, weighted task selection, configurable multi-prompt sampling, LLM text/image content mapping, and SD prompt mapping.
+- `improve_task_success_rate_with_repeat_tasks.md`: Repeat-task design for improving API task success rate.
+
 ## Doc Update Requirements
 
 When updating documentation files:

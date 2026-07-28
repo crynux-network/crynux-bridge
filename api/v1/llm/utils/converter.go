@@ -3,10 +3,9 @@ package utils
 import (
 	"crynux_bridge/api/v1/llm/structs"
 	"crynux_bridge/models"
-	"encoding/base64"
+	"crynux_bridge/utils"
 	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 func ChatCompletionsRoleToRole(role structs.ChatCompletionsRole) models.LLMRole {
@@ -109,7 +108,7 @@ func ConvertReqContentToTaskContent(content *structs.CCReqMessageContent) (any, 
 			if part.ImageURL == nil {
 				return nil, fmt.Errorf("content part %d: image_url is required when type is image_url", i)
 			}
-			base64Payload, err := extractBase64PayloadFromDataURL(part.ImageURL.URL)
+			base64Payload, err := utils.ExtractBase64PayloadFromDataURL(part.ImageURL.URL)
 			if err != nil {
 				return nil, fmt.Errorf("content part %d: %w", i, err)
 			}
@@ -123,31 +122,6 @@ func ConvertReqContentToTaskContent(content *structs.CCReqMessageContent) (any, 
 	}
 
 	return blocks, nil
-}
-
-func extractBase64PayloadFromDataURL(rawURL string) (string, error) {
-	if rawURL == "" {
-		return "", fmt.Errorf("image_url.url is required")
-	}
-
-	commaIdx := strings.Index(rawURL, ",")
-	if commaIdx <= 0 || commaIdx == len(rawURL)-1 {
-		return "", fmt.Errorf("image_url.url must be a non-empty data URL with base64 payload")
-	}
-
-	metadata := rawURL[:commaIdx]
-	payload := rawURL[commaIdx+1:]
-	if !strings.HasPrefix(strings.ToLower(metadata), "data:") || !strings.Contains(strings.ToLower(metadata), ";base64") {
-		return "", fmt.Errorf("image_url.url must use data:*;base64,<payload> format")
-	}
-
-	if _, err := base64.StdEncoding.DecodeString(payload); err != nil {
-		if _, rawErr := base64.RawStdEncoding.DecodeString(payload); rawErr != nil {
-			return "", fmt.Errorf("image_url.url contains invalid base64 payload")
-		}
-	}
-
-	return payload, nil
 }
 
 func MessageContentToString(content any) string {
