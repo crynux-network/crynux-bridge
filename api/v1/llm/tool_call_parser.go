@@ -19,18 +19,35 @@ type parsedLlmToolCall struct {
 	Arguments string
 }
 
+type parsedLlmToolCallMatch struct {
+	ToolCall parsedLlmToolCall
+	Start    int
+	End      int
+}
+
 type parsedHermesToolCall struct {
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
 }
 
 func normalizeAssistantContent(content string) (string, []parsedLlmToolCall) {
-	cleanContent := stripThinkingContent(content)
-	toolCalls := parseToolCalls(cleanContent)
-	if len(toolCalls) > 0 {
-		return "", toolCalls
+	matches := parseToolCalls(content)
+	if len(matches) == 0 {
+		return content, nil
 	}
-	return cleanContent, nil
+
+	var cleanContent strings.Builder
+	cleanContent.Grow(len(content))
+	toolCalls := make([]parsedLlmToolCall, 0, len(matches))
+	contentStart := 0
+	for _, match := range matches {
+		cleanContent.WriteString(content[contentStart:match.Start])
+		toolCalls = append(toolCalls, match.ToolCall)
+		contentStart = match.End
+	}
+	cleanContent.WriteString(content[contentStart:])
+
+	return cleanContent.String(), toolCalls
 }
 
 func stripThinkingContent(content string) string {
@@ -41,24 +58,32 @@ func stripThinkingContent(content string) string {
 	return strings.TrimLeft(content[loc[1]:], "\r\n\t ")
 }
 
-func parseToolCalls(content string) []parsedLlmToolCall {
-	matches := toolCallBlockRegex.FindAllStringSubmatch(content, -1)
+func parseToolCalls(content string) []parsedLlmToolCallMatch {
+	matches := toolCallBlockRegex.FindAllStringSubmatchIndex(content, -1)
 	if len(matches) == 0 {
 		return nil
 	}
 
-	toolCalls := make([]parsedLlmToolCall, 0, len(matches))
+	toolCalls := make([]parsedLlmToolCallMatch, 0, len(matches))
 	for _, match := range matches {
-		if len(match) < 2 {
+		if len(match) < 4 {
 			continue
 		}
-		block := strings.TrimSpace(match[1])
+		block := strings.TrimSpace(content[match[2]:match[3]])
 		if toolCall, ok := parseHermesJSONToolCall(block); ok {
-			toolCalls = append(toolCalls, toolCall)
+			toolCalls = append(toolCalls, parsedLlmToolCallMatch{
+				ToolCall: toolCall,
+				Start:    match[0],
+				End:      match[1],
+			})
 			continue
 		}
 		if toolCall, ok := parseQwenXMLToolCall(block); ok {
-			toolCalls = append(toolCalls, toolCall)
+			toolCalls = append(toolCalls, parsedLlmToolCallMatch{
+				ToolCall: toolCall,
+				Start:    match[0],
+				End:      match[1],
+			})
 		}
 	}
 

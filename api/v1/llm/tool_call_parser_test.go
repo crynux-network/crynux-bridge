@@ -47,8 +47,9 @@ print("Hello, World!")
 </tool_call>`
 
 	cleanContent, toolCalls := normalizeAssistantContent(content)
-	if cleanContent != "" {
-		t.Fatalf("expected tool call content to be cleared, got %q", cleanContent)
+	expectedContent := "The user wants a simple Python script.\n</think>\n\n"
+	if cleanContent != expectedContent {
+		t.Fatalf("expected thinking content to be preserved, got %q", cleanContent)
 	}
 	if len(toolCalls) != 1 {
 		t.Fatalf("expected one tool call, got %d", len(toolCalls))
@@ -70,19 +71,26 @@ print("Hello, World!")
 }
 
 func TestNormalizeAssistantContentParsesMultipleQwenXMLToolCalls(t *testing.T) {
-	content := `<tool_call>
+	content := `Before calls.
+<tool_call>
 <function=get_weather>
 <parameter=location>Paris</parameter>
 </function>
 </tool_call>
 
+Between calls.
 <tool_call>
 <function=get_time>
 <parameter=timezone>Europe/Paris</parameter>
 </function>
-</tool_call>`
+</tool_call>
+After calls.`
 
-	_, toolCalls := normalizeAssistantContent(content)
+	cleanContent, toolCalls := normalizeAssistantContent(content)
+	expectedContent := "Before calls.\n\n\nBetween calls.\n\nAfter calls."
+	if cleanContent != expectedContent {
+		t.Fatalf("expected surrounding content to be preserved, got %q", cleanContent)
+	}
 	if len(toolCalls) != 2 {
 		t.Fatalf("expected two tool calls, got %d", len(toolCalls))
 	}
@@ -91,15 +99,73 @@ func TestNormalizeAssistantContentParsesMultipleQwenXMLToolCalls(t *testing.T) {
 	}
 }
 
-func TestNormalizeAssistantContentStripsThinkingWithoutToolCall(t *testing.T) {
+func TestNormalizeAssistantContentPreservesThinkingWithoutToolCall(t *testing.T) {
 	content := "I should answer briefly.\n</thinking>\n\nHello there."
 
 	cleanContent, toolCalls := normalizeAssistantContent(content)
 	if len(toolCalls) != 0 {
 		t.Fatalf("expected no tool calls, got %d", len(toolCalls))
 	}
-	if cleanContent != "Hello there." {
+	if cleanContent != content {
 		t.Fatalf("unexpected clean content: %q", cleanContent)
+	}
+}
+
+func TestNormalizeAssistantContentParsesToolCallBeforeThinkingEnd(t *testing.T) {
+	content := `<think>
+I need the current weather.
+<tool_call>
+{"name":"get_weather","arguments":{"location":"Paris"}}
+</tool_call>
+</think>
+I will continue after the tool result.`
+
+	cleanContent, toolCalls := normalizeAssistantContent(content)
+	expectedContent := `<think>
+I need the current weather.
+
+</think>
+I will continue after the tool result.`
+	if cleanContent != expectedContent {
+		t.Fatalf("expected thinking and final content to be preserved, got %q", cleanContent)
+	}
+	if len(toolCalls) != 1 || toolCalls[0].Name != "get_weather" {
+		t.Fatalf("unexpected tool calls: %#v", toolCalls)
+	}
+}
+
+func TestNormalizeAssistantContentParsesToolCallWithoutThinkingEnd(t *testing.T) {
+	content := `<think>
+I need the current weather.
+<tool_call>
+{"name":"get_weather","arguments":{"location":"Paris"}}
+</tool_call>`
+
+	cleanContent, toolCalls := normalizeAssistantContent(content)
+	expectedContent := `<think>
+I need the current weather.
+`
+	if cleanContent != expectedContent {
+		t.Fatalf("expected unterminated thinking content to be preserved, got %q", cleanContent)
+	}
+	if len(toolCalls) != 1 || toolCalls[0].Name != "get_weather" {
+		t.Fatalf("unexpected tool calls: %#v", toolCalls)
+	}
+}
+
+func TestNormalizeAssistantContentPreservesMalformedToolCall(t *testing.T) {
+	content := `Before.
+<tool_call>
+{"name":"","arguments":{"location":"Paris"}}
+</tool_call>
+After.`
+
+	cleanContent, toolCalls := normalizeAssistantContent(content)
+	if cleanContent != content {
+		t.Fatalf("expected malformed block to be preserved, got %q", cleanContent)
+	}
+	if len(toolCalls) != 0 {
+		t.Fatalf("expected no tool calls, got %#v", toolCalls)
 	}
 }
 

@@ -2,6 +2,15 @@
 
 - `heartbeat_tasks.md`: Heartbeat background task creation, backpressure limits, weighted task selection, configurable multi-prompt sampling, LLM text/image content mapping, and SD prompt mapping.
 - `improve_task_success_rate_with_repeat_tasks.md`: Repeat-task design for improving API task success rate.
+- `model-compatibility/`: End-to-end OpenAI-compatible LLM request adaptation, transparent task transport, gpt-task execution boundary, and response normalization.
+
+## Model Compatibility Authority
+
+OpenAI-compatible request adaptation, canonical `GPTTaskArgs` creation, task transport boundaries, and public response normalization MUST use `docs/model-compatibility/` in this repository as their authority.
+
+Prompt rendering, chat templates, processor behavior, rendering of Bridge-adapted tool history into model input, thinking template controls, AutoClass, remote `auto_map`, execution backends, tensor-parallel fallback, generation, and raw decoding MUST use `gpt-task/docs/model-compatibility/` in the standalone gpt-task repository as their authority.
+
+Bridge documentation MUST own public API normalization, task creation, transport boundaries, response normalization, and lifecycle protocols. It MUST NOT redefine gpt-task execution facts. Model pages are verified coverage samples and MUST NOT be implemented as Bridge runtime model-ID allowlists.
 
 ## Doc Update Requirements
 
