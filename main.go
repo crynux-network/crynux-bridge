@@ -46,6 +46,7 @@ func main() {
 	go tasks.HeartbeatCreateTasks(context.Background())
 	go tasks.CancelTasks(context.Background())
 	go tasks.ProcessSDFTTasks(context.Background())
+	go tasks.CleanupInferenceResults(context.Background())
 
 	startServer()
 }

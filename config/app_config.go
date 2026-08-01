@@ -45,8 +45,9 @@ type AppConfig struct {
 	} `mapstructure:"http"`
 
 	DataDir struct {
-		InferenceTasks string `mapstructure:"inference_tasks"`
-		ModelImages    string `mapstructure:"model_images"`
+		InferenceTasks              string `mapstructure:"inference_tasks"`
+		InferenceTasksRetentionDays int    `mapstructure:"inference_tasks_retention_days"`
+		ModelImages                 string `mapstructure:"model_images"`
 	} `mapstructure:"data_dir"`
 
 	Blockchain struct {

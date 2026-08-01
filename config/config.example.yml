@@ -27,6 +27,7 @@ http:
   max_body_bytes: 2097152
 data_dir:
   inference_tasks: "/app/data/inference_tasks"
+  inference_tasks_retention_days: 7
   model_images: "/app/data/images/models"
 blockchain:
   account:
