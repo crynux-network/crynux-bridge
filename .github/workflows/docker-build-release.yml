@@ -1,4 +1,4 @@
-name: Release build ig-server docker image
+name: Release build Crynux Bridge docker image
 
 on:
   release:
