@@ -272,7 +272,14 @@ func getPendingHeartbeatTasksCount(
 		Where("client_id = ?", client.ID).
 		Where("task_type = ?", taskType).
 		Where("task_model_ids = ?", modelID).
-		Where("(status = ? OR status = ?)", models.InferenceTaskPending, models.InferenceTaskStarted).
+		Where("status NOT IN ?", []models.TaskStatus{
+			models.InferenceTaskEndAborted,
+			models.InferenceTaskEndGroupRefund,
+			models.InferenceTaskEndInvalidated,
+			models.InferenceTaskEndSuccess,
+			models.InferenceTaskResultDownloaded,
+			models.InferenceTaskNeedCancel,
+		}).
 		Count(&count).Error
 	if err != nil {
 		return 0, err
@@ -361,7 +368,7 @@ func heartbeatCreateTasks(ctx context.Context) error {
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			log.Infof("HeartbeatTask: pending heartbeat tasks counts: %v", pendingCounts)
+			log.Infof("HeartbeatTask: in-flight heartbeat tasks counts: %v", pendingCounts)
 
 			tasks := make([]*models.InferenceTask, 0, batchSize)
 			batchIncrements := make(map[string]uint64)

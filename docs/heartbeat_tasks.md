@@ -11,7 +11,7 @@ When `task.heartbeat_tasks.batch_size` is `0`, Bridge MUST NOT create heartbeat 
 When `task.heartbeat_tasks.batch_size` is greater than `0`, each loop iteration MUST:
 
 1. Enforce `max_tasks_per_hour` when it is greater than `0`.
-2. Select eligible heartbeat task entries by weighted sampling on `ratio`, excluding entries whose local pending count exceeds `max_pending_tasks`.
+2. Select eligible heartbeat task entries by weighted sampling on `ratio`, excluding entries whose in-flight count exceeds `max_pending_tasks`.
 3. Create up to `batch_size` heartbeat tasks from eligible entries and persist them as local `InferenceTask` records with status `Pending`.
 4. When no eligible entry exists, sleep and continue the loop without creating tasks.
 
@@ -41,11 +41,15 @@ When `ratio > 0`, `max_pending_tasks` MUST be greater than `0`. Config load MUST
 
 Bridge MUST select one eligible task entry by weighted sampling on `ratio`. Entries with `ratio <= 0` MUST be skipped.
 
-Pending counting MUST use only local heartbeat tasks whose `ClientId` is `heartbeat-task` and whose status is `Pending` or `Started`.
+In-flight counting MUST use local heartbeat tasks whose `ClientId` is `heartbeat-task` and whose status is not terminal.
 
-Pending counts MUST be keyed by `task_type` and the entry `model`. The stored `task_model_ids` value MUST match the base model id produced by `GetTaskConfigModelIDs` for that entry. Entries that share the same `type` and `model` MUST share one pending count pool.
+Terminal statuses MUST be: `EndAborted`, `EndGroupRefund`, `EndInvalidated`, `EndSuccess`, `ResultDownloaded`, and `NeedCancel`.
 
-An entry MUST be excluded from sampling when its pending count is greater than its `max_pending_tasks`. An entry whose pending count equals `max_pending_tasks` MUST remain eligible.
+`max_pending_tasks` MUST limit how many unfinished heartbeat tasks of that entry remain in Bridge and Relay. Tasks that have already been submitted to Relay and are still unfinished MUST count toward the limit.
+
+In-flight counts MUST be keyed by `task_type` and the entry `model`. The stored `task_model_ids` value MUST match the base model id produced by `GetTaskConfigModelIDs` for that entry. Entries that share the same `type` and `model` MUST share one in-flight count pool.
+
+An entry MUST be excluded from sampling when its in-flight count is greater than its `max_pending_tasks`. An entry whose in-flight count equals `max_pending_tasks` MUST remain eligible.
 
 Within a single batch, Bridge MUST accumulate in-memory increments per `type` and `model` so later samples in the same batch observe tasks already chosen earlier in that batch.
 
