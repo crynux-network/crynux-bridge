@@ -11,9 +11,9 @@ When `task.heartbeat_tasks.batch_size` is `0`, Bridge MUST NOT create heartbeat 
 When `task.heartbeat_tasks.batch_size` is greater than `0`, each loop iteration MUST:
 
 1. Enforce `max_tasks_per_hour` when it is greater than `0`.
-2. Skip creation when the count of local heartbeat tasks in `Pending` or `Started` status is greater than `pending_tasks_limit`.
-3. Skip creation when the Relay queued task count is greater than `pending_tasks_limit`.
-4. Create up to `batch_size` heartbeat tasks and persist them as local `InferenceTask` records with status `Pending`.
+2. Select eligible heartbeat task entries by weighted sampling on `ratio`, excluding entries whose local pending count exceeds `max_pending_tasks`.
+3. Create up to `batch_size` heartbeat tasks from eligible entries and persist them as local `InferenceTask` records with status `Pending`.
+4. When no eligible entry exists, sleep and continue the loop without creating tasks.
 
 Created heartbeat tasks MUST be submitted to Relay by the shared task processing pipeline.
 
@@ -34,9 +34,22 @@ Each heartbeat task entry under `task.heartbeat_tasks.tasks` MUST define:
 - `min_vram`
 - `fee_cnx`
 - `timeout_minutes`
+- `max_pending_tasks` when `ratio > 0`
 - optional `prompts`
 
-Bridge MUST select one eligible task entry by weighted sampling on `ratio`. Entries with `ratio <= 0` MUST be skipped. If no eligible entry exists, task creation MUST fail.
+When `ratio > 0`, `max_pending_tasks` MUST be greater than `0`. Config load MUST reject entries that violate this rule.
+
+Bridge MUST select one eligible task entry by weighted sampling on `ratio`. Entries with `ratio <= 0` MUST be skipped.
+
+Pending counting MUST use only local heartbeat tasks whose `ClientId` is `heartbeat-task` and whose status is `Pending` or `Started`.
+
+Pending counts MUST be keyed by `task_type` and the entry `model`. The stored `task_model_ids` value MUST match the base model id produced by `GetTaskConfigModelIDs` for that entry. Entries that share the same `type` and `model` MUST share one pending count pool.
+
+An entry MUST be excluded from sampling when its pending count is greater than its `max_pending_tasks`. An entry whose pending count equals `max_pending_tasks` MUST remain eligible.
+
+Within a single batch, Bridge MUST accumulate in-memory increments per `type` and `model` so later samples in the same batch observe tasks already chosen earlier in that batch.
+
+When no eligible entry remains, task creation for that loop iteration MUST stop without error.
 
 ## Prompt Selection
 

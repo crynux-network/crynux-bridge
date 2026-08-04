@@ -8,6 +8,9 @@ import (
 
 func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 	for i, task := range appConfig.Task.HeartbeatTasks.Tasks {
+		if task.Ratio > 0 && task.MaxPendingTasks == 0 {
+			return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: max_pending_tasks must be > 0 when ratio > 0", i)
+		}
 		taskType := strings.ToLower(task.Type)
 		for j := range task.Prompts {
 			if err := validateAndNormalizeHeartbeatPrompt(taskType, &appConfig.Task.HeartbeatTasks.Tasks[i].Prompts[j]); err != nil {

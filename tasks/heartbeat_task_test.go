@@ -159,3 +159,145 @@ func TestBuildHeartbeatTaskArgsWithPrompts(t *testing.T) {
 		t.Fatalf("unexpected content %#v", msg["content"])
 	}
 }
+
+func TestSelectHeartbeatTaskConfigExcludesOverPendingLimit(t *testing.T) {
+	configs := []config.HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Model:           "Qwen/Qwen2.5-7B",
+			Ratio:           1.0,
+			MaxPendingTasks: 2,
+		},
+		{
+			Type:            "llm",
+			Model:           "Qwen/Qwen2.5-14B",
+			Ratio:           1.0,
+			MaxPendingTasks: 2,
+		},
+	}
+	pendingCounts := map[string]uint64{
+		"llm|Qwen/Qwen2.5-7B":  3,
+		"llm|Qwen/Qwen2.5-14B": 1,
+	}
+	batchIncrements := map[string]uint64{}
+
+	for i := 0; i < 20; i++ {
+		selected, err := selectHeartbeatTaskConfig(configs, pendingCounts, batchIncrements)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if selected.Model != "Qwen/Qwen2.5-14B" {
+			t.Fatalf("expected only 14B to remain eligible, got %q", selected.Model)
+		}
+	}
+}
+
+func TestSelectHeartbeatTaskConfigSharedModelUsesOwnLimit(t *testing.T) {
+	configs := []config.HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Model:           "Qwen/Qwen2.5-7B",
+			Ratio:           1.0,
+			MaxPendingTasks: 1,
+		},
+		{
+			Type:            "llm",
+			Model:           "Qwen/Qwen2.5-7B",
+			Ratio:           1.0,
+			MaxPendingTasks: 5,
+			MinVram:         24,
+		},
+	}
+	pendingCounts := map[string]uint64{
+		"llm|Qwen/Qwen2.5-7B": 2,
+	}
+	batchIncrements := map[string]uint64{}
+
+	for i := 0; i < 20; i++ {
+		selected, err := selectHeartbeatTaskConfig(configs, pendingCounts, batchIncrements)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if selected.MaxPendingTasks != 5 {
+			t.Fatalf("expected only the looser limit item to remain eligible, got %#v", selected)
+		}
+	}
+}
+
+func TestSelectHeartbeatTaskConfigNoEligible(t *testing.T) {
+	configs := []config.HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Model:           "Qwen/Qwen2.5-7B",
+			Ratio:           1.0,
+			MaxPendingTasks: 1,
+		},
+		{
+			Type:            "sd",
+			Model:           "crynux-network/sdxl-turbo",
+			Ratio:           1.0,
+			MaxPendingTasks: 1,
+		},
+	}
+	pendingCounts := map[string]uint64{
+		"llm|Qwen/Qwen2.5-7B":               2,
+		"sd|crynux-network/sdxl-turbo": 2,
+	}
+	_, err := selectHeartbeatTaskConfig(configs, pendingCounts, map[string]uint64{})
+	if err == nil {
+		t.Fatalf("expected no eligible heartbeat task config error")
+	}
+}
+
+func TestSelectHeartbeatTaskConfigBatchIncrementsBlockFurtherSamples(t *testing.T) {
+	configs := []config.HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Model:           "Qwen/Qwen2.5-7B",
+			Ratio:           1.0,
+			MaxPendingTasks: 1,
+		},
+	}
+	pendingCounts := map[string]uint64{
+		"llm|Qwen/Qwen2.5-7B": 1,
+	}
+	batchIncrements := map[string]uint64{}
+
+	selected, err := selectHeartbeatTaskConfig(configs, pendingCounts, batchIncrements)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if selected.Model != "Qwen/Qwen2.5-7B" {
+		t.Fatalf("unexpected model %q", selected.Model)
+	}
+	batchIncrements[heartbeatTypeModelKey(selected.Type, selected.Model)]++
+
+	_, err = selectHeartbeatTaskConfig(configs, pendingCounts, batchIncrements)
+	if err == nil {
+		t.Fatalf("expected no eligible heartbeat task config after batch increment")
+	}
+}
+
+func TestHeartbeatTaskTypeAndModelID(t *testing.T) {
+	llmType, llmModelID, err := heartbeatTaskTypeAndModelID(config.HeartbeatTaskConfig{
+		Type:  "llm",
+		Model: "Qwen/Qwen2.5-7B",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if llmType != models.TaskTypeLLM || llmModelID != "base:Qwen/Qwen2.5-7B" {
+		t.Fatalf("unexpected llm identity: type=%v modelID=%q", llmType, llmModelID)
+	}
+
+	sdType, sdModelID, err := heartbeatTaskTypeAndModelID(config.HeartbeatTaskConfig{
+		Type:  "sd",
+		Model: "crynux-network/sdxl-turbo",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sdType != models.TaskTypeSD || sdModelID != "base:crynux-network/sdxl-turbo+fp16" {
+		t.Fatalf("unexpected sd identity: type=%v modelID=%q", sdType, sdModelID)
+	}
+}

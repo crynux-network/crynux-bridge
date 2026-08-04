@@ -92,10 +92,9 @@ type AppConfig struct {
 }
 
 type HeartbeatTasksConfig struct {
-	PendingTasksLimit uint64                `mapstructure:"pending_tasks_limit"`
-	BatchSize         uint64                `mapstructure:"batch_size"`
-	MaxTasksPerHour   uint64                `mapstructure:"max_tasks_per_hour"`
-	Tasks             []HeartbeatTaskConfig `mapstructure:"tasks"`
+	BatchSize       uint64                `mapstructure:"batch_size"`
+	MaxTasksPerHour uint64                `mapstructure:"max_tasks_per_hour"`
+	Tasks           []HeartbeatTaskConfig `mapstructure:"tasks"`
 }
 
 type HeartbeatContentBlock struct {
@@ -111,12 +110,13 @@ type HeartbeatPromptConfig struct {
 }
 
 type HeartbeatTaskConfig struct {
-	TaskVersion    string                  `mapstructure:"task_version"`
-	Type           string                  `mapstructure:"type"`
-	Ratio          float64                 `mapstructure:"ratio"`
-	Model          string                  `mapstructure:"model"`
-	MinVram        uint64                  `mapstructure:"min_vram"`
-	FeeCNX         float64                 `mapstructure:"fee_cnx"`
-	TimeoutMinutes uint64                  `mapstructure:"timeout_minutes"`
-	Prompts        []HeartbeatPromptConfig `mapstructure:"prompts"`
+	TaskVersion     string                  `mapstructure:"task_version"`
+	Type            string                  `mapstructure:"type"`
+	Ratio           float64                 `mapstructure:"ratio"`
+	Model           string                  `mapstructure:"model"`
+	MinVram         uint64                  `mapstructure:"min_vram"`
+	FeeCNX          float64                 `mapstructure:"fee_cnx"`
+	TimeoutMinutes  uint64                  `mapstructure:"timeout_minutes"`
+	MaxPendingTasks uint64                  `mapstructure:"max_pending_tasks"`
+	Prompts         []HeartbeatPromptConfig `mapstructure:"prompts"`
 }

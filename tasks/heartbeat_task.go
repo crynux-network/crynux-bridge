@@ -4,7 +4,6 @@ import (
 	"context"
 	"crynux_bridge/config"
 	"crynux_bridge/models"
-	"crynux_bridge/relay"
 	crand "crypto/rand"
 	"encoding/json"
 	"errors"
@@ -19,12 +18,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func generateHeartbeatTask(client models.Client) (*models.InferenceTask, error) {
-	heartbeatTaskConfig, err := selectHeartbeatTaskConfig(config.GetConfig().Task.HeartbeatTasks.Tasks)
-	if err != nil {
-		return nil, err
-	}
-
+func generateHeartbeatTask(client models.Client, heartbeatTaskConfig config.HeartbeatTaskConfig) (*models.InferenceTask, error) {
 	taskArgs, taskType, err := buildHeartbeatTaskArgs(heartbeatTaskConfig)
 	if err != nil {
 		return nil, err
@@ -55,12 +49,47 @@ func generateHeartbeatTask(client models.Client) (*models.InferenceTask, error) 
 	return task, nil
 }
 
-func selectHeartbeatTaskConfig(heartbeatTaskConfigs []config.HeartbeatTaskConfig) (config.HeartbeatTaskConfig, error) {
+func heartbeatTypeModelKey(taskType string, model string) string {
+	return strings.ToLower(taskType) + "|" + model
+}
+
+func heartbeatTaskTypeAndModelID(heartbeatTaskConfig config.HeartbeatTaskConfig) (models.ChainTaskType, string, error) {
+	switch strings.ToLower(heartbeatTaskConfig.Type) {
+	case "sd":
+		taskArgs, err := buildSDHeartbeatTaskArgs(heartbeatTaskConfig.Model, config.HeartbeatPromptConfig{}, true)
+		if err != nil {
+			return 0, "", err
+		}
+		modelIDs, err := models.GetTaskConfigModelIDs(taskArgs, models.TaskTypeSD)
+		if err != nil {
+			return 0, "", err
+		}
+		if len(modelIDs) == 0 {
+			return 0, "", errors.New("sd heartbeat task has no model ids")
+		}
+		return models.TaskTypeSD, modelIDs[0], nil
+	case "llm":
+		return models.TaskTypeLLM, "base:" + heartbeatTaskConfig.Model, nil
+	default:
+		return 0, "", fmt.Errorf("unsupported heartbeat task type %q", heartbeatTaskConfig.Type)
+	}
+}
+
+func selectHeartbeatTaskConfig(
+	heartbeatTaskConfigs []config.HeartbeatTaskConfig,
+	pendingCounts map[string]uint64,
+	batchIncrements map[string]uint64,
+) (config.HeartbeatTaskConfig, error) {
 	eligibleConfigs := make([]config.HeartbeatTaskConfig, 0, len(heartbeatTaskConfigs))
 	weights := make([]float64, 0, len(heartbeatTaskConfigs))
 
 	for _, heartbeatTaskConfig := range heartbeatTaskConfigs {
 		if heartbeatTaskConfig.Ratio <= 0 {
+			continue
+		}
+		key := heartbeatTypeModelKey(heartbeatTaskConfig.Type, heartbeatTaskConfig.Model)
+		count := pendingCounts[key] + batchIncrements[key]
+		if count > heartbeatTaskConfig.MaxPendingTasks {
 			continue
 		}
 		eligibleConfigs = append(eligibleConfigs, heartbeatTaskConfig)
@@ -228,18 +257,54 @@ func buildLLMHeartbeatMessageContent(prompt config.HeartbeatPromptConfig) (any, 
 	return prompt.Text, nil
 }
 
-func getPendingHeartbeatTasksCount(ctx context.Context, client models.Client) (uint64, error) {
+func getPendingHeartbeatTasksCount(
+	ctx context.Context,
+	client models.Client,
+	taskType models.ChainTaskType,
+	modelID string,
+) (uint64, error) {
 	dbCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
-	task := &models.InferenceTask{
-		Client: client,
-	}
 	var count int64
-	if err := config.GetDB().WithContext(dbCtx).Model(&task).Where(&task).Where("(status = ? OR status = ?)", models.InferenceTaskPending, models.InferenceTaskStarted).Count(&count).Error; err != nil {
+	err := config.GetDB().WithContext(dbCtx).
+		Model(&models.InferenceTask{}).
+		Where("client_id = ?", client.ID).
+		Where("task_type = ?", taskType).
+		Where("task_model_ids = ?", modelID).
+		Where("(status = ? OR status = ?)", models.InferenceTaskPending, models.InferenceTaskStarted).
+		Count(&count).Error
+	if err != nil {
 		return 0, err
 	}
 	return uint64(count), nil
+}
+
+func getPendingHeartbeatTasksCounts(
+	ctx context.Context,
+	client models.Client,
+	heartbeatTaskConfigs []config.HeartbeatTaskConfig,
+) (map[string]uint64, error) {
+	counts := make(map[string]uint64)
+	for _, heartbeatTaskConfig := range heartbeatTaskConfigs {
+		if heartbeatTaskConfig.Ratio <= 0 {
+			continue
+		}
+		key := heartbeatTypeModelKey(heartbeatTaskConfig.Type, heartbeatTaskConfig.Model)
+		if _, ok := counts[key]; ok {
+			continue
+		}
+		taskType, modelID, err := heartbeatTaskTypeAndModelID(heartbeatTaskConfig)
+		if err != nil {
+			return nil, err
+		}
+		count, err := getPendingHeartbeatTasksCount(ctx, client, taskType, modelID)
+		if err != nil {
+			return nil, err
+		}
+		counts[key] = count
+	}
+	return counts, nil
 }
 
 func heartbeatCreateTasks(ctx context.Context) error {
@@ -290,41 +355,41 @@ func heartbeatCreateTasks(ctx context.Context) error {
 				}
 			}
 
-			tasks := make([]*models.InferenceTask, 0, batchSize)
-			cnt, err := getPendingHeartbeatTasksCount(ctx, client)
+			pendingCounts, err := getPendingHeartbeatTasksCounts(ctx, client, appConfig.Task.HeartbeatTasks.Tasks)
 			if err != nil {
-				log.Errorf("HeartbeatTask: cannot get pending heartbeat tasks count %v", err)
+				log.Errorf("HeartbeatTask: cannot get pending heartbeat tasks counts %v", err)
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			log.Infof("HeartbeatTask: pending heartbeat tasks count: %d", cnt)
-			if cnt > appConfig.Task.HeartbeatTasks.PendingTasksLimit {
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			queuedTasks, err := relay.GetQueuedTasks(ctx)
-			if err != nil {
-				log.Errorf("HeartbeatTask: cannot get queued tasks count %v", err)
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			log.Infof("HeartbeatTask: queued task count %d", queuedTasks)
-			if uint64(queuedTasks) > appConfig.Task.HeartbeatTasks.PendingTasksLimit {
-				time.Sleep(2 * time.Second)
-				continue
-			}
+			log.Infof("HeartbeatTask: pending heartbeat tasks counts: %v", pendingCounts)
 
+			tasks := make([]*models.InferenceTask, 0, batchSize)
+			batchIncrements := make(map[string]uint64)
 			generationFailed := false
 			for i := 0; i < batchSize; i++ {
-				task, err := generateHeartbeatTask(client)
+				heartbeatTaskConfig, err := selectHeartbeatTaskConfig(
+					appConfig.Task.HeartbeatTasks.Tasks,
+					pendingCounts,
+					batchIncrements,
+				)
+				if err != nil {
+					break
+				}
+				task, err := generateHeartbeatTask(client, heartbeatTaskConfig)
 				if err != nil {
 					log.Errorf("HeartbeatTask: cannot generate heartbeat task: %v", err)
 					generationFailed = true
 					break
 				}
 				tasks = append(tasks, task)
+				key := heartbeatTypeModelKey(heartbeatTaskConfig.Type, heartbeatTaskConfig.Model)
+				batchIncrements[key]++
 			}
 			if generationFailed {
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			if len(tasks) == 0 {
 				time.Sleep(2 * time.Second)
 				continue
 			}

@@ -72,7 +72,9 @@ func TestValidateHeartbeatTasksConfig(t *testing.T) {
 	appConfig := &AppConfig{}
 	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
 		{
-			Type: "llm",
+			Type:            "llm",
+			Ratio:           1.0,
+			MaxPendingTasks: 5,
 			Prompts: []HeartbeatPromptConfig{
 				{Text: "ok"},
 				{
@@ -81,6 +83,34 @@ func TestValidateHeartbeatTasksConfig(t *testing.T) {
 					},
 				},
 			},
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRequiresMaxPendingTasks(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:  "llm",
+			Ratio: 1.0,
+			Model: "Qwen/Qwen2.5-7B",
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatalf("expected max_pending_tasks validation error")
+	}
+}
+
+func TestValidateHeartbeatTasksConfigAllowsZeroMaxPendingWhenRatioZero(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:  "llm",
+			Ratio: 0,
+			Model: "Qwen/Qwen2.5-7B",
 		},
 	}
 	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
