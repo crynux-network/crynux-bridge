@@ -44,7 +44,6 @@ func generateHeartbeatTask(client models.Client, heartbeatTaskConfig config.Hear
 		TaskFee:      taskFee,
 		TaskSize:     1,
 		TaskID:       taskID,
-		Timeout:      heartbeatTaskConfig.TimeoutMinutes * 60,
 	}
 	return task, nil
 }
@@ -278,7 +277,6 @@ func getPendingHeartbeatTasksCount(
 			models.InferenceTaskEndInvalidated,
 			models.InferenceTaskEndSuccess,
 			models.InferenceTaskResultDownloaded,
-			models.InferenceTaskNeedCancel,
 		}).
 		Count(&count).Error
 	if err != nil {

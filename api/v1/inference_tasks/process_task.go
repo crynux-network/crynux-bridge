@@ -11,23 +11,13 @@ import (
 	"os"
 	"path"
 	"sync"
-	"time"
 
 	"gorm.io/gorm"
 )
 
-const defaultLLMTaskWaitTimeout = 3 * time.Minute
-
 type TasksCreatedCallback func([]models.InferenceTask)
 
 func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTasksCreated ...TasksCreatedCallback) (*models.GPTTaskResponse, *models.InferenceTask, error) {
-	waitTimeout := defaultLLMTaskWaitTimeout
-	if in != nil && in.Timeout != nil && *in.Timeout > 0 {
-		waitTimeout = time.Duration(*in.Timeout) * time.Second
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, waitTimeout)
-	defer cancel()
 	/* 1. Create GPT task by function CreateTask */
 	taskResponse, err := DoCreateTask(ctx, in)
 	if err != nil {
@@ -48,14 +38,14 @@ func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTasksCrea
 	}
 	taskGroups, err := models.WaitAllTaskGroup(ctx, db, tasks)
 	if err != nil {
-		if timeoutErr := mapTaskTimeoutError(err, waitTimeout); timeoutErr != nil {
+		if timeoutErr := mapTaskTimeoutError(err); timeoutErr != nil {
 			return nil, createdTask, timeoutErr
 		}
 		return nil, createdTask, response.NewExceptionResponse(err)
 	}
 	resultDownloadedTask, err := models.WaitResultTask(ctx, db, taskGroups)
 	if err != nil {
-		if timeoutErr := mapTaskTimeoutError(err, waitTimeout); timeoutErr != nil {
+		if timeoutErr := mapTaskTimeoutError(err); timeoutErr != nil {
 			return nil, createdTask, timeoutErr
 		}
 		return nil, createdTask, response.NewExceptionResponse(err)
@@ -74,8 +64,6 @@ func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTasksCrea
 }
 
 func ProcessSDTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTasksCreated ...TasksCreatedCallback) ([]string, *models.InferenceTask, error) {
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
-	defer cancel()
 	/* 1. Create SD task by function CreateTask */
 	taskResponse, err := DoCreateTask(ctx, in)
 	if err != nil {
@@ -95,14 +83,14 @@ func ProcessSDTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTasksCreat
 	}
 	taskGroups, err := models.WaitAllTaskGroup(ctx, db, tasks)
 	if err != nil {
-		if timeoutErr := mapTaskTimeoutError(err, 3*time.Minute); timeoutErr != nil {
+		if timeoutErr := mapTaskTimeoutError(err); timeoutErr != nil {
 			return nil, nil, timeoutErr
 		}
 		return nil, nil, response.NewExceptionResponse(err)
 	}
 	resultDownloadedTask, err := models.WaitResultTask(ctx, db, taskGroups)
 	if err != nil {
-		if timeoutErr := mapTaskTimeoutError(err, 3*time.Minute); timeoutErr != nil {
+		if timeoutErr := mapTaskTimeoutError(err); timeoutErr != nil {
 			return nil, nil, timeoutErr
 		}
 		return nil, nil, response.NewExceptionResponse(err)
@@ -112,43 +100,6 @@ func ProcessSDTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTasksCreat
 	results, err := readSDTaskResults(resultDownloadedTask)
 	if err != nil {
 		return nil, nil, response.NewExceptionResponse(err)
-	}
-
-	return results, resultDownloadedTask, nil
-}
-
-func ProcessSDFTLoraTask(ctx context.Context, db *gorm.DB, in *TaskInput) (string, *models.InferenceTask, error) {
-	/* 1. Create SD task by function CreateTask */
-	taskResponse, err := DoCreateTask(ctx, in)
-	if err != nil {
-		return "", nil, err
-	}
-
-	/* 2. Get tasks, wait until they are finished and the taks result is downloaded  */
-	tasks := taskResponse.Data.InferenceTasks
-	if len(tasks) == 0 {
-		err := errors.New("no task created")
-		return "", nil, response.NewExceptionResponse(err)
-	}
-	taskGroups, err := models.WaitAllTaskGroup(ctx, db, tasks)
-	if err != nil {
-		if timeoutErr := mapTaskTimeoutError(err, 0); timeoutErr != nil {
-			return "", nil, timeoutErr
-		}
-		return "", nil, response.NewExceptionResponse(err)
-	}
-	resultDownloadedTask, err := models.WaitResultTask(ctx, db, taskGroups)
-	if err != nil {
-		if timeoutErr := mapTaskTimeoutError(err, 0); timeoutErr != nil {
-			return "", nil, timeoutErr
-		}
-		return "", nil, response.NewExceptionResponse(err)
-	}
-
-	/* 3. Read task result and return */
-	results, err := readSDFTLoraTaskResults(resultDownloadedTask)
-	if err != nil {
-		return "", nil, response.NewExceptionResponse(err)
 	}
 
 	return results, resultDownloadedTask, nil
@@ -224,25 +175,9 @@ func readSDTaskResults(task *models.InferenceTask) ([]string, error) {
 	return results, nil
 }
 
-func readSDFTLoraTaskResults(task *models.InferenceTask) (string, error) {
-	if task.TaskType != models.TaskTypeSDFTLora {
-		err := errors.New("unsupported task type")
-		return "", err
-	}
-
-	appConfig := config.GetConfig()
-	taskFolder := path.Join(appConfig.DataDir.InferenceTasks, task.TaskIDCommitment)
-	filename := path.Join(taskFolder, "checkpoint.zip")
-
-	return filename, nil
-}
-
-func mapTaskTimeoutError(err error, waitTimeout time.Duration) error {
+func mapTaskTimeoutError(err error) error {
 	if errors.Is(err, models.ErrTaskTimeout) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		if waitTimeout > 0 {
-			return response.NewExceptionResponse(fmt.Errorf("task timeout: task did not finish within %s", waitTimeout.String()))
-		}
-		return response.NewExceptionResponse(errors.New("task timeout: task did not finish before the request deadline"))
+		return response.NewExceptionResponse(fmt.Errorf("task wait interrupted: %w", err))
 	}
 	return nil
 }

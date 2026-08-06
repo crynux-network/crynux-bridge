@@ -24,20 +24,19 @@ import (
 )
 
 type CreateImageRequest struct {
-	Authorization     string  `header:"Authorization" validate:"required" description:"API key"`
-	Prompt            string  `json:"prompt" validate:"required" description:"A text description of the desired image(s)"`
-	Background        string  `json:"background,omitempty" description:"No use for now. For compatibility with Openai."`
-	Model             string  `json:"model,omitempty" default:"crynux-network/sdxl-turbo" description:"The model to use for image generation. Default is 'crynux-network/sdxl-turbo'"`
-	Moderation        string  `json:"moderation,omitempty" default:"auto" description:"No use for now. For compatibility with Openai."`
-	N                 int     `json:"n,omitempty" default:"1" description:"The number of images to generate. Default is 1"`
-	OutputCompression int     `json:"output_compression,omitempty" default:"100" description:"The compression level for the output image(s). Default is 100. No use for now."`
-	OutputFormat      string  `json:"output_format,omitempty" default:"png" enum:"png,jpeg,webp" description:"The format of the output image(s). Only support 'png' for now."`
-	Quality           string  `json:"quality,omitempty" default:"auto" enum:"auto,low,medium,high,hd,standard" description:"The quality of the output image(s). Default is 'auto'. No use for now."`
-	ResponseFormat    string  `json:"response_format,omitempty" default:"b64_json" enum:"url,b64_json" description:"The format of the response. Only support 'b64_json' for now."`
-	Size              string  `json:"size,omitempty" default:"512x512" enum:"256x256,512x512,1024x1024" description:"The size of the output image(s). Default is '512x512'"`
-	Style             string  `json:"style,omitempty" enum:"vivid,natural" description:"No use for now. For compatibility with Openai."`
-	User              string  `json:"user,omitempty" description:"No use for now. For compatibility with Openai."`
-	Timeout           *uint64 `json:"timeout,omitempty" description:"Task timeout" validate:"omitempty"`
+	Authorization     string `header:"Authorization" validate:"required" description:"API key"`
+	Prompt            string `json:"prompt" validate:"required" description:"A text description of the desired image(s)"`
+	Background        string `json:"background,omitempty" description:"No use for now. For compatibility with Openai."`
+	Model             string `json:"model,omitempty" default:"crynux-network/sdxl-turbo" description:"The model to use for image generation. Default is 'crynux-network/sdxl-turbo'"`
+	Moderation        string `json:"moderation,omitempty" default:"auto" description:"No use for now. For compatibility with Openai."`
+	N                 int    `json:"n,omitempty" default:"1" description:"The number of images to generate. Default is 1"`
+	OutputCompression int    `json:"output_compression,omitempty" default:"100" description:"The compression level for the output image(s). Default is 100. No use for now."`
+	OutputFormat      string `json:"output_format,omitempty" default:"png" enum:"png,jpeg,webp" description:"The format of the output image(s). Only support 'png' for now."`
+	Quality           string `json:"quality,omitempty" default:"auto" enum:"auto,low,medium,high,hd,standard" description:"The quality of the output image(s). Default is 'auto'. No use for now."`
+	ResponseFormat    string `json:"response_format,omitempty" default:"b64_json" enum:"url,b64_json" description:"The format of the response. Only support 'b64_json' for now."`
+	Size              string `json:"size,omitempty" default:"512x512" enum:"256x256,512x512,1024x1024" description:"The size of the output image(s). Default is '512x512'"`
+	Style             string `json:"style,omitempty" enum:"vivid,natural" description:"No use for now. For compatibility with Openai."`
+	User              string `json:"user,omitempty" description:"No use for now. For compatibility with Openai."`
 }
 
 func (in *CreateImageRequest) SetDefaultValues() {

@@ -21,7 +21,8 @@ Each created heartbeat task MUST use:
 
 - `ClientId` `heartbeat-task`
 - `TaskSize` `1`
-- `Timeout` equal to `timeout_minutes * 60` seconds
+
+Heartbeat tasks MUST NOT set an execution timeout. Relay MUST calculate the execution timeout after assigning a node.
 
 ## Task Selection
 
@@ -33,7 +34,6 @@ Each heartbeat task entry under `task.heartbeat_tasks.tasks` MUST define:
 - `model`
 - `min_vram`
 - `fee_cnx`
-- `timeout_minutes`
 - `max_pending_tasks` when `ratio > 0`
 - optional `prompts`
 
@@ -43,7 +43,7 @@ Bridge MUST select one eligible task entry by weighted sampling on `ratio`. Entr
 
 In-flight counting MUST use local heartbeat tasks whose `ClientId` is `heartbeat-task` and whose status is not terminal.
 
-Terminal statuses MUST be: `EndAborted`, `EndGroupRefund`, `EndInvalidated`, `EndSuccess`, `ResultDownloaded`, and `NeedCancel`.
+Terminal statuses MUST be: `EndAborted`, `EndGroupRefund`, `EndInvalidated`, `EndSuccess`, and `ResultDownloaded`.
 
 `max_pending_tasks` MUST limit how many unfinished heartbeat tasks of that entry remain in Bridge and Relay. Tasks that have already been submitted to Relay and are still unfinished MUST count toward the limit.
 

@@ -542,8 +542,6 @@ func taskStatusName(status models.TaskStatus) string {
 		return "end_success"
 	case models.InferenceTaskResultDownloaded:
 		return "result_downloaded"
-	case models.InferenceTaskNeedCancel:
-		return "need_cancel"
 	default:
 		return fmt.Sprintf("unknown_%d", status)
 	}

@@ -94,15 +94,10 @@ func ProcessSDFTTasks(ctx context.Context) {
 						log.Errorf("ProcessSDFTTasks: get the same inference task of client task %d", task.ID)
 					}
 					inferenceTaskID = inferenceTask.ID
-					func() {
-						duration := time.Duration(inferenceTask.Timeout) * time.Second
-						ctx, cancel := context.WithTimeout(ctx, duration)
-						defer cancel()
-						err = processSDFTTaskWithRetry(ctx, task, inferenceTask)
-						if err != nil {
-							log.Errorf("ProcessSDFTTasks: cannot process task %d: %v", task.ID, err)
-						}
-					}()
+					err = processSDFTTaskWithRetry(ctx, task, inferenceTask)
+					if err != nil {
+						log.Errorf("ProcessSDFTTasks: cannot process task %d: %v", task.ID, err)
+					}
 				}
 			}(ctx, task)
 		}
@@ -140,14 +135,24 @@ func getRunningSDFTInferenceTask(ctx context.Context, clientTaskID uint) (*model
 }
 
 func processSDFTTaskWithRetry(ctx context.Context, clientTask *models.ClientTask, inferenceTask *models.InferenceTask) error {
+	return runSDFTTaskUntilComplete(ctx, func() error {
+		return processSDFTTask(ctx, clientTask, inferenceTask)
+	})
+}
+
+func runSDFTTaskUntilComplete(ctx context.Context, process func() error) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			err := processSDFTTask(ctx, clientTask, inferenceTask)
+			err := process()
 			if err != nil {
-				time.Sleep(3 * time.Second)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(3 * time.Second):
+				}
 			} else {
 				return nil
 			}

@@ -49,7 +49,7 @@ const (
 	InferenceTaskEndInvalidated
 	InferenceTaskEndSuccess
 	InferenceTaskResultDownloaded
-	InferenceTaskNeedCancel
+	_
 )
 
 type ChainTaskType uint8
@@ -68,6 +68,12 @@ const (
 	TaskAbortModelDownloadFailed
 	TaskAbortIncorrectResult
 	TaskAbortTaskFeeTooLow
+	TaskAbortGroupTimeout
+	TaskAbortErrorReported
+	TaskAbortCreatorCancelled
+	TaskAbortCreatorValidationTimeout
+	TaskAbortResultUploadTimeout
+	TaskAbortNodeSlashed
 )
 
 type TaskError uint8
@@ -157,7 +163,16 @@ func GenerateTaskIDCommitment(taskID string) (string, string) {
 }
 
 func (task *InferenceTask) Finished() bool {
-	return task.Status == InferenceTaskEndAborted || task.Status == InferenceTaskEndGroupRefund || task.Status == InferenceTaskEndInvalidated || task.Status == InferenceTaskResultDownloaded || task.Status == InferenceTaskNeedCancel
+	return task.Status == InferenceTaskEndAborted || task.Status == InferenceTaskEndGroupRefund || task.Status == InferenceTaskEndInvalidated || task.Status == InferenceTaskResultDownloaded
+}
+
+// IsRelayTerminalTaskStatus reports whether the relay will not change the task status anymore.
+func IsRelayTerminalTaskStatus(status TaskStatus) bool {
+	return status == InferenceTaskEndAborted ||
+		status == InferenceTaskEndGroupRefund ||
+		status == InferenceTaskEndInvalidated ||
+		status == InferenceTaskEndSuccess ||
+		status == InferenceTaskResultDownloaded
 }
 
 func (task *InferenceTask) Success() bool {
@@ -238,6 +253,11 @@ func WaitTaskGroup(ctx context.Context, db *gorm.DB, task *InferenceTask) ([]Inf
 		}
 		if len(task.VRFNumber) > 0 {
 			break
+		}
+		// A task that reaches a terminal status before its VRF data is persisted
+		// never gets a validation group, so waiting on the VRF data would never end.
+		if IsRelayTerminalTaskStatus(task.Status) {
+			return []InferenceTask{*task}, nil
 		}
 		time.Sleep(time.Second)
 	}

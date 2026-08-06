@@ -69,7 +69,6 @@ type AppConfig struct {
 		DefaultLLMMaxCompletionTokens int                  `mapstructure:"default_llm_max_completion_tokens"`
 		DefaultSDFinetuneTaskFeeCNX   float64              `mapstructure:"default_sd_finetune_task_fee_cnx"`
 		RepeatNum                     int                  `mapstructure:"repeat_num"`
-		DefaultTimeout                uint64               `mapstructure:"default_timeout"`
 		SDFinetuneTimeout             uint64               `mapstructure:"sd_finetune_timeout"`
 		DefaultTaskVersion            string               `mapstructure:"default_task_version"`
 		HeartbeatTasks                HeartbeatTasksConfig `mapstructure:"heartbeat_tasks"`
@@ -116,7 +115,6 @@ type HeartbeatTaskConfig struct {
 	Model           string                  `mapstructure:"model"`
 	MinVram         uint64                  `mapstructure:"min_vram"`
 	FeeCNX          float64                 `mapstructure:"fee_cnx"`
-	TimeoutMinutes  uint64                  `mapstructure:"timeout_minutes"`
 	MaxPendingTasks uint64                  `mapstructure:"max_pending_tasks"`
 	Prompts         []HeartbeatPromptConfig `mapstructure:"prompts"`
 }

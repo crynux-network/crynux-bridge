@@ -39,7 +39,7 @@ type CreateTaskInput struct {
 	TaskSize         uint64   `json:"task_size"`
 	TaskType         int      `json:"task_type"`
 	TaskVersion      string   `json:"task_version"`
-	Timeout          uint64   `json:"timeout"`
+	Timeout          *uint64  `json:"timeout,omitempty"`
 	TaskFee          string   `json:"task_fee"`
 }
 
@@ -52,11 +52,26 @@ type ValidateTaskInput struct {
 	Signature         string   `json:"signature,omitempty"`
 }
 
-type CancelTaskInput struct {
-	TaskIDCommitment string `json:"task_id_commitment"`
-	AbortReason      int    `json:"abort_reason"`
-	Timestamp        int64  `json:"timestamp,omitempty"`
-	Signature        string `json:"signature,omitempty"`
+func buildCreateTaskInput(task *models.InferenceTask, taskFee string) *CreateTaskInput {
+	var timeout *uint64
+	if task.TaskType == models.TaskTypeSDFTLora {
+		value := task.Timeout
+		timeout = &value
+	}
+	return &CreateTaskInput{
+		TaskIDCommitment: task.TaskIDCommitment,
+		MinVram:          task.MinVram,
+		Nonce:            task.Nonce,
+		RequiredGpu:      task.RequiredGPU,
+		RequiredGpuVram:  task.RequiredGPUVram,
+		TaskArgs:         task.TaskArgs,
+		TaskModelIds:     task.TaskModelIDs,
+		TaskSize:         task.TaskSize,
+		TaskType:         int(task.TaskType),
+		TaskVersion:      task.TaskVersion,
+		TaskFee:          taskFee,
+		Timeout:          timeout,
+	}
 }
 
 // Parse the "data" field of relay response, and store it in parsedData
@@ -170,30 +185,8 @@ func CreateTask(ctx context.Context, task *models.InferenceTask) error {
 	appConfig := config.GetConfig()
 
 	taskFee := utils.GweiToWei(big.NewInt(int64(task.TaskFee)))
-
-	var timeout uint64
-	if task.Timeout != 0 {
-		timeout = task.Timeout
-	} else if task.TaskType == models.TaskTypeSDFTLora {
-		timeout = appConfig.Task.SDFinetuneTimeout * 60
-	} else {
-		timeout = appConfig.Task.DefaultTimeout * 60
-	}
-
-	params := &CreateTaskInput{
-		TaskIDCommitment: task.TaskIDCommitment,
-		MinVram:          task.MinVram,
-		Nonce:            task.Nonce,
-		RequiredGpu:      task.RequiredGPU,
-		RequiredGpuVram:  task.RequiredGPUVram,
-		TaskArgs:         task.TaskArgs,
-		TaskModelIds:     task.TaskModelIDs,
-		TaskSize:         task.TaskSize,
-		TaskType:         int(task.TaskType),
-		TaskVersion:      task.TaskVersion,
-		TaskFee:          taskFee.String(),
-		Timeout:          timeout,
-	}
+	params := buildCreateTaskInput(task, taskFee.String())
+	timeout := params.Timeout
 
 	timestamp, signature, err := SignData(params, appConfig.Blockchain.Account.PrivateKey)
 	if err != nil {
@@ -228,7 +221,9 @@ func CreateTask(ctx context.Context, task *models.InferenceTask) error {
 		form.Add("task_fee", taskFee.String())
 		form.Add("timestamp", strconv.FormatInt(timestamp, 10))
 		form.Add("signature", signature)
-		form.Add("timeout", strconv.FormatUint(timeout, 10))
+		if timeout != nil {
+			form.Add("timeout", strconv.FormatUint(*timeout, 10))
+		}
 		for _, modelID := range task.TaskModelIDs {
 			form.Add("task_model_ids", modelID)
 		}
@@ -253,7 +248,9 @@ func CreateTask(ctx context.Context, task *models.InferenceTask) error {
 			multipartWriter.WriteField("task_fee", taskFee.String())
 			multipartWriter.WriteField("timestamp", strconv.FormatInt(timestamp, 10))
 			multipartWriter.WriteField("signature", signature)
-			multipartWriter.WriteField("timeout", strconv.FormatUint(timeout, 10))
+			if timeout != nil {
+				multipartWriter.WriteField("timeout", strconv.FormatUint(*timeout, 10))
+			}
 			for _, modelID := range task.TaskModelIDs {
 				multipartWriter.WriteField("task_model_ids", modelID)
 			}
@@ -364,50 +361,6 @@ func ValidateTask(ctx context.Context, tasks []*models.InferenceTask) error {
 	}
 
 	log.Debugf("Relay: validate task %s success", taskIDCommitments)
-	return nil
-}
-
-func CancelTask(ctx context.Context, task *models.InferenceTask, abortReason models.TaskAbortReason) error {
-
-	appConfig := config.GetConfig()
-
-	taskIDCommitment := task.TaskIDCommitment
-
-	params := &CancelTaskInput{
-		TaskIDCommitment: taskIDCommitment,
-		AbortReason:      int(abortReason),
-	}
-
-	timestamp, signature, err := SignData(params, appConfig.Blockchain.Account.PrivateKey)
-	if err != nil {
-		return err
-	}
-
-	params.Timestamp = timestamp
-	params.Signature = signature
-	bs, err := json.Marshal(params)
-	if err != nil {
-		return err
-	}
-	body := bytes.NewReader(bs)
-
-	reqUrl := appConfig.Relay.BaseURL + fmt.Sprintf("/v1/inference_tasks/%s/abort_reason", taskIDCommitment)
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(timeoutCtx, "POST", reqUrl, body)
-	req.Header.Add("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if err := processRelayResponse(resp); err != nil {
-		log.Errorf("Relay: cancel task %s error: %v", taskIDCommitment, err)
-		return err
-	}
-
-	log.Debugf("Relay: cancel task %s success", taskIDCommitment)
 	return nil
 }
 

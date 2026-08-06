@@ -42,7 +42,6 @@ task:
   default_llm_max_completion_tokens: 3000
   default_sd_finetune_task_fee_cnx: 15.0
   repeat_num: 1
-  default_timeout: 6
   sd_finetune_timeout: 120
   default_task_version: "3.1.0"
   heartbeat_tasks:
@@ -55,7 +54,6 @@ task:
         model: "crynux-network/sdxl-turbo"
         min_vram: 14
         fee_cnx: 2.0
-        timeout_minutes: 6
         max_pending_tasks: 10
         prompts:
           - text: "Self-portrait oil painting,a beautiful cyborg with golden hair,8k"
@@ -67,7 +65,6 @@ task:
         model: "Qwen/Qwen2.5-14B"
         min_vram: 32
         fee_cnx: 20.0
-        timeout_minutes: 10
         max_pending_tasks: 10
         prompts:
           - text: "I want to create an AI agent. Any suggestions?"
@@ -78,7 +75,6 @@ task:
         model: "Qwen/Qwen2.5-32B"
         min_vram: 60
         fee_cnx: 40.0
-        timeout_minutes: 15
         max_pending_tasks: 10
       - task_version: "3.1.0"
         type: "llm"
@@ -86,7 +82,6 @@ task:
         model: "Qwen/Qwen2.5-7B"
         min_vram: 24
         fee_cnx: 5.0
-        timeout_minutes: 6
         max_pending_tasks: 10
       # VLM example: use content blocks for text + image.
       # image.base64 accepts raw base64 or a data:*;base64,<payload> value.
@@ -96,7 +91,6 @@ task:
       #   model: "Qwen/Qwen2.5-VL-7B-Instruct"
       #   min_vram: 24
       #   fee_cnx: 10.0
-      #   timeout_minutes: 10
       #   max_pending_tasks: 10
       #   prompts:
       #     - text: "Describe a cyberpunk city at night."

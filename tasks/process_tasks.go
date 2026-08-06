@@ -84,12 +84,18 @@ func syncTask(ctx context.Context, task *models.InferenceTask) (*models.RelayTas
 
 	chainTask, err := getTask(ctx, task.TaskIDCommitment)
 	if err != nil {
-		if task.Status == models.InferenceTaskPending {
-			var relayErr relay.RelayError
-			if errors.As(err, &relayErr) && strings.Contains(relayErr.ErrorMessage, "Task not found") {
+		if isRelayTaskNotFound(err) {
+			if task.Status == models.InferenceTaskPending {
 				return nil, nil
 			}
-			return nil, err
+			// The task was created on the relay before, so the relay has removed it
+			// and will never report a terminal status for it. Abort it locally.
+			if err := abortTaskLocally(ctx, task, "task_aborted", map[string]any{
+				"reason": "relay_task_not_found",
+			}); err != nil {
+				return nil, err
+			}
+			return nil, nil
 		}
 		return nil, err
 	}
@@ -176,6 +182,8 @@ func syncTask(ctx context.Context, task *models.InferenceTask) (*models.RelayTas
 		if err := task.Update(ctx, config.GetDB(), newTask); err != nil {
 			return nil, err
 		}
+		task.AbortReason = abortReason
+		task.TaskError = taskError
 		if statusChanged {
 			task.Status = newTask.Status
 			tasktrace.RecordEvent(task, taskStatusEventName(newTask.Status), map[string]any{
@@ -186,6 +194,112 @@ func syncTask(ctx context.Context, task *models.InferenceTask) (*models.RelayTas
 		}
 	}
 	return chainTask, nil
+}
+
+func isTaskBeforeValidation(status models.TaskStatus) bool {
+	return status == models.InferenceTaskCreated ||
+		status == models.InferenceTaskStarted ||
+		status == models.InferenceTaskParamsUploaded
+}
+
+func isTaskReadyForValidation(status models.TaskStatus) bool {
+	return status == models.InferenceTaskScoreReady ||
+		status == models.InferenceTaskErrorReported
+}
+
+func isTaskReadyOrLater(status models.TaskStatus) bool {
+	return isTaskReadyForValidation(status) ||
+		status == models.InferenceTaskValidated ||
+		models.IsRelayTerminalTaskStatus(status)
+}
+
+func isRelayTaskNotFound(err error) bool {
+	var relayErr relay.RelayError
+	return errors.As(err, &relayErr) && strings.Contains(relayErr.ErrorMessage, "Task not found")
+}
+
+// A 400 response means the relay validated and rejected the request itself,
+// so resubmitting the same request can never succeed.
+func isRelayRequestRejected(err error) bool {
+	var relayErr relay.RelayError
+	return errors.As(err, &relayErr) && relayErr.StatusCode == 400
+}
+
+func abortTaskLocally(ctx context.Context, task *models.InferenceTask, event string, payload map[string]any) error {
+	newTask := &models.InferenceTask{Status: models.InferenceTaskEndAborted}
+	if err := task.Update(ctx, config.GetDB(), newTask); err != nil {
+		return err
+	}
+	task.Status = models.InferenceTaskEndAborted
+	tasktrace.RecordEvent(task, event, payload)
+	return nil
+}
+
+// The relay sequence, sampling seed, and VRF data of a task must be persisted before
+// validation. Validation sub-tasks carry VRF data at creation and only need the sequence.
+func needsRelayTaskData(task *models.InferenceTask) bool {
+	return task.Sequence == 0 || len(task.VRFNumber) == 0
+}
+
+func hasCreatorValidationTimeout(tasks []models.InferenceTask) bool {
+	for _, task := range tasks {
+		if task.Status == models.InferenceTaskEndAborted &&
+			task.AbortReason == models.TaskAbortCreatorValidationTimeout {
+			return true
+		}
+	}
+	return false
+}
+
+func allTasksEligibleForGroupValidation(tasks []models.InferenceTask) bool {
+	for _, task := range tasks {
+		if !isTaskReadyForValidation(task.Status) &&
+			task.Status != models.InferenceTaskEndAborted {
+			return false
+		}
+	}
+	return true
+}
+
+func buildValidationTasks(
+	task *models.InferenceTask,
+	requiredGPU string,
+	requiredGPUVram uint64,
+	samplingSeed string,
+	vrfProof string,
+	vrfNumber string,
+) []*models.InferenceTask {
+	tasks := make([]*models.InferenceTask, 0, 2)
+	for i := 0; i < 2; i++ {
+		tasks = append(tasks, &models.InferenceTask{
+			ClientID:        task.ClientID,
+			ClientTaskID:    task.ClientTaskID,
+			TaskArgs:        task.TaskArgs,
+			TaskType:        task.TaskType,
+			TaskModelIDs:    task.TaskModelIDs,
+			TaskVersion:     task.TaskVersion,
+			TaskFee:         task.TaskFee,
+			MinVram:         task.MinVram,
+			RequiredGPU:     requiredGPU,
+			RequiredGPUVram: requiredGPUVram,
+			TaskSize:        task.TaskSize,
+			Timeout:         task.Timeout,
+			TaskID:          task.TaskID,
+			SamplingSeed:    samplingSeed,
+			VRFProof:        vrfProof,
+			VRFNumber:       vrfNumber,
+		})
+	}
+	return tasks
+}
+
+func syncTaskGroup(ctx context.Context, tasks []models.InferenceTask) error {
+	for i := range tasks {
+		if _, err := syncTask(ctx, &tasks[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func doDownloadTaskResult(ctx context.Context, taskIDCommitment string, index uint64, filename string) error {
@@ -305,11 +419,14 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 	tasktrace.RecordEvent(task, "worker_processing_started", nil)
 
 	// sync task from relay
-	_, err := syncTask(ctx, task)
+	chainTask, err := syncTask(ctx, task)
 	if err != nil {
 		return err
 	}
 	log.Infof("ProcessTasks: task %d status %d", task.ID, task.Status)
+	if models.IsRelayTerminalTaskStatus(task.Status) && task.Status != models.InferenceTaskEndSuccess {
+		return processClientTask(ctx, task)
+	}
 
 	// 1. Generate taskIDCommitment if not exist
 	// 2. Create task
@@ -330,6 +447,16 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 
 		tasktrace.RecordEvent(task, "relay_task_create_submitted", nil)
 		if err := createTask(ctx, task); err != nil {
+			// No relay-side deadline exists before the task is created, so a
+			// permanently rejected create request must terminate the task locally.
+			if isRelayRequestRejected(err) {
+				if err := abortTaskLocally(ctx, task, "relay_task_create_rejected", map[string]any{
+					"error": err.Error(),
+				}); err != nil {
+					return err
+				}
+				return processClientTask(ctx, task)
+			}
 			return err
 		}
 
@@ -346,12 +473,19 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 
 	// 1. Sync sequence and sampling seed, update local database
 	// 2. If needs two more sub-tasks, generate them and store into database
-	// 3. Wait for task result hash to be submitted to relay(Status: InferenceTaskTaskScoreReady)
-	if task.Status == models.InferenceTaskCreated || task.Status == models.InferenceTaskStarted || task.Status == models.InferenceTaskParamsUploaded {
+	// Validation requires the persisted VRF data, so this step must also run when the
+	// task has already reached score-ready or error-reported before the data was persisted.
+	if !models.IsRelayTerminalTaskStatus(task.Status) && needsRelayTaskData(task) {
 		// get task sequence and sampling number
-		chainTask, err := getTask(ctx, task.TaskIDCommitment)
+		chainTask, err = syncTask(ctx, task)
 		if err != nil {
 			return err
+		}
+		if models.IsRelayTerminalTaskStatus(task.Status) {
+			if task.Status == models.InferenceTaskEndSuccess {
+				goto download
+			}
+			return processClientTask(ctx, task)
 		}
 		newTask := &models.InferenceTask{}
 		newTask.Sequence = chainTask.Sequence
@@ -388,10 +522,18 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 				requiredGPUVram := task.RequiredGPUVram
 				if task.TaskType == models.TaskTypeLLM {
 					// for LLM type task, need to wait the task is started to determine required gpu for sub tasks
+					// once the task reaches score-ready or error-reported, the selected node is
+					// already set, so the loop exits through the selected-node check
 					for len(chainTask.SelectedNode) == 0 {
-						chainTask, err = getTask(ctx, task.TaskIDCommitment)
+						chainTask, err = syncTask(ctx, task)
 						if err != nil {
 							return err
+						}
+						if models.IsRelayTerminalTaskStatus(task.Status) {
+							if task.Status == models.InferenceTaskEndSuccess {
+								goto download
+							}
+							return processClientTask(ctx, task)
 						}
 						if len(chainTask.SelectedNode) > 0 {
 							break
@@ -405,26 +547,14 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 					requiredGPU = node.GPUName
 					requiredGPUVram = node.GPUVram
 				}
-				for i := 0; i < 2; i++ {
-					subTask := &models.InferenceTask{
-						ClientID:        task.ClientID,
-						ClientTaskID:    task.ClientTaskID,
-						TaskArgs:        task.TaskArgs,
-						TaskType:        task.TaskType,
-						TaskModelIDs:    task.TaskModelIDs,
-						TaskVersion:     task.TaskVersion,
-						TaskFee:         task.TaskFee,
-						MinVram:         task.MinVram,
-						RequiredGPU:     requiredGPU,
-						RequiredGPUVram: requiredGPUVram,
-						TaskSize:        task.TaskSize,
-						TaskID:          task.TaskID,
-						SamplingSeed:    newTask.SamplingSeed,
-						VRFProof:        newTask.VRFProof,
-						VRFNumber:       newTask.VRFNumber,
-					}
-					subTasks = append(subTasks, subTask)
-				}
+				subTasks = buildValidationTasks(
+					task,
+					requiredGPU,
+					requiredGPUVram,
+					newTask.SamplingSeed,
+					newTask.VRFProof,
+					newTask.VRFNumber,
+				)
 			}
 		}
 
@@ -448,25 +578,33 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 				"validation_task_count": len(subTasks),
 			})
 		}
+	}
 
-		// wait task status to be score-ready or error reported
+	// wait task status to be score-ready or error reported
+	if isTaskBeforeValidation(task.Status) {
 		for {
 			_, err := syncTask(ctx, task)
 			if err != nil {
 				return err
 			}
-			if task.Status == models.InferenceTaskScoreReady || task.Status == models.InferenceTaskErrorReported || task.Status == models.InferenceTaskEndAborted {
+			if isTaskReadyForValidation(task.Status) || models.IsRelayTerminalTaskStatus(task.Status) {
 				break
 			}
 			time.Sleep(time.Second)
 		}
 		log.Infof("ProcessTasks: task %d status %d", task.ID, task.Status)
+		if models.IsRelayTerminalTaskStatus(task.Status) {
+			if task.Status == models.InferenceTaskEndSuccess {
+				goto download
+			}
+			return processClientTask(ctx, task)
+		}
 	}
 
 	// 1. If single task, validate
 	// 2. If task group, wait until all sub-tasks are ready, then validate
 	// 3. Wait for validate result(Status: InferenceTaskEndInvalidated, InferenceTaskEndSuccess, InferenceTaskEndGroupRefund, InferenceTaskEndAborted)
-	if task.Status == models.InferenceTaskScoreReady || task.Status == models.InferenceTaskErrorReported {
+	if isTaskReadyForValidation(task.Status) {
 		needValidate := false
 		taskGroup, err := models.GetTaskGroup(ctx, config.GetDB(), task.TaskID)
 		if err != nil {
@@ -478,13 +616,16 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 		} else if len(taskGroup) == 3 {
 			// wait all tasks in group be in status score ready, error reported or aborted
 			for {
+				if err := syncTaskGroup(ctx, taskGroup); err != nil {
+					return err
+				}
 				readyCount := 0
 				for _, subTask := range taskGroup {
-					if subTask.Status >= models.InferenceTaskScoreReady {
+					if isTaskReadyOrLater(subTask.Status) {
 						readyCount += 1
 					}
 				}
-				if readyCount == 3 {
+				if readyCount == 3 || hasCreatorValidationTimeout(taskGroup) {
 					break
 				}
 				time.Sleep(time.Second)
@@ -494,19 +635,33 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 					return err
 				}
 			}
-			validateTaskIDCommitment := ""
-			for _, subTask := range taskGroup {
-				if subTask.Status == models.InferenceTaskScoreReady || subTask.Status == models.InferenceTaskErrorReported {
-					validateTaskIDCommitment = subTask.TaskIDCommitment
-					break
+			if allTasksEligibleForGroupValidation(taskGroup) && !hasCreatorValidationTimeout(taskGroup) {
+				validateTaskIDCommitment := ""
+				for _, subTask := range taskGroup {
+					if isTaskReadyForValidation(subTask.Status) {
+						validateTaskIDCommitment = subTask.TaskIDCommitment
+						break
+					}
 				}
-			}
-			if validateTaskIDCommitment == task.TaskIDCommitment {
-				needValidate = true
+				if validateTaskIDCommitment == task.TaskIDCommitment {
+					needValidate = true
+				}
 			}
 		}
 
 		// validate task
+		if needValidate {
+			taskGroup, err = models.GetTaskGroup(ctx, config.GetDB(), task.TaskID)
+			if err != nil {
+				return err
+			}
+			if err := syncTaskGroup(ctx, taskGroup); err != nil {
+				return err
+			}
+			if !allTasksEligibleForGroupValidation(taskGroup) || hasCreatorValidationTimeout(taskGroup) {
+				needValidate = false
+			}
+		}
 		if needValidate {
 			tasktrace.RecordEvent(task, "validation_submitted", map[string]any{
 				"task_group_size": len(taskGroup),
@@ -530,12 +685,18 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 			if err != nil {
 				return err
 			}
-			if task.Status >= models.InferenceTaskValidated {
+			if task.Status == models.InferenceTaskValidated || models.IsRelayTerminalTaskStatus(task.Status) {
 				break
 			}
 			time.Sleep(time.Second)
 		}
 		log.Infof("ProcessTasks: task %d status %d", task.ID, task.Status)
+		if models.IsRelayTerminalTaskStatus(task.Status) {
+			if task.Status == models.InferenceTaskEndSuccess {
+				goto download
+			}
+			return processClientTask(ctx, task)
+		}
 	}
 
 	if task.Status == models.InferenceTaskValidated {
@@ -544,15 +705,19 @@ func processOneTask(ctx context.Context, task *models.InferenceTask) error {
 			if err != nil {
 				return err
 			}
-			if task.Status == models.InferenceTaskEndSuccess || task.Status == models.InferenceTaskEndAborted {
+			if models.IsRelayTerminalTaskStatus(task.Status) {
 				break
 			}
 			time.Sleep(time.Second)
 		}
 		log.Infof("ProcessTasks: task %d status %d", task.ID, task.Status)
+		if task.Status != models.InferenceTaskEndSuccess {
+			return processClientTask(ctx, task)
+		}
 	}
 
 	// download task result
+download:
 	if task.Status == models.InferenceTaskEndSuccess {
 		tasktrace.RecordEvent(task, "result_download_started", nil)
 		err := downloadTaskResult(ctx, task)
@@ -602,8 +767,6 @@ func taskStatusEventName(status models.TaskStatus) string {
 		return "task_execution_succeeded"
 	case models.InferenceTaskResultDownloaded:
 		return "result_downloaded"
-	case models.InferenceTaskNeedCancel:
-		return "task_needs_cancel"
 	default:
 		return fmt.Sprintf("status_%d", status)
 	}
@@ -689,7 +852,6 @@ func getUnprocessedTasks(ctx context.Context) ([]models.InferenceTask, error) {
 				Where("status != ?", models.InferenceTaskEndInvalidated).
 				Where("status != ?", models.InferenceTaskEndGroupRefund).
 				Where("status != ?", models.InferenceTaskResultDownloaded).
-				Where("status != ?", models.InferenceTaskNeedCancel).
 				Order("id ASC").
 				Limit(limit).
 				Offset(offset).
@@ -734,76 +896,20 @@ func ProcessTasks(ctx context.Context) {
 				go func(ctx context.Context, task models.InferenceTask) {
 					defer d.Delete(task.ID)
 					log.Infof("ProcessTasks: start processing task %d", task.ID)
-					var ctx1 context.Context
-					var cancel context.CancelFunc
-					// if timeout is 0, use default timeout
-					timeout := task.Timeout
-					if timeout == 0 {
-						appConfig := config.GetConfig()
-						timeout = appConfig.Task.DefaultTimeout
-						if task.TaskType == models.TaskTypeSDFTLora {
-							timeout = appConfig.Task.SDFinetuneTimeout
-						}
-						timeout *= 60
-					}
-					duration := time.Duration(timeout)*time.Second + 3*time.Minute // additional 3 minutes for waiting task to start
-					deadline := task.CreatedAt.Add(duration)
-					ctx1, cancel = context.WithDeadline(ctx, deadline)
-					defer cancel()
-
 					for {
-						c := make(chan error, 1)
-						go func() {
-							c <- processOneTask(ctx1, &task)
-						}()
-
-						select {
-						// process task successfully or failed
-						case err := <-c:
-							if err != nil {
-								log.Errorf("ProcessTasks: process task %d error %v, retry", task.ID, err)
-								duration := time.Duration((mrand.Float64()*3 + 2) * 1000)
-								time.Sleep(duration * time.Millisecond)
-							} else {
-								log.Infof("ProcessTasks: process task %d successfully", task.ID)
+						if err := processOneTask(ctx, &task); err != nil {
+							if ctx.Err() != nil {
 								return
 							}
-						// process task timeout
-						case <-ctx1.Done():
-							err := ctx1.Err()
-							log.Errorf("ProcessTasks: process task %d timeout %v, finish", task.ID, err)
-							if err == context.DeadlineExceeded {
-								newTask := &models.InferenceTask{}
-								if task.Status != models.InferenceTaskEndAborted &&
-									task.Status != models.InferenceTaskEndInvalidated &&
-									task.Status != models.InferenceTaskEndGroupRefund &&
-									task.Status != models.InferenceTaskEndSuccess &&
-									task.Status != models.InferenceTaskResultDownloaded {
-									newTask.Status = models.InferenceTaskNeedCancel
-								} else if task.Status == models.InferenceTaskEndSuccess {
-									newTask.Status = models.InferenceTaskEndAborted
-								}
-								if newTask.Status != models.InferenceTaskPending {
-									for {
-										if err := task.Update(ctx, config.GetDB(), newTask); err != nil {
-											log.Errorf("ProcessTasks: save task %d error %v", task.ID, err)
-											time.Sleep(2 * time.Second)
-										} else {
-											task.Status = newTask.Status
-											tasktrace.RecordEvent(&task, "task_timeout", map[string]any{
-												"new_status": taskStatusEventName(newTask.Status),
-											})
-											break
-										}
-										if err := processClientTask(ctx, &task); err != nil {
-											log.Errorf("ProcessTasks: process client task %d error %v", task.ID, err)
-											time.Sleep(2 * time.Second)
-										} else {
-											break
-										}
-									}
-								}
+							log.Errorf("ProcessTasks: process task %d error %v, retry", task.ID, err)
+							duration := time.Duration((mrand.Float64()*3 + 2) * 1000)
+							select {
+							case <-ctx.Done():
+								return
+							case <-time.After(duration * time.Millisecond):
 							}
+						} else {
+							log.Infof("ProcessTasks: process task %d successfully", task.ID)
 							return
 						}
 					}

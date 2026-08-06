@@ -20,9 +20,8 @@ import (
 
 type CompletionsRequest struct {
 	structs.CompletionsRequest
-	Authorization string  `header:"Authorization" validate:"required" description:"API key"`
-	Timeout       *uint64 `json:"timeout,omitempty" description:"Task timeout" validate:"omitempty"`
-	PathVramLimit string  `path:"vram_limit" description:"Override minimum GPU VRAM in GB from URL path"`
+	Authorization string `header:"Authorization" validate:"required" description:"API key"`
+	PathVramLimit string `path:"vram_limit" description:"Override minimum GPU VRAM in GB from URL path"`
 }
 
 // build TaskInput from CompletionsRequest, create task, wait for task to finish, get task result, then return CompletionsResponse
@@ -35,7 +34,6 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	in.SetDefaultValues() // set default values for some fields
 	logRequestPayload := map[string]any{
 		"request":         in.CompletionsRequest,
-		"timeout":         in.Timeout,
 		"path_vram_limit": in.PathVramLimit,
 	}
 	var logResponsePayload any
@@ -129,7 +127,6 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 		RequiredGPUVram: 0,
 		RepeatNum:       nil,
 		TaskFee:         nil,
-		Timeout:         in.Timeout,
 	}
 
 	/* 2. Create task, wait until task finish and get task result. Implemented by function ProcessGPTTask */

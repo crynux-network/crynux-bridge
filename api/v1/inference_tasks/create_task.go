@@ -96,6 +96,26 @@ func getTaskFee(baseTaskFee, cap uint64) uint64 {
 	return baseTaskFee * cap
 }
 
+func resolveTaskTimeout(taskType models.ChainTaskType, requested *uint64, appConfig *config.AppConfig) (uint64, error) {
+	if taskType == models.TaskTypeSDFTLora {
+		if requested != nil {
+			if *requested == 0 {
+				return 0, response.NewValidationErrorResponse("timeout", "timeout must be greater than 0 for SD finetune tasks")
+			}
+			return *requested, nil
+		}
+		timeout := appConfig.Task.SDFinetuneTimeout * 60
+		if timeout == 0 {
+			return 0, response.NewValidationErrorResponse("timeout", "timeout must be greater than 0 for SD finetune tasks")
+		}
+		return timeout, nil
+	}
+	if requested != nil {
+		return 0, response.NewValidationErrorResponse("timeout", "timeout is only supported for SD finetune tasks")
+	}
+	return 0, nil
+}
+
 func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientTask, appConfig *config.AppConfig) ([]*models.InferenceTask, error) {
 	taskType := *in.TaskType
 
@@ -148,13 +168,9 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 		return nil, response.NewValidationErrorResponse("task_args", fmt.Sprintf("invalid task_args: %v", err))
 	}
 
-	var timeout uint64
-	if in.Timeout != nil {
-		timeout = *in.Timeout
-	} else if taskType == models.TaskTypeSDFTLora {
-		timeout = appConfig.Task.SDFinetuneTimeout * 60
-	} else {
-		timeout = appConfig.Task.DefaultTimeout * 60
+	timeout, err := resolveTaskTimeout(taskType, in.Timeout, appConfig)
+	if err != nil {
+		return nil, err
 	}
 
 	tasks := make([]*models.InferenceTask, 0)
