@@ -12,6 +12,16 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 			return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: max_pending_tasks must be > 0 when ratio > 0", i)
 		}
 		taskType := strings.ToLower(task.Type)
+		switch taskType {
+		case "llm":
+			if task.MaxNewTokens == 0 {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: max_new_tokens must be > 0 for llm tasks", i)
+			}
+		case "sd":
+			if task.MaxNewTokens != 0 {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: max_new_tokens is not supported for sd tasks", i)
+			}
+		}
 		for j := range task.Prompts {
 			if err := validateAndNormalizeHeartbeatPrompt(taskType, &appConfig.Task.HeartbeatTasks.Tasks[i].Prompts[j]); err != nil {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d].prompts[%d]: %w", i, j, err)

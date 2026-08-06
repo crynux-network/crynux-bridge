@@ -35,7 +35,7 @@ func TestSelectHeartbeatPromptReturnsConfigured(t *testing.T) {
 }
 
 func TestBuildLLMHeartbeatTaskArgsDefault(t *testing.T) {
-	taskArgs, err := buildLLMHeartbeatTaskArgs("Qwen/Qwen2.5-7B", config.HeartbeatPromptConfig{}, true)
+	taskArgs, err := buildLLMHeartbeatTaskArgs("Qwen/Qwen2.5-7B", config.HeartbeatPromptConfig{}, true, 64)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -49,6 +49,10 @@ func TestBuildLLMHeartbeatTaskArgsDefault(t *testing.T) {
 	if msg["content"] != "I want to create an AI agent. Any suggestions?" {
 		t.Fatalf("unexpected default content: %#v", msg["content"])
 	}
+	generationConfig := parsed["generation_config"].(map[string]interface{})
+	if generationConfig["max_new_tokens"] != float64(64) {
+		t.Fatalf("unexpected max_new_tokens: %#v", generationConfig["max_new_tokens"])
+	}
 }
 
 func TestBuildLLMHeartbeatTaskArgsText(t *testing.T) {
@@ -56,6 +60,7 @@ func TestBuildLLMHeartbeatTaskArgsText(t *testing.T) {
 		"Qwen/Qwen2.5-7B",
 		config.HeartbeatPromptConfig{Text: "hello heartbeat"},
 		false,
+		128,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -72,6 +77,9 @@ func TestBuildLLMHeartbeatTaskArgsText(t *testing.T) {
 	if !ok || content != "hello heartbeat" {
 		t.Fatalf("unexpected content %#v", parsed.Messages[0].Content)
 	}
+	if parsed.GenerationConfig == nil || parsed.GenerationConfig.MaxNewTokens != 128 {
+		t.Fatalf("unexpected max_new_tokens %#v", parsed.GenerationConfig)
+	}
 }
 
 func TestBuildLLMHeartbeatTaskArgsContentBlocks(t *testing.T) {
@@ -84,6 +92,7 @@ func TestBuildLLMHeartbeatTaskArgsContentBlocks(t *testing.T) {
 			},
 		},
 		false,
+		250,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -136,8 +145,9 @@ func TestBuildSDHeartbeatTaskArgsConfiguredPrompt(t *testing.T) {
 
 func TestBuildHeartbeatTaskArgsWithPrompts(t *testing.T) {
 	taskArgs, taskType, err := buildHeartbeatTaskArgs(config.HeartbeatTaskConfig{
-		Type:  "llm",
-		Model: "Qwen/Qwen2.5-7B",
+		Type:         "llm",
+		Model:        "Qwen/Qwen2.5-7B",
+		MaxNewTokens: 64,
 		Prompts: []config.HeartbeatPromptConfig{
 			{Text: "only-one"},
 		},
@@ -157,6 +167,10 @@ func TestBuildHeartbeatTaskArgsWithPrompts(t *testing.T) {
 	msg := messages[0].(map[string]interface{})
 	if msg["content"] != "only-one" {
 		t.Fatalf("unexpected content %#v", msg["content"])
+	}
+	generationConfig := parsed["generation_config"].(map[string]interface{})
+	if generationConfig["max_new_tokens"] != float64(64) {
+		t.Fatalf("unexpected max_new_tokens: %#v", generationConfig["max_new_tokens"])
 	}
 }
 

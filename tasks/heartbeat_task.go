@@ -118,7 +118,7 @@ func buildHeartbeatTaskArgs(heartbeatTaskConfig config.HeartbeatTaskConfig) (str
 		taskArgs, err := buildSDHeartbeatTaskArgs(heartbeatTaskConfig.Model, prompt, useDefault)
 		return taskArgs, models.TaskTypeSD, err
 	case "llm":
-		taskArgs, err := buildLLMHeartbeatTaskArgs(heartbeatTaskConfig.Model, prompt, useDefault)
+		taskArgs, err := buildLLMHeartbeatTaskArgs(heartbeatTaskConfig.Model, prompt, useDefault, heartbeatTaskConfig.MaxNewTokens)
 		return taskArgs, models.TaskTypeLLM, err
 	default:
 		return "", 0, fmt.Errorf("unsupported heartbeat task type %q", heartbeatTaskConfig.Type)
@@ -193,7 +193,7 @@ func buildSDHeartbeatTaskArgs(model string, prompt config.HeartbeatPromptConfig,
 	return string(taskArgsBytes), nil
 }
 
-func buildLLMHeartbeatTaskArgs(model string, prompt config.HeartbeatPromptConfig, useDefault bool) (string, error) {
+func buildLLMHeartbeatTaskArgs(model string, prompt config.HeartbeatPromptConfig, useDefault bool, maxNewTokens uint64) (string, error) {
 	var content any = "I want to create an AI agent. Any suggestions?"
 	if !useDefault {
 		var err error
@@ -213,7 +213,7 @@ func buildLLMHeartbeatTaskArgs(model string, prompt config.HeartbeatPromptConfig
 		},
 		"tools": nil,
 		"generation_config": map[string]interface{}{
-			"max_new_tokens":     250,
+			"max_new_tokens":     maxNewTokens,
 			"do_sample":          false,
 			"temperature":        0,
 			"repetition_penalty": 1.1,

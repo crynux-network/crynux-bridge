@@ -35,9 +35,14 @@ Each heartbeat task entry under `task.heartbeat_tasks.tasks` MUST define:
 - `min_vram`
 - `fee_cnx`
 - `max_pending_tasks` when `ratio > 0`
+- `max_new_tokens` when `type` is `llm`
 - optional `prompts`
 
 When `ratio > 0`, `max_pending_tasks` MUST be greater than `0`. Config load MUST reject entries that violate this rule.
+
+When `type` is `llm`, `max_new_tokens` MUST be greater than `0`. Config load MUST reject LLM entries that violate this rule.
+
+When `type` is `sd`, `max_new_tokens` MUST NOT be set. Config load MUST reject SD entries that set `max_new_tokens`.
 
 Bridge MUST select one eligible task entry by weighted sampling on `ratio`. Entries with `ratio <= 0` MUST be skipped.
 
@@ -126,7 +131,7 @@ Selected LLM prompt fields MUST map to Relay GPT inference task args:
 
 LLM heartbeat generation config MUST use:
 
-- `max_new_tokens: 250`
+- `max_new_tokens` from the selected task entry `max_new_tokens`
 - `do_sample: false`
 - `temperature: 0`
 - `repetition_penalty: 1.1`

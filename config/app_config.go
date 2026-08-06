@@ -116,5 +116,6 @@ type HeartbeatTaskConfig struct {
 	MinVram         uint64                  `mapstructure:"min_vram"`
 	FeeCNX          float64                 `mapstructure:"fee_cnx"`
 	MaxPendingTasks uint64                  `mapstructure:"max_pending_tasks"`
+	MaxNewTokens    uint64                  `mapstructure:"max_new_tokens"`
 	Prompts         []HeartbeatPromptConfig `mapstructure:"prompts"`
 }
