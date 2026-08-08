@@ -3,6 +3,8 @@ package config
 import (
 	"crypto/ecdsa"
 	"errors"
+	"path/filepath"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/spf13/viper"
 )
@@ -30,6 +32,10 @@ func InitConfig(configPath string) error {
 	appConfig = &AppConfig{}
 
 	if err := v.Unmarshal(appConfig); err != nil {
+		return err
+	}
+	configDir := filepath.Dir(v.ConfigFileUsed())
+	if err := loadHeartbeatTasksFile(appConfig, configDir); err != nil {
 		return err
 	}
 	if err := validateTaskFeeConfig(appConfig); err != nil {

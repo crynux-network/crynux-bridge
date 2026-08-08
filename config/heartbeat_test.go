@@ -1,6 +1,11 @@
 package config
 
-import "testing"
+import (
+	"encoding/base64"
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestValidateHeartbeatPromptTextOK(t *testing.T) {
 	prompt := HeartbeatPromptConfig{Text: "hello"}
@@ -149,5 +154,149 @@ func TestValidateHeartbeatTasksConfigRejectsMaxNewTokensForSD(t *testing.T) {
 	}
 	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
 		t.Fatalf("expected max_new_tokens rejection for sd tasks")
+	}
+}
+
+func writeHeartbeatTasksFixture(t *testing.T, dir string, jsonBody string) string {
+	t.Helper()
+	path := filepath.Join(dir, "heartbeat_tasks.json")
+	if err := os.WriteFile(path, []byte(jsonBody), 0o644); err != nil {
+		t.Fatalf("write tasks file: %v", err)
+	}
+	return path
+}
+
+func TestLoadHeartbeatTasksFileRelativePathAndImagePath(t *testing.T) {
+	dir := t.TempDir()
+	pngPath := filepath.Join(dir, "vl_sample.png")
+	pngBytes := []byte("png-bytes")
+	if err := os.WriteFile(pngPath, pngBytes, 0o644); err != nil {
+		t.Fatalf("write png: %v", err)
+	}
+
+	writeHeartbeatTasksFixture(t, dir, `{
+  "tasks": [
+    {
+      "task_version": "3.5.0",
+      "type": "llm",
+      "ratio": 1.0,
+      "model": "qwen/qwen3.6-27b",
+      "min_vram": 120,
+      "fee_cnx": 0.0006,
+      "max_pending_tasks": 1,
+      "max_new_tokens": 256,
+      "prompts": [
+        {
+          "content": [
+            {"type": "text", "text": "What is in this image?"},
+            {"type": "image", "image_path": "vl_sample.png"}
+          ]
+        }
+      ]
+    }
+  ]
+}`)
+
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.TasksFile = "heartbeat_tasks.json"
+	if err := loadHeartbeatTasksFile(appConfig, dir); err != nil {
+		t.Fatalf("unexpected load error: %v", err)
+	}
+	if len(appConfig.Task.HeartbeatTasks.Tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(appConfig.Task.HeartbeatTasks.Tasks))
+	}
+	block := appConfig.Task.HeartbeatTasks.Tasks[0].Prompts[0].Content[1]
+	if block.ImagePath != "" {
+		t.Fatalf("expected image_path cleared after load, got %q", block.ImagePath)
+	}
+	want := base64.StdEncoding.EncodeToString(pngBytes)
+	if block.Base64 != want {
+		t.Fatalf("expected base64 %q, got %q", want, block.Base64)
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
+		t.Fatalf("unexpected validate error: %v", err)
+	}
+}
+
+func TestLoadHeartbeatTasksFileDefaultName(t *testing.T) {
+	dir := t.TempDir()
+	writeHeartbeatTasksFixture(t, dir, `{
+  "tasks": [
+    {
+      "task_version": "3.5.0",
+      "type": "sd",
+      "ratio": 1.0,
+      "model": "crynux-network/sdxl-turbo",
+      "min_vram": 14,
+      "fee_cnx": 0.0001,
+      "max_pending_tasks": 1,
+      "prompts": [{"text": "a cat"}]
+    }
+  ]
+}`)
+
+	appConfig := &AppConfig{}
+	if err := loadHeartbeatTasksFile(appConfig, dir); err != nil {
+		t.Fatalf("unexpected load error: %v", err)
+	}
+	if got := appConfig.Task.HeartbeatTasks.Tasks[0].Prompts[0].Text; got != "a cat" {
+		t.Fatalf("unexpected prompt text %q", got)
+	}
+}
+
+func TestLoadHeartbeatTasksFileRejectsImagePathAndBase64(t *testing.T) {
+	dir := t.TempDir()
+	writeHeartbeatTasksFixture(t, dir, `{
+  "tasks": [
+    {
+      "task_version": "3.5.0",
+      "type": "llm",
+      "ratio": 1.0,
+      "model": "qwen/qwen3.6-27b",
+      "min_vram": 120,
+      "fee_cnx": 0.0006,
+      "max_pending_tasks": 1,
+      "max_new_tokens": 256,
+      "prompts": [
+        {
+          "content": [
+            {"type": "image", "image_path": "vl_sample.png", "base64": "aGVsbG8="}
+          ]
+        }
+      ]
+    }
+  ]
+}`)
+
+	appConfig := &AppConfig{}
+	if err := loadHeartbeatTasksFile(appConfig, dir); err == nil {
+		t.Fatalf("expected mutual exclusion error")
+	}
+}
+
+func TestLoadHeartbeatTasksFileAbsoluteTasksFile(t *testing.T) {
+	dir := t.TempDir()
+	absTasks := writeHeartbeatTasksFixture(t, dir, `{
+  "tasks": [
+    {
+      "task_version": "3.5.0",
+      "type": "llm",
+      "ratio": 0,
+      "model": "qwen/qwen3-8b",
+      "min_vram": 24,
+      "fee_cnx": 0.0003,
+      "max_new_tokens": 64,
+      "prompts": [{"text": "hello"}]
+    }
+  ]
+}`)
+
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.TasksFile = absTasks
+	if err := loadHeartbeatTasksFile(appConfig, filepath.Join(dir, "unused")); err != nil {
+		t.Fatalf("unexpected load error: %v", err)
+	}
+	if got := appConfig.Task.HeartbeatTasks.Tasks[0].Prompts[0].Text; got != "hello" {
+		t.Fatalf("unexpected prompt text %q", got)
 	}
 }

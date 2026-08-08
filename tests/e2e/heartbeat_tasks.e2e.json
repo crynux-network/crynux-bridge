@@ -1,0 +1,62 @@
+{
+  "tasks": [
+    {
+      "task_version": "3.1.0",
+      "type": "sd",
+      "ratio": 1.0,
+      "model": "crynux-network/sdxl-turbo",
+      "min_vram": 14,
+      "fee_cnx": 2.0,
+      "max_pending_tasks": 10,
+      "prompts": [
+        {
+          "text": "Self-portrait oil painting,a beautiful cyborg with golden hair,8k"
+        }
+      ]
+    },
+    {
+      "task_version": "3.1.0",
+      "type": "sd",
+      "ratio": 1.0,
+      "model": "crynux-network/stable-diffusion-v1-5",
+      "min_vram": 4,
+      "fee_cnx": 1.0,
+      "max_pending_tasks": 10
+    },
+    {
+      "task_version": "3.1.0",
+      "type": "llm",
+      "ratio": 0.5,
+      "model": "Qwen/Qwen2.5-14B",
+      "min_vram": 32,
+      "fee_cnx": 20.0,
+      "max_pending_tasks": 10,
+      "max_new_tokens": 128,
+      "prompts": [
+        {
+          "text": "I want to create an AI agent. Any suggestions?"
+        }
+      ]
+    },
+    {
+      "task_version": "3.1.0",
+      "type": "llm",
+      "ratio": 0.5,
+      "model": "Qwen/Qwen2.5-32B",
+      "min_vram": 60,
+      "fee_cnx": 40.0,
+      "max_pending_tasks": 10,
+      "max_new_tokens": 250
+    },
+    {
+      "task_version": "3.1.0",
+      "type": "llm",
+      "ratio": 1.0,
+      "model": "Qwen/Qwen2.5-7B",
+      "min_vram": 24,
+      "fee_cnx": 5.0,
+      "max_pending_tasks": 10,
+      "max_new_tokens": 64
+    }
+  ]
+}

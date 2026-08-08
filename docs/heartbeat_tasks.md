@@ -24,6 +24,22 @@ Each created heartbeat task MUST use:
 
 Heartbeat tasks MUST NOT set an execution timeout. Relay MUST calculate the execution timeout after assigning a node.
 
+## Task File Loading
+
+`task.heartbeat_tasks` in `config.yml` MUST contain only control fields and a tasks file pointer:
+
+- `batch_size`
+- `max_tasks_per_hour`
+- `tasks_file`
+
+When `tasks_file` is omitted or empty, Bridge MUST use `heartbeat_tasks.json`.
+
+`tasks_file` MUST be resolved relative to the directory that contains the loaded `config.yml`. An absolute `tasks_file` path MUST also be accepted.
+
+At config load, Bridge MUST read that JSON file and populate `task.heartbeat_tasks.tasks` from the top-level `tasks` array. Bridge MUST reject startup when the file cannot be read or parsed.
+
+Deployment MUST place the tasks JSON file next to `config.yml`. Image files referenced by `image_path` MUST use the same resolution rule.
+
 ## Task Selection
 
 Each heartbeat task entry under `task.heartbeat_tasks.tasks` MUST define:
@@ -94,14 +110,16 @@ For `type: llm`:
 Each content block MUST use one of:
 
 - `type: text` with non-empty `text`
-- `type: image` with non-empty `base64`
+- `type: image` with exactly one of `base64` or `image_path`
 
 Unsupported content block types MUST be rejected at config load.
 
-For `type: image`, `base64` MUST accept either:
+For `type: image`:
 
-- raw base64 payload
-- a `data:*;base64,<payload>` value
+- `base64` and `image_path` MUST be mutually exclusive
+- `image_path` MUST be resolved relative to the directory that contains the loaded `config.yml`; an absolute path MUST also be accepted
+- when `image_path` is set, config load MUST read the file bytes, encode them as raw base64 into `base64`, and clear `image_path` before validation
+- when `base64` is set, it MUST accept either a raw base64 payload or a `data:*;base64,<payload>` value
 
 Config load MUST normalize image `base64` to raw base64. The final LLM `task_args` image block MUST use:
 
@@ -110,6 +128,7 @@ Config load MUST normalize image `base64` to raw base64. The final LLM `task_arg
 ```
 
 The final LLM `task_args` MUST NOT include a data URL prefix in image blocks.
+The final LLM `task_args` MUST NOT include `image_path`.
 
 ## Task Args Mapping
 

@@ -73,9 +73,15 @@ func validateAndNormalizeHeartbeatContent(prompt *HeartbeatPromptConfig) error {
 			if block.Base64 != "" {
 				return fmt.Errorf("content[%d]: base64 is not allowed when type is text", i)
 			}
+			if strings.TrimSpace(block.ImagePath) != "" {
+				return fmt.Errorf("content[%d]: image_path is not allowed when type is text", i)
+			}
 		case "image":
 			if strings.TrimSpace(block.Text) != "" {
 				return fmt.Errorf("content[%d]: text is not allowed when type is image", i)
+			}
+			if strings.TrimSpace(block.ImagePath) != "" {
+				return fmt.Errorf("content[%d]: image_path must be resolved before validation", i)
 			}
 			normalized, err := utils.NormalizeImageBase64(block.Base64)
 			if err != nil {

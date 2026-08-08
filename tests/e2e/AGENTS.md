@@ -21,14 +21,16 @@
 <mount-root>/
   config/
     config.yml
+    heartbeat_tasks.json
   privkey.txt
 ```
 
 - Workflow:
   1. Create the `config` folder under `<mount-root>` if it does not already exist.
   2. Copy `tests/e2e/config.e2e.yml` to `<mount-root>/config/config.yml`.
-  3. Mount `<mount-root>/config` to `/app/config` in the bridge container.
-  4. Mount `<mount-root>/privkey.txt` to `/app/privkey.txt` in the bridge container.
+  3. Copy `tests/e2e/heartbeat_tasks.e2e.json` to `<mount-root>/config/heartbeat_tasks.json`.
+  4. Mount `<mount-root>/config` to `/app/config` in the bridge container.
+  5. Mount `<mount-root>/privkey.txt` to `/app/privkey.txt` in the bridge container.
 
 ## Prepare the database
 

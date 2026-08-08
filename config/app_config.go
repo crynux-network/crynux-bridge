@@ -93,29 +93,31 @@ type AppConfig struct {
 type HeartbeatTasksConfig struct {
 	BatchSize       uint64                `mapstructure:"batch_size"`
 	MaxTasksPerHour uint64                `mapstructure:"max_tasks_per_hour"`
-	Tasks           []HeartbeatTaskConfig `mapstructure:"tasks"`
+	TasksFile       string                `mapstructure:"tasks_file"`
+	Tasks           []HeartbeatTaskConfig `mapstructure:"tasks" json:"tasks"`
 }
 
 type HeartbeatContentBlock struct {
-	Type   string `mapstructure:"type"`
-	Text   string `mapstructure:"text"`
-	Base64 string `mapstructure:"base64"`
+	Type      string `mapstructure:"type" json:"type"`
+	Text      string `mapstructure:"text" json:"text,omitempty"`
+	Base64    string `mapstructure:"base64" json:"base64,omitempty"`
+	ImagePath string `mapstructure:"image_path" json:"image_path,omitempty"`
 }
 
 type HeartbeatPromptConfig struct {
-	Text           string                  `mapstructure:"text"`
-	NegativePrompt string                  `mapstructure:"negative_prompt"`
-	Content        []HeartbeatContentBlock `mapstructure:"content"`
+	Text           string                  `mapstructure:"text" json:"text,omitempty"`
+	NegativePrompt string                  `mapstructure:"negative_prompt" json:"negative_prompt,omitempty"`
+	Content        []HeartbeatContentBlock `mapstructure:"content" json:"content,omitempty"`
 }
 
 type HeartbeatTaskConfig struct {
-	TaskVersion     string                  `mapstructure:"task_version"`
-	Type            string                  `mapstructure:"type"`
-	Ratio           float64                 `mapstructure:"ratio"`
-	Model           string                  `mapstructure:"model"`
-	MinVram         uint64                  `mapstructure:"min_vram"`
-	FeeCNX          float64                 `mapstructure:"fee_cnx"`
-	MaxPendingTasks uint64                  `mapstructure:"max_pending_tasks"`
-	MaxNewTokens    uint64                  `mapstructure:"max_new_tokens"`
-	Prompts         []HeartbeatPromptConfig `mapstructure:"prompts"`
+	TaskVersion     string                  `mapstructure:"task_version" json:"task_version"`
+	Type            string                  `mapstructure:"type" json:"type"`
+	Ratio           float64                 `mapstructure:"ratio" json:"ratio"`
+	Model           string                  `mapstructure:"model" json:"model"`
+	MinVram         uint64                  `mapstructure:"min_vram" json:"min_vram"`
+	FeeCNX          float64                 `mapstructure:"fee_cnx" json:"fee_cnx"`
+	MaxPendingTasks uint64                  `mapstructure:"max_pending_tasks" json:"max_pending_tasks"`
+	MaxNewTokens    uint64                  `mapstructure:"max_new_tokens" json:"max_new_tokens,omitempty"`
+	Prompts         []HeartbeatPromptConfig `mapstructure:"prompts" json:"prompts,omitempty"`
 }
