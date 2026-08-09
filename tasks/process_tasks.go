@@ -782,58 +782,107 @@ func dereferenceTasks(tasks []*models.InferenceTask) []models.InferenceTask {
 	return result
 }
 
+// cancelQueuedValidationSiblings best-effort cancels other members of a 3-task
+// validation group when the current task itself is EndAborted. Errors are ignored.
+func cancelQueuedValidationSiblings(ctx context.Context, task *models.InferenceTask) {
+	cancelQueuedValidationSiblingsWith(ctx, config.GetDB(), task, relay.AbortTask)
+}
+
+func cancelQueuedValidationSiblingsWith(
+	ctx context.Context,
+	db *gorm.DB,
+	task *models.InferenceTask,
+	abortFn func(context.Context, string) error,
+) {
+	if task == nil || len(task.TaskID) == 0 {
+		return
+	}
+	if task.Status != models.InferenceTaskEndAborted {
+		return
+	}
+
+	taskGroup, err := models.GetTaskGroup(ctx, db, task.TaskID)
+	if err != nil {
+		log.Errorf("ProcessTasks: cancel siblings get task group of %s error: %v", task.TaskID, err)
+		return
+	}
+	if len(taskGroup) != 3 {
+		return
+	}
+
+	for i := range taskGroup {
+		sibling := &taskGroup[i]
+		if sibling.ID == task.ID {
+			continue
+		}
+		if len(sibling.TaskIDCommitment) == 0 {
+			continue
+		}
+		if err := abortFn(ctx, sibling.TaskIDCommitment); err != nil {
+			log.Warnf(
+				"ProcessTasks: best-effort abort sibling %s of task %d failed: %v",
+				sibling.TaskIDCommitment,
+				task.ID,
+				err,
+			)
+			continue
+		}
+		log.Infof(
+			"ProcessTasks: best-effort abort sibling %s of task %d submitted",
+			sibling.TaskIDCommitment,
+			task.ID,
+		)
+	}
+}
+
 func processClientTask(ctx context.Context, task *models.InferenceTask) error {
+	cancelQueuedValidationSiblings(ctx, task)
+
 	if task.TaskType == models.TaskTypeSDFTLora {
 		return nil
 	}
 
-	clientTask, err := models.GetClientTaskByID(ctx, config.GetDB(), task.ClientTaskID)
+	return updateClientTaskStatus(ctx, config.GetDB(), task)
+}
+
+func updateClientTaskStatus(ctx context.Context, db *gorm.DB, task *models.InferenceTask) error {
+	clientTask, err := models.GetClientTaskByID(ctx, db, task.ClientTaskID)
 	if err != nil {
 		return err
 	}
-	if clientTask.Status == models.ClientTaskStatusRunning && task.Finished() {
-		if task.Success() {
-			clientTask.Status = models.ClientTaskStatusSuccess
-			if err := clientTask.Update(ctx, config.GetDB(), clientTask); err != nil {
-				return err
-			}
-		} else {
-			taskGroup, err := models.GetTaskGroup(ctx, config.GetDB(), task.TaskID)
-			if err != nil {
-				return err
-			}
-			if len(taskGroup) == 1 {
-				clientTask.FailedCount += 1
-				clientTask.Status = models.ClientTaskStatusFailed
-				if err := clientTask.Update(ctx, config.GetDB(), clientTask); err != nil {
-					return err
-				}
-			} else {
-				allFinished := true
-				success := false
-				for _, subTask := range taskGroup {
-					if !subTask.Finished() {
-						allFinished = false
-					}
-					if subTask.Success() {
-						success = true
-					}
-				}
-				if allFinished {
-					if success {
-						clientTask.Status = models.ClientTaskStatusSuccess
-					} else {
-						clientTask.FailedCount += 1
-						clientTask.Status = models.ClientTaskStatusFailed
-					}
-					if err := clientTask.Update(ctx, config.GetDB(), clientTask); err != nil {
-						return err
-					}
-				}
-			}
+	if clientTask.Status != models.ClientTaskStatusRunning || !task.Finished() {
+		return nil
+	}
+
+	if task.Success() {
+		clientTask.Status = models.ClientTaskStatusSuccess
+		return clientTask.Update(ctx, db, clientTask)
+	}
+
+	allTasks, err := models.GetTasksByClientTaskID(ctx, db, task.ClientTaskID)
+	if err != nil {
+		return err
+	}
+	allFinished := true
+	success := false
+	for _, t := range allTasks {
+		if !t.Finished() {
+			allFinished = false
+		}
+		if t.Success() {
+			success = true
 		}
 	}
-	return nil
+	if !allFinished {
+		return nil
+	}
+	if success {
+		clientTask.Status = models.ClientTaskStatusSuccess
+	} else {
+		clientTask.FailedCount += 1
+		clientTask.Status = models.ClientTaskStatusFailed
+	}
+	return clientTask.Update(ctx, db, clientTask)
 }
 
 func getUnprocessedTasks(ctx context.Context) ([]models.InferenceTask, error) {

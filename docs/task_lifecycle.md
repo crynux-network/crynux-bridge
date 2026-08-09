@@ -18,7 +18,7 @@ Each worker MUST use only the process context. Bridge MUST NOT derive a worker d
 
 No Relay-side deadline exists before Relay accepts the create request. If Relay rejects a create request with an HTTP 400 validation response, resubmission can never succeed, and the worker MUST set the task to local `EndAborted` instead of retrying. The worker MUST then update the owning client task.
 
-Bridge MUST NOT change an unfinished task to a local cancellation state because an HTTP request ended. Bridge MUST NOT call Relay's creator-cancel endpoint as part of task processing.
+Bridge MUST NOT change an unfinished task to a local cancellation state because an HTTP request ended. Bridge MUST NOT call Relay's creator-cancel endpoint because an HTTP request ended.
 
 Persisted tasks MUST remain eligible for `ProcessTasks` after restart. A task with a Relay commitment MUST be queried and reconciled before Bridge performs its next stage action.
 
@@ -46,6 +46,8 @@ Bridge MUST map both Relay success statuses to local `EndSuccess`. Bridge MUST d
 
 After a non-success terminal status is synchronized, the worker MUST stop active-stage processing and update the owning client task. After success is synchronized, the worker MUST download the result and persist `ResultDownloaded` before updating the owning client task.
 
+When updating the owning client task after a non-success finished inference task, Bridge MUST inspect every `InferenceTask` with the same `ClientTaskID`. Bridge MUST mark the client task `Failed` only when every such inference task is finished and none has reached `ResultDownloaded`. Bridge MUST NOT mark the client task `Failed` because only the current `TaskID` validation group has finished unsuccessfully while another inference task under the same client task is still unfinished. When any inference task under the client task reaches `ResultDownloaded` while the client task is still `Running`, Bridge MUST mark the client task `Success`.
+
 ## Validation Tasks
 
 Bridge MUST persist a task's Relay sequence, sampling seed, VRF proof, and VRF number before submitting validation. While Relay reports a non-terminal status and these values are not persisted, the worker MUST fetch them from Relay and persist them, and MUST create validation members in the same transaction when the VRF selects the task for validation. This applies at every non-terminal Relay status, including `ScoreReady` and `ErrorReported`; reaching a ready status MUST NOT skip this persistence step.
@@ -59,6 +61,8 @@ A task is ready for validation only in `ScoreReady` or `ErrorReported`. Group wa
 `ScoreReady`, `ErrorReported`, and `EndAborted` members MUST be accepted as group-validation inputs. An `EndAborted` member with queue timeout, execution timeout, or another abort reason MUST NOT prevent Bridge from submitting group validation.
 
 If any validation-group member reaches `EndAborted` with `TaskAbortCreatorValidationTimeout`, Bridge MUST stop waiting for group readiness and MUST NOT submit or retry group validation. Other group members MUST continue to synchronize independently until Relay reports their terminal states.
+
+When a validation-group member's own worker synchronizes that member to `EndAborted`, that worker MUST attempt Relay creator-cancel once for each other group member that has a `TaskIDCommitment`, using `TaskAbortCreatorCancelled`. Bridge MUST NOT query Relay task status before those cancel attempts. Bridge MUST ignore cancel success and failure, including rejection because the sibling is no longer `TaskQueued`, and MUST continue client-task updates. Bridge MUST NOT attempt sibling cancel when the current task is `EndInvalidated`. Bridge MUST NOT attempt sibling cancel only because another group member failed while the current task is still non-terminal.
 
 ## Abort Reasons and Legacy Status
 

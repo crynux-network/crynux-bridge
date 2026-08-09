@@ -52,6 +52,20 @@ type ValidateTaskInput struct {
 	Signature         string   `json:"signature,omitempty"`
 }
 
+type AbortTaskInput struct {
+	TaskIDCommitment string                 `json:"task_id_commitment"`
+	AbortReason      models.TaskAbortReason `json:"abort_reason"`
+	Timestamp        int64                  `json:"timestamp,omitempty"`
+	Signature        string                 `json:"signature,omitempty"`
+}
+
+func buildAbortTaskInput(taskIDCommitment string) *AbortTaskInput {
+	return &AbortTaskInput{
+		TaskIDCommitment: taskIDCommitment,
+		AbortReason:      models.TaskAbortCreatorCancelled,
+	}
+}
+
 func buildCreateTaskInput(task *models.InferenceTask, taskFee string) *CreateTaskInput {
 	var timeout *uint64
 	if task.TaskType == models.TaskTypeSDFTLora {
@@ -297,6 +311,47 @@ func CreateTask(ctx context.Context, task *models.InferenceTask) error {
 	}
 
 	log.Debugf("Relay: create task %s", taskIDCommitment)
+	return nil
+}
+
+// AbortTask cancels a Queued task on Relay with TaskAbortCreatorCancelled.
+func AbortTask(ctx context.Context, taskIDCommitment string) error {
+	appConfig := config.GetConfig()
+
+	params := buildAbortTaskInput(taskIDCommitment)
+	timestamp, signature, err := SignData(params, appConfig.Blockchain.Account.PrivateKey)
+	if err != nil {
+		return err
+	}
+	params.Timestamp = timestamp
+	params.Signature = signature
+
+	bs, err := json.Marshal(params)
+	if err != nil {
+		return err
+	}
+	body := bytes.NewReader(bs)
+
+	reqUrl := appConfig.Relay.BaseURL + "/v1/inference_tasks/" + taskIDCommitment + "/abort_reason"
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(timeoutCtx, "POST", reqUrl, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if err := processRelayResponse(resp); err != nil {
+		log.Errorf("Relay: abort task %s error: %v", taskIDCommitment, err)
+		return err
+	}
+
+	log.Debugf("Relay: abort task %s", taskIDCommitment)
 	return nil
 }
 

@@ -41,6 +41,7 @@ The SD finetune LoRA API path MUST set `RepeatNum` to `1` explicitly and therefo
 - The synchronous API path MUST wait for task completion events and select the first task that reaches result-downloaded state.
 - Once the first successful result is available, the API response MUST be built from that task result and returned immediately.
 - The completion of other concurrent attempts MUST continue in background and MUST NOT block the API response after the first success is available.
+- Client-task failure status MUST be decided from all inference tasks under the same `ClientTaskID`, not from a single primary or validation group alone. One unsuccessful primary or validation group MUST NOT mark the client task failed while another attempt under the same client task is still unfinished.
 
 ## Implementation Summary
 

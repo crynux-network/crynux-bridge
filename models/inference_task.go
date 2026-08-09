@@ -228,6 +228,17 @@ func GetTaskGroup(ctx context.Context, db *gorm.DB, taskID string) ([]InferenceT
 	return tasks, nil
 }
 
+func GetTasksByClientTaskID(ctx context.Context, db *gorm.DB, clientTaskID uint) ([]InferenceTask, error) {
+	tasks := make([]InferenceTask, 0)
+	dbCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	err := db.WithContext(dbCtx).Model(&InferenceTask{}).Where("client_task_id = ?", clientTaskID).Order("id").Find(&tasks).Error
+	if err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
 func (t *InferenceTask) GetTaskHash() (*[32]byte, error) {
 
 	hash := crypto.Keccak256Hash([]byte(t.TaskArgs))
