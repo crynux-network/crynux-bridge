@@ -52,6 +52,7 @@ Each heartbeat task entry under `task.heartbeat_tasks.tasks` MUST define:
 - `fee_cnx`
 - `max_pending_tasks` when `ratio > 0`
 - `max_new_tokens` when `type` is `llm`
+- optional `tools` when `type` is `llm`
 - optional `prompts`
 
 When `ratio > 0`, `max_pending_tasks` MUST be greater than `0`. Config load MUST reject entries that violate this rule.
@@ -59,6 +60,10 @@ When `ratio > 0`, `max_pending_tasks` MUST be greater than `0`. Config load MUST
 When `type` is `llm`, `max_new_tokens` MUST be greater than `0`. Config load MUST reject LLM entries that violate this rule.
 
 When `type` is `sd`, `max_new_tokens` MUST NOT be set. Config load MUST reject SD entries that set `max_new_tokens`.
+
+When `type` is `sd`, `tools` MUST NOT be set. Config load MUST reject SD entries that set `tools`.
+
+When any prompt under an LLM entry contains assistant `tool_calls`, that entry's `tools` MUST be a non-empty array. Config load MUST reject entries that violate this rule.
 
 Bridge MUST select one eligible task entry by weighted sampling on `ratio`. Entries with `ratio <= 0` MUST be skipped.
 
@@ -86,8 +91,9 @@ Each prompt entry MUST define exactly one of:
 
 - `text`
 - `content`
+- `messages`
 
-`text` and `content` MUST NOT both be set. A prompt with neither `text` nor `content` MUST be rejected at config load.
+`text`, `content`, and `messages` MUST be mutually exclusive. A prompt that sets more than one, or that sets none of them, MUST be rejected at config load.
 
 ### SD Prompts
 
@@ -96,6 +102,7 @@ For `type: sd`, each prompt MUST use `text`.
 - `text` MUST become the SD task `prompt`
 - optional `negative_prompt` MUST become the SD task `negative_prompt`
 - `content` MUST be rejected at config load
+- `messages` MUST be rejected at config load
 
 SD generation parameters other than prompt text (scheduler, steps, cfg, seed, safety checker) MUST follow the existing model-specific heartbeat defaults.
 
@@ -105,6 +112,7 @@ For `type: llm`:
 
 - When `text` is set, Bridge MUST create a single user message whose `content` is that string.
 - When `content` is set, Bridge MUST create a single user message whose `content` is the content block list.
+- When `messages` is set, Bridge MUST use that message list as the task `messages`.
 - `negative_prompt` MUST be ignored.
 
 Each content block MUST use one of:
@@ -130,6 +138,34 @@ Config load MUST normalize image `base64` to raw base64. The final LLM `task_arg
 The final LLM `task_args` MUST NOT include a data URL prefix in image blocks.
 The final LLM `task_args` MUST NOT include `image_path`.
 
+### LLM Messages
+
+When `messages` is set, each message MUST use one of these roles:
+
+- `system`
+- `user`
+- `assistant`
+- `tool`
+
+For `system` and `user`:
+
+- `content` MUST be a non-empty string or a non-empty content block list
+- `tool_call_id` MUST NOT be set
+- `tool_calls` MUST NOT be set
+
+For `assistant`:
+
+- When `tool_calls` is absent or empty, `content` MUST be a non-empty string or a non-empty content block list
+- When `tool_calls` is non-empty, each tool call MUST define `id`, `type` equal to `function`, `function.name`, and `function.arguments`
+- `function.arguments` MUST be a JSON object encoded as a string
+- `tool_call_id` MUST NOT be set
+
+For `tool`:
+
+- `tool_call_id` MUST be non-empty
+- `content` MUST be a non-empty string
+- `tool_calls` MUST NOT be set
+
 ## Task Args Mapping
 
 ### SD
@@ -145,8 +181,11 @@ Selected SD prompt fields MUST map to Relay SD inference task args:
 Selected LLM prompt fields MUST map to Relay GPT inference task args:
 
 - `model` from task `model`
-- `messages` as a single user message
-- `messages[0].content` as either a string (`text` prompt) or a list of `{type,text|base64}` blocks (`content` prompt)
+- when the selected prompt uses `text` or `content`, `messages` as a single user message whose `content` is that string or content block list
+- when the selected prompt uses `messages`, `messages` as that configured list after tool-history adaptation
+- `tools` from the task entry `tools` when the array is non-empty; otherwise `tools` MUST be omitted
+
+When assistant tool-call history is present, Bridge MUST apply the same tool-history `function.arguments` adaptation used by Chat Completions before serializing task args. That adaptation is defined in `docs/model-compatibility/openai-api-adaptation.md`. Heartbeat MUST NOT redefine the argument-object versus argument-string rules.
 
 LLM heartbeat generation config MUST use:
 

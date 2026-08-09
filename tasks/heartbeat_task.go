@@ -2,7 +2,9 @@ package tasks
 
 import (
 	"context"
+	"crynux_bridge/api/v1/llm/structs"
 	"crynux_bridge/config"
+	"crynux_bridge/llmtask"
 	"crynux_bridge/models"
 	crand "crypto/rand"
 	"encoding/json"
@@ -118,7 +120,7 @@ func buildHeartbeatTaskArgs(heartbeatTaskConfig config.HeartbeatTaskConfig) (str
 		taskArgs, err := buildSDHeartbeatTaskArgs(heartbeatTaskConfig.Model, prompt, useDefault)
 		return taskArgs, models.TaskTypeSD, err
 	case "llm":
-		taskArgs, err := buildLLMHeartbeatTaskArgs(heartbeatTaskConfig.Model, prompt, useDefault, heartbeatTaskConfig.MaxNewTokens)
+		taskArgs, err := buildLLMHeartbeatTaskArgs(heartbeatTaskConfig, prompt, useDefault)
 		return taskArgs, models.TaskTypeLLM, err
 	default:
 		return "", 0, fmt.Errorf("unsupported heartbeat task type %q", heartbeatTaskConfig.Type)
@@ -193,27 +195,25 @@ func buildSDHeartbeatTaskArgs(model string, prompt config.HeartbeatPromptConfig,
 	return string(taskArgsBytes), nil
 }
 
-func buildLLMHeartbeatTaskArgs(model string, prompt config.HeartbeatPromptConfig, useDefault bool, maxNewTokens uint64) (string, error) {
-	var content any = "I want to create an AI agent. Any suggestions?"
-	if !useDefault {
-		var err error
-		content, err = buildLLMHeartbeatMessageContent(prompt)
-		if err != nil {
-			return "", err
-		}
+func buildLLMHeartbeatTaskArgs(
+	heartbeatTaskConfig config.HeartbeatTaskConfig,
+	prompt config.HeartbeatPromptConfig,
+	useDefault bool,
+) (string, error) {
+	messages, err := buildLLMHeartbeatMessages(prompt, useDefault)
+	if err != nil {
+		return "", err
+	}
+	adaptedMessages, err := llmtask.BuildTemplateToolCallMessages(heartbeatTaskConfig.Model, messages)
+	if err != nil {
+		return "", err
 	}
 
 	taskArgs := map[string]interface{}{
-		"model": model,
-		"messages": []map[string]interface{}{
-			{
-				"role":    "user",
-				"content": content,
-			},
-		},
-		"tools": nil,
+		"model":    heartbeatTaskConfig.Model,
+		"messages": adaptedMessages,
 		"generation_config": map[string]interface{}{
-			"max_new_tokens":     maxNewTokens,
+			"max_new_tokens":     heartbeatTaskConfig.MaxNewTokens,
 			"do_sample":          false,
 			"temperature":        0,
 			"repetition_penalty": 1.1,
@@ -221,12 +221,81 @@ func buildLLMHeartbeatTaskArgs(model string, prompt config.HeartbeatPromptConfig
 		"seed":  rand.Intn(100000000),
 		"dtype": "bfloat16",
 	}
+	if len(heartbeatTaskConfig.Tools) > 0 {
+		taskArgs["tools"] = heartbeatTaskConfig.Tools
+	}
 
 	taskArgsBytes, err := json.Marshal(taskArgs)
 	if err != nil {
 		return "", err
 	}
 	return string(taskArgsBytes), nil
+}
+
+func buildLLMHeartbeatMessages(prompt config.HeartbeatPromptConfig, useDefault bool) ([]models.Message, error) {
+	if useDefault {
+		return []models.Message{{
+			Role:    models.LLMRoleUser,
+			Content: "I want to create an AI agent. Any suggestions?",
+		}}, nil
+	}
+	if len(prompt.Messages) > 0 {
+		return convertHeartbeatMessages(prompt.Messages)
+	}
+	content, err := buildLLMHeartbeatMessageContent(prompt)
+	if err != nil {
+		return nil, err
+	}
+	return []models.Message{{
+		Role:    models.LLMRoleUser,
+		Content: content,
+	}}, nil
+}
+
+func convertHeartbeatMessages(messages []config.HeartbeatMessageConfig) ([]models.Message, error) {
+	converted := make([]models.Message, 0, len(messages))
+	for i, message := range messages {
+		role, err := parseHeartbeatMessageRole(message.Role)
+		if err != nil {
+			return nil, fmt.Errorf("messages[%d]: %w", i, err)
+		}
+		convertedMessage := models.Message{
+			Role:       role,
+			Content:    message.Content,
+			ToolCallID: message.ToolCallID,
+		}
+		if len(message.ToolCalls) > 0 {
+			toolCalls := make([]structs.ToolCall, 0, len(message.ToolCalls))
+			for _, toolCall := range message.ToolCalls {
+				toolCalls = append(toolCalls, structs.ToolCall{
+					Id:   toolCall.ID,
+					Type: toolCall.Type,
+					Function: structs.FunctionCall{
+						Name:      toolCall.Function.Name,
+						Arguments: toolCall.Function.Arguments,
+					},
+				})
+			}
+			convertedMessage.ToolCalls = toolCalls
+		}
+		converted = append(converted, convertedMessage)
+	}
+	return converted, nil
+}
+
+func parseHeartbeatMessageRole(role string) (models.LLMRole, error) {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "system":
+		return models.LLMRoleSystem, nil
+	case "user":
+		return models.LLMRoleUser, nil
+	case "assistant":
+		return models.LLMRoleAssistant, nil
+	case "tool":
+		return models.LLMRoleTool, nil
+	default:
+		return "", fmt.Errorf("unsupported role %q", role)
+	}
 }
 
 func buildLLMHeartbeatMessageContent(prompt config.HeartbeatPromptConfig) (any, error) {

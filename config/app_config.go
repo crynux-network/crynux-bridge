@@ -104,20 +104,40 @@ type HeartbeatContentBlock struct {
 	ImagePath string `mapstructure:"image_path" json:"image_path,omitempty"`
 }
 
+type HeartbeatMessageToolCallFunction struct {
+	Name      string `mapstructure:"name" json:"name"`
+	Arguments string `mapstructure:"arguments" json:"arguments"`
+}
+
+type HeartbeatMessageToolCall struct {
+	ID       string                           `mapstructure:"id" json:"id"`
+	Type     string                           `mapstructure:"type" json:"type"`
+	Function HeartbeatMessageToolCallFunction `mapstructure:"function" json:"function"`
+}
+
+type HeartbeatMessageConfig struct {
+	Role       string                     `mapstructure:"role" json:"role"`
+	Content    any                        `mapstructure:"content" json:"content,omitempty"`
+	ToolCallID string                     `mapstructure:"tool_call_id" json:"tool_call_id,omitempty"`
+	ToolCalls  []HeartbeatMessageToolCall `mapstructure:"tool_calls" json:"tool_calls,omitempty"`
+}
+
 type HeartbeatPromptConfig struct {
-	Text           string                  `mapstructure:"text" json:"text,omitempty"`
-	NegativePrompt string                  `mapstructure:"negative_prompt" json:"negative_prompt,omitempty"`
-	Content        []HeartbeatContentBlock `mapstructure:"content" json:"content,omitempty"`
+	Text           string                   `mapstructure:"text" json:"text,omitempty"`
+	NegativePrompt string                   `mapstructure:"negative_prompt" json:"negative_prompt,omitempty"`
+	Content        []HeartbeatContentBlock  `mapstructure:"content" json:"content,omitempty"`
+	Messages       []HeartbeatMessageConfig `mapstructure:"messages" json:"messages,omitempty"`
 }
 
 type HeartbeatTaskConfig struct {
-	TaskVersion     string                  `mapstructure:"task_version" json:"task_version"`
-	Type            string                  `mapstructure:"type" json:"type"`
-	Ratio           float64                 `mapstructure:"ratio" json:"ratio"`
-	Model           string                  `mapstructure:"model" json:"model"`
-	MinVram         uint64                  `mapstructure:"min_vram" json:"min_vram"`
-	FeeCNX          float64                 `mapstructure:"fee_cnx" json:"fee_cnx"`
-	MaxPendingTasks uint64                  `mapstructure:"max_pending_tasks" json:"max_pending_tasks"`
-	MaxNewTokens    uint64                  `mapstructure:"max_new_tokens" json:"max_new_tokens,omitempty"`
-	Prompts         []HeartbeatPromptConfig `mapstructure:"prompts" json:"prompts,omitempty"`
+	TaskVersion     string                   `mapstructure:"task_version" json:"task_version"`
+	Type            string                   `mapstructure:"type" json:"type"`
+	Ratio           float64                  `mapstructure:"ratio" json:"ratio"`
+	Model           string                   `mapstructure:"model" json:"model"`
+	MinVram         uint64                   `mapstructure:"min_vram" json:"min_vram"`
+	FeeCNX          float64                  `mapstructure:"fee_cnx" json:"fee_cnx"`
+	MaxPendingTasks uint64                   `mapstructure:"max_pending_tasks" json:"max_pending_tasks"`
+	MaxNewTokens    uint64                   `mapstructure:"max_new_tokens" json:"max_new_tokens,omitempty"`
+	Tools           []map[string]interface{} `mapstructure:"tools" json:"tools,omitempty"`
+	Prompts         []HeartbeatPromptConfig  `mapstructure:"prompts" json:"prompts,omitempty"`
 }

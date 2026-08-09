@@ -35,7 +35,10 @@ func TestSelectHeartbeatPromptReturnsConfigured(t *testing.T) {
 }
 
 func TestBuildLLMHeartbeatTaskArgsDefault(t *testing.T) {
-	taskArgs, err := buildLLMHeartbeatTaskArgs("Qwen/Qwen2.5-7B", config.HeartbeatPromptConfig{}, true, 64)
+	taskArgs, err := buildLLMHeartbeatTaskArgs(config.HeartbeatTaskConfig{
+		Model:        "Qwen/Qwen2.5-7B",
+		MaxNewTokens: 64,
+	}, config.HeartbeatPromptConfig{}, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -49,6 +52,9 @@ func TestBuildLLMHeartbeatTaskArgsDefault(t *testing.T) {
 	if msg["content"] != "I want to create an AI agent. Any suggestions?" {
 		t.Fatalf("unexpected default content: %#v", msg["content"])
 	}
+	if _, ok := parsed["tools"]; ok {
+		t.Fatalf("expected tools to be omitted when unset, got %#v", parsed["tools"])
+	}
 	generationConfig := parsed["generation_config"].(map[string]interface{})
 	if generationConfig["max_new_tokens"] != float64(64) {
 		t.Fatalf("unexpected max_new_tokens: %#v", generationConfig["max_new_tokens"])
@@ -57,10 +63,12 @@ func TestBuildLLMHeartbeatTaskArgsDefault(t *testing.T) {
 
 func TestBuildLLMHeartbeatTaskArgsText(t *testing.T) {
 	taskArgs, err := buildLLMHeartbeatTaskArgs(
-		"Qwen/Qwen2.5-7B",
+		config.HeartbeatTaskConfig{
+			Model:        "Qwen/Qwen2.5-7B",
+			MaxNewTokens: 128,
+		},
 		config.HeartbeatPromptConfig{Text: "hello heartbeat"},
 		false,
-		128,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -84,7 +92,10 @@ func TestBuildLLMHeartbeatTaskArgsText(t *testing.T) {
 
 func TestBuildLLMHeartbeatTaskArgsContentBlocks(t *testing.T) {
 	taskArgs, err := buildLLMHeartbeatTaskArgs(
-		"Qwen/Qwen2.5-VL-7B-Instruct",
+		config.HeartbeatTaskConfig{
+			Model:        "Qwen/Qwen2.5-VL-7B-Instruct",
+			MaxNewTokens: 250,
+		},
 		config.HeartbeatPromptConfig{
 			Content: []config.HeartbeatContentBlock{
 				{Type: "text", Text: "What is in this image?"},
@@ -92,7 +103,6 @@ func TestBuildLLMHeartbeatTaskArgsContentBlocks(t *testing.T) {
 			},
 		},
 		false,
-		250,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -115,6 +125,75 @@ func TestBuildLLMHeartbeatTaskArgsContentBlocks(t *testing.T) {
 	}
 	if imageBlock["type"] != "image" || imageBlock["base64"] != "aGVsbG8=" {
 		t.Fatalf("unexpected image block %#v", imageBlock)
+	}
+}
+
+func TestBuildLLMHeartbeatTaskArgsToolsAndMessages(t *testing.T) {
+	taskArgs, err := buildLLMHeartbeatTaskArgs(
+		config.HeartbeatTaskConfig{
+			Model:        "Qwen/Qwen3-8B",
+			MaxNewTokens: 128,
+			Tools: []map[string]interface{}{
+				{
+					"type": "function",
+					"function": map[string]interface{}{
+						"name": "search_docs",
+						"parameters": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"query": map[string]interface{}{"type": "string"},
+							},
+						},
+					},
+				},
+			},
+		},
+		config.HeartbeatPromptConfig{
+			Messages: []config.HeartbeatMessageConfig{
+				{Role: "user", Content: "Find the GPU scheduling docs."},
+				{
+					Role: "assistant",
+					ToolCalls: []config.HeartbeatMessageToolCall{
+						{
+							ID:   "call_1",
+							Type: "function",
+							Function: config.HeartbeatMessageToolCallFunction{
+								Name:      "search_docs",
+								Arguments: `{"query":"gpu scheduling"}`,
+							},
+						},
+					},
+				},
+				{Role: "tool", ToolCallID: "call_1", Content: "GPU scheduling uses VRAM demand and QoS."},
+				{Role: "user", Content: "Summarize that result in one sentence."},
+			},
+		},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(taskArgs), &parsed); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if _, ok := parsed["tools"]; !ok {
+		t.Fatal("expected tools in task args")
+	}
+	messages := parsed["messages"].([]interface{})
+	if len(messages) != 4 {
+		t.Fatalf("expected 4 messages, got %d", len(messages))
+	}
+	assistant := messages[1].(map[string]interface{})
+	toolCalls := assistant["tool_calls"].([]interface{})
+	function := toolCalls[0].(map[string]interface{})["function"].(map[string]interface{})
+	arguments, ok := function["arguments"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected adapted arguments object, got %#v", function["arguments"])
+	}
+	if arguments["query"] != "gpu scheduling" {
+		t.Fatalf("unexpected arguments %#v", arguments)
 	}
 }
 

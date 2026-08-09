@@ -2,6 +2,7 @@ package config
 
 import (
 	"crynux_bridge/utils"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -21,11 +22,25 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 			if task.MaxNewTokens != 0 {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: max_new_tokens is not supported for sd tasks", i)
 			}
+			if len(task.Tools) > 0 {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: tools is not supported for sd tasks", i)
+			}
+		default:
+			return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: unsupported heartbeat task type %q", i, task.Type)
 		}
+
+		promptHasToolCalls := false
 		for j := range task.Prompts {
-			if err := validateAndNormalizeHeartbeatPrompt(taskType, &appConfig.Task.HeartbeatTasks.Tasks[i].Prompts[j]); err != nil {
+			prompt := &appConfig.Task.HeartbeatTasks.Tasks[i].Prompts[j]
+			if err := validateAndNormalizeHeartbeatPrompt(taskType, prompt); err != nil {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d].prompts[%d]: %w", i, j, err)
 			}
+			if heartbeatMessagesHaveAssistantToolCalls(prompt.Messages) {
+				promptHasToolCalls = true
+			}
+		}
+		if promptHasToolCalls && len(task.Tools) == 0 {
+			return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: tools must be non-empty when prompts include assistant tool_calls", i)
 		}
 	}
 	return nil
@@ -34,12 +49,23 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 func validateAndNormalizeHeartbeatPrompt(taskType string, prompt *HeartbeatPromptConfig) error {
 	hasText := strings.TrimSpace(prompt.Text) != ""
 	hasContent := len(prompt.Content) > 0
+	hasMessages := len(prompt.Messages) > 0
 
-	if hasText && hasContent {
-		return fmt.Errorf("text and content are mutually exclusive")
+	modes := 0
+	if hasText {
+		modes++
 	}
-	if !hasText && !hasContent {
-		return fmt.Errorf("either text or content is required")
+	if hasContent {
+		modes++
+	}
+	if hasMessages {
+		modes++
+	}
+	if modes == 0 {
+		return fmt.Errorf("exactly one of text, content, or messages is required")
+	}
+	if modes > 1 {
+		return fmt.Errorf("text, content, and messages are mutually exclusive")
 	}
 
 	switch taskType {
@@ -47,12 +73,18 @@ func validateAndNormalizeHeartbeatPrompt(taskType string, prompt *HeartbeatPromp
 		if hasContent {
 			return fmt.Errorf("content is not supported for sd tasks")
 		}
+		if hasMessages {
+			return fmt.Errorf("messages is not supported for sd tasks")
+		}
 		return nil
 	case "llm":
-		if !hasContent {
-			return nil
+		if hasContent {
+			return validateAndNormalizeHeartbeatContent(prompt)
 		}
-		return validateAndNormalizeHeartbeatContent(prompt)
+		if hasMessages {
+			return validateHeartbeatMessages(prompt.Messages)
+		}
+		return nil
 	default:
 		return fmt.Errorf("unsupported heartbeat task type %q", taskType)
 	}
@@ -93,4 +125,104 @@ func validateAndNormalizeHeartbeatContent(prompt *HeartbeatPromptConfig) error {
 		}
 	}
 	return nil
+}
+
+func validateHeartbeatMessages(messages []HeartbeatMessageConfig) error {
+	if len(messages) == 0 {
+		return fmt.Errorf("messages must be a non-empty array")
+	}
+	for i, message := range messages {
+		role := strings.ToLower(strings.TrimSpace(message.Role))
+		switch role {
+		case "system", "user":
+			if err := validateHeartbeatMessageContent(i, message); err != nil {
+				return err
+			}
+			if message.ToolCallID != "" {
+				return fmt.Errorf("messages[%d]: tool_call_id is not allowed for role %q", i, message.Role)
+			}
+			if len(message.ToolCalls) > 0 {
+				return fmt.Errorf("messages[%d]: tool_calls is not allowed for role %q", i, message.Role)
+			}
+		case "assistant":
+			if err := validateHeartbeatAssistantMessage(i, message); err != nil {
+				return err
+			}
+		case "tool":
+			if strings.TrimSpace(message.ToolCallID) == "" {
+				return fmt.Errorf("messages[%d]: tool_call_id is required for role tool", i)
+			}
+			if len(message.ToolCalls) > 0 {
+				return fmt.Errorf("messages[%d]: tool_calls is not allowed for role tool", i)
+			}
+			content, ok := message.Content.(string)
+			if !ok || strings.TrimSpace(content) == "" {
+				return fmt.Errorf("messages[%d]: content must be a non-empty string for role tool", i)
+			}
+		default:
+			return fmt.Errorf("messages[%d]: unsupported role %q", i, message.Role)
+		}
+	}
+	return nil
+}
+
+func validateHeartbeatMessageContent(messageIndex int, message HeartbeatMessageConfig) error {
+	switch content := message.Content.(type) {
+	case string:
+		if strings.TrimSpace(content) == "" {
+			return fmt.Errorf("messages[%d]: content must be a non-empty string", messageIndex)
+		}
+		return nil
+	case []any:
+		if len(content) == 0 {
+			return fmt.Errorf("messages[%d]: content blocks must be non-empty", messageIndex)
+		}
+		return nil
+	default:
+		if content == nil {
+			return fmt.Errorf("messages[%d]: content is required", messageIndex)
+		}
+		return fmt.Errorf("messages[%d]: content must be a string or content block list", messageIndex)
+	}
+}
+
+func validateHeartbeatAssistantMessage(messageIndex int, message HeartbeatMessageConfig) error {
+	if message.ToolCallID != "" {
+		return fmt.Errorf("messages[%d]: tool_call_id is not allowed for role assistant", messageIndex)
+	}
+	if len(message.ToolCalls) == 0 {
+		return validateHeartbeatMessageContent(messageIndex, message)
+	}
+	for toolCallIndex, toolCall := range message.ToolCalls {
+		if strings.TrimSpace(toolCall.ID) == "" {
+			return fmt.Errorf("messages[%d].tool_calls[%d]: id is required", messageIndex, toolCallIndex)
+		}
+		if toolCall.Type != "function" {
+			return fmt.Errorf("messages[%d].tool_calls[%d]: type must be function", messageIndex, toolCallIndex)
+		}
+		if strings.TrimSpace(toolCall.Function.Name) == "" {
+			return fmt.Errorf("messages[%d].tool_calls[%d]: function.name is required", messageIndex, toolCallIndex)
+		}
+		if err := validateHeartbeatToolCallArguments(messageIndex, toolCallIndex, toolCall.Function.Arguments); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateHeartbeatToolCallArguments(messageIndex, toolCallIndex int, raw string) error {
+	arguments := map[string]any{}
+	if err := json.Unmarshal([]byte(raw), &arguments); err != nil || arguments == nil {
+		return fmt.Errorf("messages[%d].tool_calls[%d].function.arguments must be a JSON object string", messageIndex, toolCallIndex)
+	}
+	return nil
+}
+
+func heartbeatMessagesHaveAssistantToolCalls(messages []HeartbeatMessageConfig) bool {
+	for _, message := range messages {
+		if strings.EqualFold(strings.TrimSpace(message.Role), "assistant") && len(message.ToolCalls) > 0 {
+			return true
+		}
+	}
+	return false
 }

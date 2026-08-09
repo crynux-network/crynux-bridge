@@ -27,12 +27,106 @@ func TestValidateHeartbeatPromptMutuallyExclusive(t *testing.T) {
 	if err := validateAndNormalizeHeartbeatPrompt("llm", &prompt); err == nil {
 		t.Fatalf("expected mutual exclusion error")
 	}
+
+	prompt = HeartbeatPromptConfig{
+		Text: "hello",
+		Messages: []HeartbeatMessageConfig{
+			{Role: "user", Content: "world"},
+		},
+	}
+	if err := validateAndNormalizeHeartbeatPrompt("llm", &prompt); err == nil {
+		t.Fatalf("expected text/messages mutual exclusion error")
+	}
 }
 
 func TestValidateHeartbeatPromptEmpty(t *testing.T) {
 	prompt := HeartbeatPromptConfig{}
 	if err := validateAndNormalizeHeartbeatPrompt("llm", &prompt); err == nil {
 		t.Fatalf("expected empty prompt error")
+	}
+}
+
+func TestValidateHeartbeatPromptMessagesOK(t *testing.T) {
+	prompt := HeartbeatPromptConfig{
+		Messages: []HeartbeatMessageConfig{
+			{Role: "user", Content: "search docs"},
+			{
+				Role: "assistant",
+				ToolCalls: []HeartbeatMessageToolCall{
+					{
+						ID:   "call_1",
+						Type: "function",
+						Function: HeartbeatMessageToolCallFunction{
+							Name:      "search_docs",
+							Arguments: `{"query":"vram"}`,
+						},
+					},
+				},
+			},
+			{Role: "tool", ToolCallID: "call_1", Content: "VRAM is video memory."},
+		},
+	}
+	if err := validateAndNormalizeHeartbeatPrompt("llm", &prompt); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateHeartbeatPromptSDRejectsMessages(t *testing.T) {
+	prompt := HeartbeatPromptConfig{
+		Messages: []HeartbeatMessageConfig{
+			{Role: "user", Content: "hello"},
+		},
+	}
+	if err := validateAndNormalizeHeartbeatPrompt("sd", &prompt); err == nil {
+		t.Fatalf("expected sd messages rejection")
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRequiresToolsForToolCalls(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Ratio:           1.0,
+			MaxPendingTasks: 5,
+			MaxNewTokens:    128,
+			Prompts: []HeartbeatPromptConfig{
+				{
+					Messages: []HeartbeatMessageConfig{
+						{Role: "user", Content: "search"},
+						{
+							Role: "assistant",
+							ToolCalls: []HeartbeatMessageToolCall{
+								{
+									ID:   "call_1",
+									Type: "function",
+									Function: HeartbeatMessageToolCallFunction{
+										Name:      "search_docs",
+										Arguments: `{"query":"x"}`,
+									},
+								},
+							},
+						},
+						{Role: "tool", ToolCallID: "call_1", Content: "result"},
+					},
+				},
+			},
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatalf("expected tools required error")
+	}
+
+	appConfig.Task.HeartbeatTasks.Tasks[0].Tools = []map[string]interface{}{
+		{
+			"type": "function",
+			"function": map[string]interface{}{
+				"name": "search_docs",
+			},
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -271,6 +365,25 @@ func TestLoadHeartbeatTasksFileRejectsImagePathAndBase64(t *testing.T) {
 	appConfig := &AppConfig{}
 	if err := loadHeartbeatTasksFile(appConfig, dir); err == nil {
 		t.Fatalf("expected mutual exclusion error")
+	}
+}
+
+func TestLoadAndValidateRepoHeartbeatTasksJSON(t *testing.T) {
+	configDir := filepath.Join("..", "config")
+	tasksPath := filepath.Join(configDir, "heartbeat_tasks.json")
+	if _, err := os.Stat(tasksPath); err != nil {
+		t.Skip("repo config/heartbeat_tasks.json is not present")
+	}
+
+	appConfig := &AppConfig{}
+	if err := loadHeartbeatTasksFile(appConfig, configDir); err != nil {
+		t.Fatalf("unexpected load error: %v", err)
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
+		t.Fatalf("unexpected validate error: %v", err)
+	}
+	if len(appConfig.Task.HeartbeatTasks.Tasks) < 1 {
+		t.Fatal("expected at least one heartbeat task")
 	}
 }
 
