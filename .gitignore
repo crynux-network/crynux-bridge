@@ -1,4 +1,5 @@
 .idea/
+.cursor/
 config/config.yml
 config/heartbeat_tasks.json
 config/vl_sample*.png
