@@ -18,7 +18,13 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 			if task.MaxNewTokens == 0 {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: max_new_tokens must be > 0 for llm tasks", i)
 			}
+			if task.Steps != 0 {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: steps is not supported for llm tasks", i)
+			}
 		case "sd":
+			if task.Steps == 0 {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: steps must be > 0 for sd tasks", i)
+			}
 			if task.MaxNewTokens != 0 {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: max_new_tokens is not supported for sd tasks", i)
 			}

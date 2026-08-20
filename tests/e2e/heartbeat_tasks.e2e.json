@@ -3,11 +3,12 @@
     {
       "task_version": "3.1.0",
       "type": "sd",
-      "ratio": 1.0,
+      "ratio": 0.5,
       "model": "crynux-network/sdxl-turbo",
       "min_vram": 14,
       "fee_cnx": 2.0,
       "max_pending_tasks": 10,
+      "steps": 1,
       "prompts": [
         {
           "text": "Self-portrait oil painting,a beautiful cyborg with golden hair,8k"
@@ -17,11 +18,37 @@
     {
       "task_version": "3.1.0",
       "type": "sd",
-      "ratio": 1.0,
+      "ratio": 0.5,
+      "model": "crynux-network/sdxl-turbo",
+      "min_vram": 14,
+      "fee_cnx": 2.0,
+      "max_pending_tasks": 10,
+      "steps": 4,
+      "prompts": [
+        {
+          "text": "Self-portrait oil painting,a beautiful cyborg with golden hair,8k"
+        }
+      ]
+    },
+    {
+      "task_version": "3.1.0",
+      "type": "sd",
+      "ratio": 0.5,
       "model": "crynux-network/stable-diffusion-v1-5",
       "min_vram": 4,
       "fee_cnx": 1.0,
-      "max_pending_tasks": 10
+      "max_pending_tasks": 10,
+      "steps": 1
+    },
+    {
+      "task_version": "3.1.0",
+      "type": "sd",
+      "ratio": 0.5,
+      "model": "crynux-network/stable-diffusion-v1-5",
+      "min_vram": 4,
+      "fee_cnx": 1.0,
+      "max_pending_tasks": 10,
+      "steps": 25
     },
     {
       "task_version": "3.1.0",

@@ -52,6 +52,7 @@ Each heartbeat task entry under `task.heartbeat_tasks.tasks` MUST define:
 - `fee_cnx`
 - `max_pending_tasks` when `ratio > 0`
 - `max_new_tokens` when `type` is `llm`
+- `steps` when `type` is `sd`
 - optional `tools` when `type` is `llm`
 - optional `prompts`
 
@@ -59,7 +60,11 @@ When `ratio > 0`, `max_pending_tasks` MUST be greater than `0`. Config load MUST
 
 When `type` is `llm`, `max_new_tokens` MUST be greater than `0`. Config load MUST reject LLM entries that violate this rule.
 
+When `type` is `sd`, `steps` MUST be greater than `0`. Config load MUST reject SD entries that violate this rule.
+
 When `type` is `sd`, `max_new_tokens` MUST NOT be set. Config load MUST reject SD entries that set `max_new_tokens`.
+
+When `type` is `llm`, `steps` MUST NOT be set. Config load MUST reject LLM entries that set `steps`.
 
 When `type` is `sd`, `tools` MUST NOT be set. Config load MUST reject SD entries that set `tools`.
 
@@ -104,7 +109,9 @@ For `type: sd`, each prompt MUST use `text`.
 - `content` MUST be rejected at config load
 - `messages` MUST be rejected at config load
 
-SD generation parameters other than prompt text (scheduler, steps, cfg, seed, safety checker) MUST follow the existing model-specific heartbeat defaults.
+SD generation parameters other than prompt text, `negative_prompt`, and `steps` (scheduler, cfg, seed, safety checker, omitted image width and height) MUST follow the existing model-specific heartbeat defaults.
+
+SD heartbeat entries used for Relay execution-time fitting MUST follow [heartbeat_sd_calibration.md](./heartbeat_sd_calibration.md).
 
 ### LLM Prompts
 
@@ -175,6 +182,10 @@ Selected SD prompt fields MUST map to Relay SD inference task args:
 - `prompt` from selected prompt `text` or built-in default
 - `negative_prompt` from selected prompt `negative_prompt` or built-in default
 - `base_model.name` from task `model`
+- `task_config.steps` from the selected task entry `steps`
+- `task_config.num_images` `1`
+
+SD heartbeat entries used for Relay execution-time fitting MUST follow [heartbeat_sd_calibration.md](./heartbeat_sd_calibration.md).
 
 ### LLM
 
@@ -195,3 +206,5 @@ LLM heartbeat generation config MUST use:
 - `repetition_penalty: 1.1`
 - `dtype: bfloat16`
 - a random `seed`
+
+LLM heartbeat entries used for Relay execution-time fitting MUST follow [heartbeat_llm_calibration.md](./heartbeat_llm_calibration.md).

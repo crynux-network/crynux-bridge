@@ -199,7 +199,11 @@ func TestBuildLLMHeartbeatTaskArgsToolsAndMessages(t *testing.T) {
 
 func TestBuildSDHeartbeatTaskArgsConfiguredPrompt(t *testing.T) {
 	taskArgs, err := buildSDHeartbeatTaskArgs(
-		"crynux-network/sdxl-turbo",
+		config.HeartbeatTaskConfig{
+			Type:  "sd",
+			Model: "crynux-network/sdxl-turbo",
+			Steps: 4,
+		},
 		config.HeartbeatPromptConfig{
 			Text:           "custom sd prompt",
 			NegativePrompt: "blurry",
@@ -219,6 +223,10 @@ func TestBuildSDHeartbeatTaskArgsConfiguredPrompt(t *testing.T) {
 	}
 	if parsed["negative_prompt"] != "blurry" {
 		t.Fatalf("unexpected negative_prompt %#v", parsed["negative_prompt"])
+	}
+	taskConfig := parsed["task_config"].(map[string]interface{})
+	if taskConfig["steps"] != float64(4) {
+		t.Fatalf("unexpected steps %#v", taskConfig["steps"])
 	}
 }
 
@@ -386,6 +394,7 @@ func TestHeartbeatTaskTypeAndModelID(t *testing.T) {
 	sdType, sdModelID, err := heartbeatTaskTypeAndModelID(config.HeartbeatTaskConfig{
 		Type:  "sd",
 		Model: "crynux-network/sdxl-turbo",
+		Steps: 1,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

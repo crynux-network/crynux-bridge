@@ -138,6 +138,7 @@ type HeartbeatTaskConfig struct {
 	FeeCNX          float64                  `mapstructure:"fee_cnx" json:"fee_cnx"`
 	MaxPendingTasks uint64                   `mapstructure:"max_pending_tasks" json:"max_pending_tasks"`
 	MaxNewTokens    uint64                   `mapstructure:"max_new_tokens" json:"max_new_tokens,omitempty"`
+	Steps           uint64                   `mapstructure:"steps" json:"steps,omitempty"`
 	Tools           []map[string]interface{} `mapstructure:"tools" json:"tools,omitempty"`
 	Prompts         []HeartbeatPromptConfig  `mapstructure:"prompts" json:"prompts,omitempty"`
 }

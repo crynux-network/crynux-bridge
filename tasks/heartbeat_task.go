@@ -57,7 +57,7 @@ func heartbeatTypeModelKey(taskType string, model string) string {
 func heartbeatTaskTypeAndModelID(heartbeatTaskConfig config.HeartbeatTaskConfig) (models.ChainTaskType, string, error) {
 	switch strings.ToLower(heartbeatTaskConfig.Type) {
 	case "sd":
-		taskArgs, err := buildSDHeartbeatTaskArgs(heartbeatTaskConfig.Model, config.HeartbeatPromptConfig{}, true)
+		taskArgs, err := buildSDHeartbeatTaskArgs(heartbeatTaskConfig, config.HeartbeatPromptConfig{}, true)
 		if err != nil {
 			return 0, "", err
 		}
@@ -117,7 +117,7 @@ func buildHeartbeatTaskArgs(heartbeatTaskConfig config.HeartbeatTaskConfig) (str
 
 	switch strings.ToLower(heartbeatTaskConfig.Type) {
 	case "sd":
-		taskArgs, err := buildSDHeartbeatTaskArgs(heartbeatTaskConfig.Model, prompt, useDefault)
+		taskArgs, err := buildSDHeartbeatTaskArgs(heartbeatTaskConfig, prompt, useDefault)
 		return taskArgs, models.TaskTypeSD, err
 	case "llm":
 		taskArgs, err := buildLLMHeartbeatTaskArgs(heartbeatTaskConfig, prompt, useDefault)
@@ -134,7 +134,8 @@ func selectHeartbeatPrompt(prompts []config.HeartbeatPromptConfig) (config.Heart
 	return prompts[rand.Intn(len(prompts))], false, nil
 }
 
-func buildSDHeartbeatTaskArgs(model string, prompt config.HeartbeatPromptConfig, useDefault bool) (string, error) {
+func buildSDHeartbeatTaskArgs(heartbeatTaskConfig config.HeartbeatTaskConfig, prompt config.HeartbeatPromptConfig, useDefault bool) (string, error) {
+	model := heartbeatTaskConfig.Model
 	seed := rand.Intn(100000000)
 	baseModel := map[string]interface{}{
 		"name":    model,
@@ -162,7 +163,7 @@ func buildSDHeartbeatTaskArgs(model string, prompt config.HeartbeatPromptConfig,
 			"task_config": map[string]interface{}{
 				"num_images":     1,
 				"seed":           seed,
-				"steps":          1,
+				"steps":          heartbeatTaskConfig.Steps,
 				"cfg":            0,
 				"safety_checker": false,
 			},
@@ -181,7 +182,7 @@ func buildSDHeartbeatTaskArgs(model string, prompt config.HeartbeatPromptConfig,
 			"task_config": map[string]interface{}{
 				"num_images":     1,
 				"seed":           seed,
-				"steps":          25,
+				"steps":          heartbeatTaskConfig.Steps,
 				"cfg":            0,
 				"safety_checker": false,
 			},

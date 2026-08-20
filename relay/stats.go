@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"strconv"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -108,11 +109,27 @@ func GetNodeStats(ctx context.Context) (*NodeStats, error) {
 
 func GetBalance(ctx context.Context, address string) (*big.Int, error) {
 	appConfig := config.GetConfig()
-	reqUrl := appConfig.Relay.BaseURL + "/v1/balance/" + address
 
+	params := &struct {
+		Address string `json:"address"`
+	}{
+		Address: address,
+	}
+
+	timestamp, signature, err := SignData(params, appConfig.Blockchain.Account.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	reqUrl := appConfig.Relay.BaseURL + "/v2/relay_account/" + address + "/balance"
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(timeoutCtx, "GET", reqUrl, nil)
+	query := req.URL.Query()
+	query.Add("timestamp", strconv.FormatInt(timestamp, 10))
+	query.Add("signature", signature)
+	req.URL.RawQuery = query.Encode()
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err

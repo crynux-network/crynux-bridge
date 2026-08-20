@@ -1,6 +1,8 @@
 ## Document Index
 
 - `heartbeat_tasks.md`: Heartbeat background task creation, backpressure limits, weighted task selection, configurable multi-prompt sampling, LLM text/image content mapping, and SD prompt mapping.
+- `heartbeat_llm_calibration.md`: LLM heartbeat workload grid that Relay execution-time fitting requires, including input classes, output classes, and the per-model entry set.
+- `heartbeat_sd_calibration.md`: SD heartbeat workload grid that Relay execution-time fitting requires, including the two `steps` classes per model.
 - `improve_task_success_rate_with_repeat_tasks.md`: Repeat-task design for improving API task success rate.
 - `task_lifecycle.md`: HTTP request lifetime, Relay-owned deadlines, per-inference-task reconciliation, terminal synchronization, and validation-group stopping rules.
 - `model-compatibility/`: End-to-end OpenAI-compatible LLM request adaptation, transparent task transport, gpt-task execution boundary, and response normalization.

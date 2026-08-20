@@ -243,11 +243,44 @@ func TestValidateHeartbeatTasksConfigRejectsMaxNewTokensForSD(t *testing.T) {
 			Ratio:           1.0,
 			Model:           "crynux-network/sdxl-turbo",
 			MaxPendingTasks: 5,
+			Steps:           1,
 			MaxNewTokens:    250,
 		},
 	}
 	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
 		t.Fatalf("expected max_new_tokens rejection for sd tasks")
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRequiresStepsForSD(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "sd",
+			Ratio:           1.0,
+			Model:           "crynux-network/sdxl-turbo",
+			MaxPendingTasks: 5,
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatalf("expected steps validation error")
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRejectsStepsForLLM(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen2.5-7B",
+			MaxPendingTasks: 5,
+			MaxNewTokens:    64,
+			Steps:           1,
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatalf("expected steps rejection for llm tasks")
 	}
 }
 
@@ -324,6 +357,7 @@ func TestLoadHeartbeatTasksFileDefaultName(t *testing.T) {
       "min_vram": 14,
       "fee_cnx": 0.0001,
       "max_pending_tasks": 1,
+      "steps": 1,
       "prompts": [{"text": "a cat"}]
     }
   ]
@@ -384,6 +418,25 @@ func TestLoadAndValidateRepoHeartbeatTasksJSON(t *testing.T) {
 	}
 	if len(appConfig.Task.HeartbeatTasks.Tasks) < 1 {
 		t.Fatal("expected at least one heartbeat task")
+	}
+
+	sdStepsByModel := map[string]map[uint64]struct{}{}
+	for _, task := range appConfig.Task.HeartbeatTasks.Tasks {
+		if task.Type != "sd" {
+			continue
+		}
+		if sdStepsByModel[task.Model] == nil {
+			sdStepsByModel[task.Model] = map[uint64]struct{}{}
+		}
+		sdStepsByModel[task.Model][task.Steps] = struct{}{}
+	}
+	if len(sdStepsByModel) == 0 {
+		t.Fatal("expected at least one sd heartbeat task")
+	}
+	for model, steps := range sdStepsByModel {
+		if len(steps) < 2 {
+			t.Fatalf("sd model %s has %d distinct steps, want at least 2", model, len(steps))
+		}
 	}
 }
 
