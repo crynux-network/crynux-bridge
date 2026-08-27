@@ -15,6 +15,7 @@ import (
 
 	"github.com/loopfz/gadgeto/tonic"
 	"github.com/wI2L/fizz"
+	"github.com/wI2L/fizz/openapi"
 )
 
 func InitRoutes(r *fizz.Fizz) {
@@ -24,22 +25,29 @@ func InitRoutes(r *fizz.Fizz) {
 	tasksGroup := v1g.Group("inference_tasks", "Inference tasks", "Inference tasks related APIs")
 
 	tasksGroup.POST("", []fizz.OperationOption{
-		fizz.Summary("Create an inference task"),
+		fizz.Summary("Create an inference task with API key authentication"),
 		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, tonic.Handler(inference_tasks.CreateTask, 200))
 
-	tasksGroup.GET("/:client_id/:client_task_id", []fizz.OperationOption{
-		fizz.Summary("Get task details by task id"),
+	tasksGroup.GET("/:client_task_id", []fizz.OperationOption{
+		fizz.Summary("Get task details by client task id with API key authentication"),
 		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, tonic.Handler(inference_tasks.GetTaskById, 200))
 
-	tasksGroup.GET("/:client_id/:client_task_id/images/:index", []fizz.OperationOption{
-		fizz.Summary("Get task details by task id"),
+	tasksGroup.GET("/:client_task_id/images/:index", []fizz.OperationOption{
+		fizz.Summary("Download image task result with API key authentication"),
 		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
-	}, tonic.Handler(inference_tasks.GetTaskImage, 200))
+	}, tonic.Handler(inference_tasks.GetAuthenticatedTaskImage, 200))
+
+	tasksGroup.GET("/:client_task_id/llm", []fizz.OperationOption{
+		fizz.Summary("Download LLM task JSON result with API key authentication"),
+		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
+		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
+	}, tonic.Handler(inference_tasks.GetLLMResult, 200))
+	setTaskResultResponseContent(r)
 
 	modelsGroup := v1g.Group("models", "Models", "Models related APIs")
 
@@ -198,4 +206,27 @@ func InitRoutes(r *fizz.Fizz) {
 		fizz.Response("401", "unauthorized", response.ErrorResponse{}, nil, nil),
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, middleware.AdminAuthMiddleware(), tonic.Handler(admin.GetOpenAILLMTaskTrace, 200))
+}
+
+func setTaskResultResponseContent(r *fizz.Fizz) {
+	responses := []struct {
+		path, mediaType, schemaType, format string
+	}{
+		{"/v1/inference_tasks/{client_task_id}/images/{index}", "image/png", "string", "binary"},
+		{"/v1/inference_tasks/{client_task_id}/llm", "application/json", "object", ""},
+	}
+	for _, item := range responses {
+		pathItem := r.Generator().API().Paths[item.path]
+		if pathItem == nil || pathItem.GET == nil || pathItem.GET.Responses["200"] == nil {
+			continue
+		}
+		response := pathItem.GET.Responses["200"]
+		response.Content = map[string]*openapi.MediaTypeOrRef{
+			item.mediaType: {
+				MediaType: &openapi.MediaType{Schema: &openapi.SchemaOrRef{
+					Schema: &openapi.Schema{Type: item.schemaType, Format: item.format},
+				}},
+			},
+		}
+	}
 }

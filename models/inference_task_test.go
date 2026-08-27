@@ -134,3 +134,25 @@ func TestWaitResultTaskHandlesMultipleDownloadedResults(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 }
+
+func TestInferenceTaskFeeRoundTripsUint256Text(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.InferenceTask{}); err != nil {
+		t.Fatal(err)
+	}
+	const fee = "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+	task := models.InferenceTask{TaskFee: fee}
+	if err := db.Create(&task).Error; err != nil {
+		t.Fatal(err)
+	}
+	var loaded models.InferenceTask
+	if err := db.First(&loaded, task.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if loaded.TaskFee != fee {
+		t.Fatalf("task fee = %q, want %q", loaded.TaskFee, fee)
+	}
+}

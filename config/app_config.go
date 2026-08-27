@@ -63,11 +63,11 @@ type AppConfig struct {
 	} `mapstructure:"relay"`
 
 	Task struct {
-		DefaultSDTaskFeeCNX           float64              `mapstructure:"default_sd_task_fee_cnx"`
-		DefaultSDXLTaskFeeCNX         float64              `mapstructure:"default_sd_xl_task_fee_cnx"`
-		DefaultLLMTaskFeeCNX          float64              `mapstructure:"default_llm_task_fee_cnx"`
+		DefaultSDTaskFeeCNX           string               `mapstructure:"default_sd_task_fee_cnx"`
+		DefaultSDXLTaskFeeCNX         string               `mapstructure:"default_sd_xl_task_fee_cnx"`
+		DefaultLLMTaskFeeCNX          string               `mapstructure:"default_llm_task_fee_cnx"`
 		DefaultLLMMaxCompletionTokens int                  `mapstructure:"default_llm_max_completion_tokens"`
-		DefaultSDFinetuneTaskFeeCNX   float64              `mapstructure:"default_sd_finetune_task_fee_cnx"`
+		DefaultSDFinetuneTaskFeeCNX   string               `mapstructure:"default_sd_finetune_task_fee_cnx"`
 		RepeatNum                     int                  `mapstructure:"repeat_num"`
 		SDFinetuneTimeout             uint64               `mapstructure:"sd_finetune_timeout"`
 		DefaultTaskVersion            string               `mapstructure:"default_task_version"`
@@ -135,7 +135,7 @@ type HeartbeatTaskConfig struct {
 	Ratio           float64                  `mapstructure:"ratio" json:"ratio"`
 	Model           string                   `mapstructure:"model" json:"model"`
 	MinVram         uint64                   `mapstructure:"min_vram" json:"min_vram"`
-	FeeCNX          float64                  `mapstructure:"fee_cnx" json:"fee_cnx"`
+	FeeCNX          string                   `mapstructure:"fee_cnx" json:"fee_cnx"`
 	MaxPendingTasks uint64                   `mapstructure:"max_pending_tasks" json:"max_pending_tasks"`
 	MaxNewTokens    uint64                   `mapstructure:"max_new_tokens" json:"max_new_tokens,omitempty"`
 	Steps           uint64                   `mapstructure:"steps" json:"steps,omitempty"`

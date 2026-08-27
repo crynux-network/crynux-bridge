@@ -21,7 +21,6 @@ import (
 )
 
 type TaskInput struct {
-	ClientID        string                `json:"client_id" description:"Client id" validate:"required"`
 	TaskArgs        string                `json:"task_args" description:"Task args" validate:"required"`
 	TaskType        *models.ChainTaskType `json:"task_type" description:"Task type. 0 - SD task, 1 - LLM task, 2 - SD Finetune task" validate:"required"`
 	TaskVersion     *string               `json:"task_version,omitempty" description:"Task version. Default is task.default_task_version" validate:"omitempty"`
@@ -29,8 +28,13 @@ type TaskInput struct {
 	RequiredGPU     string                `json:"required_gpu,omitempty" description:"Task required GPU name" validate:"omitempty"`
 	RequiredGPUVram uint64                `json:"required_gpu_vram,omitempty" description:"Task required GPU Vram" validate:"omitempty"`
 	RepeatNum       *int                  `json:"repeat_num,omitempty" description:"Task repeat number" validate:"omitempty"`
-	TaskFee         *uint64               `json:"task_fee,omitempty" description:"Task fee" validate:"omitempty"`
+	TaskFee         *string               `json:"task_fee" description:"Final task fee in Wei as a decimal string" validate:"required"`
 	Timeout         *uint64               `json:"timeout,omitempty" description:"Task timeout" validate:"omitempty"`
+}
+
+type CreateTaskInput struct {
+	TaskInput
+	Authorization string `header:"Authorization" validate:"required" description:"API key"`
 }
 
 type TaskResponse struct {
@@ -69,13 +73,13 @@ func getTaskSize(taskType models.ChainTaskType, taskArgs string) (uint64, error)
 	}
 }
 
-func getDefaultTaskFeeGWei(taskType models.ChainTaskType, taskArgs string, appConfig *config.AppConfig) (uint64, error) {
-	var feeCNX float64
+func getDefaultTaskFeeCNX(taskType models.ChainTaskType, taskArgs string, appConfig *config.AppConfig) (string, error) {
+	var feeCNX string
 	switch taskType {
 	case models.TaskTypeSD:
 		baseModel, err := models.GetSDTaskConfigBaseModel(taskArgs)
 		if err != nil {
-			return 0, err
+			return "", err
 		}
 		if baseModel == "crynux-network/sdxl-turbo" {
 			feeCNX = appConfig.Task.DefaultSDXLTaskFeeCNX
@@ -87,13 +91,30 @@ func getDefaultTaskFeeGWei(taskType models.ChainTaskType, taskArgs string, appCo
 	case models.TaskTypeSDFTLora:
 		feeCNX = appConfig.Task.DefaultSDFinetuneTaskFeeCNX
 	default:
-		return 0, fmt.Errorf("unsupported task type %d", taskType)
+		return "", fmt.Errorf("unsupported task type %d", taskType)
 	}
-	return config.CNXToGWei(feeCNX)
+	return feeCNX, nil
 }
 
-func getTaskFee(baseTaskFee, cap uint64) uint64 {
-	return baseTaskFee * cap
+func resolveTaskFee(
+	requested *string,
+	taskType models.ChainTaskType,
+	taskArgs string,
+	taskSize uint64,
+	appConfig *config.AppConfig,
+) (string, error) {
+	if requested != nil {
+		return config.ValidateWei(*requested)
+	}
+	feeCNX, err := getDefaultTaskFeeCNX(taskType, taskArgs, appConfig)
+	if err != nil {
+		return "", err
+	}
+	baseTaskFeeWei, err := config.CNXToWei(feeCNX)
+	if err != nil {
+		return "", err
+	}
+	return config.MultiplyWei(baseTaskFeeWei, taskSize)
 }
 
 func resolveTaskTimeout(taskType models.ChainTaskType, requested *uint64, appConfig *config.AppConfig) (uint64, error) {
@@ -147,16 +168,10 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 
 	// task args has been validated, so there should be no error
 	taskSize, _ := getTaskSize(taskType, in.TaskArgs)
-	var baseTaskFee uint64
-	if in.TaskFee != nil {
-		baseTaskFee = *in.TaskFee
-	} else {
-		baseTaskFee, err = getDefaultTaskFeeGWei(taskType, in.TaskArgs, appConfig)
-		if err != nil {
-			return nil, response.NewExceptionResponse(err)
-		}
+	taskFee, err := resolveTaskFee(in.TaskFee, taskType, in.TaskArgs, taskSize, appConfig)
+	if err != nil {
+		return nil, response.NewExceptionResponse(err)
 	}
-	taskFee := getTaskFee(baseTaskFee, taskSize)
 
 	repeatNum := appConfig.Task.RepeatNum
 	if in.RepeatNum != nil {
@@ -217,49 +232,150 @@ func isTaskArgsJSONError(err error) bool {
 	return false
 }
 
-func DoCreateTask(ctx context.Context, in *TaskInput) (*TaskResponse, error) {
+func DoCreateTask(ctx context.Context, clientID string, in *TaskInput) (*TaskResponse, error) {
 	appConfig := config.GetConfig()
 	db := config.GetDB()
-
-	// get Client
-	client, err := tools.GetClient(ctx, db, in.ClientID)
-	if err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, response.NewExceptionResponse(err)
-		}
-	}
-
-	// create ClientTask for client
-	clientTask, err := tools.CreateClientTask(ctx, db, client)
-	if err != nil {
-		return nil, response.NewExceptionResponse(err)
-	}
-
-	// build interface tasks
-	tasks, err := buildTasks(in, client, clientTask, appConfig)
-	if err != nil {
+	if err := validateTaskInput(in, appConfig); err != nil {
 		return nil, err
 	}
 
-	// save tasks to local db
-	err = models.SaveTasks(ctx, config.GetDB(), tasks)
+	client, err := tools.CreateClientIfNotExist(ctx, db, clientID)
 	if err != nil {
 		return nil, response.NewExceptionResponse(err)
 	}
+
+	clientTask, err := createTaskRecords(ctx, db, client, in, appConfig)
+	if err != nil {
+		if _, ok := err.(response.ErrorResponseMessage); ok {
+			return nil, err
+		}
+		if _, ok := err.(response.ExceptionResponseMessage); ok {
+			return nil, err
+		}
+		return nil, response.NewExceptionResponse(err)
+	}
+	return &TaskResponse{Data: clientTask}, nil
+}
+
+func createTaskRecords(
+	ctx context.Context,
+	db *gorm.DB,
+	client *models.Client,
+	in *TaskInput,
+	appConfig *config.AppConfig,
+) (*models.ClientTask, error) {
+	return saveTaskRecords(ctx, db, client, func(clientTask *models.ClientTask) ([]*models.InferenceTask, error) {
+		return buildTasks(in, client, clientTask, appConfig)
+	})
+}
+
+func saveTaskRecords(
+	ctx context.Context,
+	db *gorm.DB,
+	client *models.Client,
+	build func(*models.ClientTask) ([]*models.InferenceTask, error),
+) (*models.ClientTask, error) {
+	clientTask, err := tools.CreateClientTask(ctx, db, client)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := build(clientTask)
+	if err != nil {
+		return nil, err
+	}
+	if err := models.SaveTasks(ctx, db, tasks); err != nil {
+		return nil, err
+	}
+	return attachInferenceTasks(clientTask, tasks), nil
+}
+
+func attachInferenceTasks(clientTask *models.ClientTask, tasks []*models.InferenceTask) *models.ClientTask {
 	clientTask.InferenceTasks = make([]models.InferenceTask, len(tasks))
 	for i, t := range tasks {
 		clientTask.InferenceTasks[i] = *t
 	}
+	return clientTask
+}
 
+func validateRawTaskInput(in *TaskInput) error {
+	if in.TaskFee == nil {
+		return response.NewValidationErrorResponse("task_fee", "task_fee is required")
+	}
+	if _, err := config.ValidateWei(*in.TaskFee); err != nil {
+		return response.NewValidationErrorResponse("task_fee", err.Error())
+	}
+	return validateTaskInput(in, config.GetConfig())
+}
+
+func validateTaskInput(in *TaskInput, appConfig *config.AppConfig) error {
+	if in.TaskType == nil || *in.TaskType > models.TaskTypeSDFTLora {
+		return response.NewValidationErrorResponse("task_type", "task_type must be 0, 1, or 2")
+	}
+	repeatNum := appConfig.Task.RepeatNum
+	if in.RepeatNum != nil {
+		repeatNum = *in.RepeatNum
+	}
+	if repeatNum <= 0 {
+		return response.NewValidationErrorResponse("repeat_num", "repeat_num must be greater than 0")
+	}
+	if result, err := models.ValidateTaskArgsJsonStr(in.TaskArgs, *in.TaskType); err != nil {
+		if isTaskArgsJSONError(err) {
+			return response.NewValidationErrorResponse("task_args", fmt.Sprintf("task_args must be valid JSON: %v", err))
+		}
+		return response.NewExceptionResponse(err)
+	} else if result != nil {
+		return response.NewValidationErrorResponse("task_args", fmt.Sprintf("invalid task_args: %s", result.Error()))
+	}
+	return nil
+}
+
+func createRawTaskAndConsumeQuota(
+	ctx context.Context,
+	db *gorm.DB,
+	apiKey *models.ClientAPIKey,
+	in *TaskInput,
+) (*TaskResponse, error) {
+	var clientTask *models.ClientTask
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := apiKey.UseWithinLimit(ctx, tx); err != nil {
+			return err
+		}
+		client, err := tools.CreateClientIfNotExist(ctx, tx, apiKey.ClientID)
+		if err != nil {
+			return err
+		}
+		clientTask, err = createTaskRecords(ctx, tx, client, in, config.GetConfig())
+		return err
+	})
+	if err != nil {
+		if errors.Is(err, models.ErrAPIKeyQuotaExceeded) {
+			return nil, response.NewValidationErrorResponse("Authorization", "API key quota exceeded")
+		}
+		if _, ok := err.(response.ErrorResponseMessage); ok {
+			return nil, err
+		}
+		if _, ok := err.(response.ExceptionResponseMessage); ok {
+			return nil, err
+		}
+		return nil, response.NewExceptionResponse(err)
+	}
 	return &TaskResponse{Data: clientTask}, nil
 }
 
-func CreateTask(c *gin.Context, in *TaskInput) (*TaskResponse, error) {
+func CreateTask(c *gin.Context, in *CreateTaskInput) (*TaskResponse, error) {
 	ctx := c.Request.Context()
 	requestStart := time.Now()
+	db := config.GetDB()
 
-	// check rate limit
-	allowed, waitTime, err := ratelimit.APIRateLimiter.CheckRateLimit(ctx, in.ClientID, 20, time.Minute)
+	apiKey, err := tools.ValidateAuthorization(ctx, db, in.Authorization)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateRawTaskInput(&in.TaskInput); err != nil {
+		return nil, err
+	}
+
+	allowed, waitTime, err := ratelimit.APIRateLimiter.CheckRateLimit(ctx, apiKey.ClientID, apiKey.RateLimit, time.Minute)
 	if err != nil {
 		return nil, response.NewExceptionResponse(err)
 	}
@@ -267,7 +383,7 @@ func CreateTask(c *gin.Context, in *TaskInput) (*TaskResponse, error) {
 		return nil, response.NewValidationErrorResponse("rate_limit", fmt.Sprintf("rate limit exceeded, please wait %.2f seconds", waitTime))
 	}
 
-	taskResponse, err := DoCreateTask(ctx, in)
+	taskResponse, err := createRawTaskAndConsumeQuota(ctx, db, apiKey, &in.TaskInput)
 	if err != nil {
 		return nil, err
 	}
@@ -275,10 +391,10 @@ func CreateTask(c *gin.Context, in *TaskInput) (*TaskResponse, error) {
 	primaryTaskIDCommitment := tasktrace.StartTrace(tasktrace.StartTraceInput{
 		Source:      tasktrace.SourceDirectInferenceTask,
 		Endpoint:    "/v1/inference_tasks",
-		ClientID:    in.ClientID,
+		ClientID:    apiKey.ClientID,
 		Model:       traceModelIDs(tasks),
 		TaskType:    in.TaskType,
-		Request:     in,
+		Request:     in.TaskInput,
 		RequestTime: requestStart,
 		Tasks:       tasks,
 	}, config.GetConfig().Admin.TaskTraceMaxTasks)

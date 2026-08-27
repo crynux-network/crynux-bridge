@@ -44,6 +44,14 @@ func TestBuildCreateTaskInputTimeoutByTaskType(t *testing.T) {
 	}
 }
 
+func TestBuildCreateTaskInputPreservesWeiTaskFee(t *testing.T) {
+	const taskFeeWei = "123456789012345"
+	input := buildCreateTaskInput(&models.InferenceTask{}, taskFeeWei)
+	if input.TaskFee != taskFeeWei {
+		t.Fatalf("task fee = %q, want %q", input.TaskFee, taskFeeWei)
+	}
+}
+
 func TestBuildAbortTaskInputUsesCreatorCancelled(t *testing.T) {
 	input := buildAbortTaskInput("0xcommitment")
 	if input.TaskIDCommitment != "0xcommitment" {

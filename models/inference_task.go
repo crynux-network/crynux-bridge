@@ -124,7 +124,7 @@ type InferenceTask struct {
 	TaskType        ChainTaskType `json:"task_type"`
 	TaskModelIDs    StringArray   `json:"task_model_ids"`
 	TaskVersion     string        `json:"task_version"`
-	TaskFee         uint64        `json:"task_fee"`
+	TaskFee         string        `json:"task_fee" gorm:"type:varchar(78)"`
 	MinVram         uint64        `json:"min_vram"`
 	RequiredGPU     string        `json:"required_gpu"`
 	RequiredGPUVram uint64        `json:"required_gpu_vram"`

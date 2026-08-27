@@ -198,8 +198,8 @@ func GetTaskByCommitment(ctx context.Context, taskIDCommitment string) (*models.
 func CreateTask(ctx context.Context, task *models.InferenceTask) error {
 	appConfig := config.GetConfig()
 
-	taskFee := utils.GweiToWei(big.NewInt(int64(task.TaskFee)))
-	params := buildCreateTaskInput(task, taskFee.String())
+	taskFee := task.TaskFee
+	params := buildCreateTaskInput(task, taskFee)
 	timeout := params.Timeout
 
 	timestamp, signature, err := SignData(params, appConfig.Blockchain.Account.PrivateKey)
@@ -232,7 +232,7 @@ func CreateTask(ctx context.Context, task *models.InferenceTask) error {
 		form.Add("task_size", strconv.FormatUint(task.TaskSize, 10))
 		form.Add("task_type", strconv.Itoa(int(task.TaskType)))
 		form.Add("task_version", task.TaskVersion)
-		form.Add("task_fee", taskFee.String())
+		form.Add("task_fee", taskFee)
 		form.Add("timestamp", strconv.FormatInt(timestamp, 10))
 		form.Add("signature", signature)
 		if timeout != nil {
@@ -259,7 +259,7 @@ func CreateTask(ctx context.Context, task *models.InferenceTask) error {
 			multipartWriter.WriteField("task_size", strconv.FormatUint(task.TaskSize, 10))
 			multipartWriter.WriteField("task_type", strconv.Itoa(int(task.TaskType)))
 			multipartWriter.WriteField("task_version", task.TaskVersion)
-			multipartWriter.WriteField("task_fee", taskFee.String())
+			multipartWriter.WriteField("task_fee", taskFee)
 			multipartWriter.WriteField("timestamp", strconv.FormatInt(timestamp, 10))
 			multipartWriter.WriteField("signature", signature)
 			if timeout != nil {

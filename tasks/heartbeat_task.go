@@ -26,7 +26,7 @@ func generateHeartbeatTask(client models.Client, heartbeatTaskConfig config.Hear
 		return nil, err
 	}
 	taskModelIDs, _ := models.GetTaskConfigModelIDs(taskArgs, taskType)
-	taskFee, err := config.CNXToGWei(heartbeatTaskConfig.FeeCNX)
+	taskFee, err := config.CNXToWei(heartbeatTaskConfig.FeeCNX)
 	if err != nil {
 		return nil, err
 	}

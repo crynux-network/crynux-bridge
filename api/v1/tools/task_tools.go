@@ -2,12 +2,12 @@ package tools
 
 import (
 	"context"
-	"errors"
 
 	"crynux_bridge/models"
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // get Client from local db
@@ -36,13 +36,16 @@ func CreateClient(ctx context.Context, db *gorm.DB, clientID string) (*models.Cl
 }
 
 func CreateClientIfNotExist(ctx context.Context, db *gorm.DB, clientID string) (*models.Client, error) {
-	client, err := GetClient(ctx, db, clientID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return CreateClient(ctx, db, clientID)
-		}
+	dbCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	client := models.Client{ClientId: clientID}
+	if err := db.WithContext(dbCtx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "client_id"}},
+		DoNothing: true,
+	}).Create(&client).Error; err != nil {
+		return nil, err
 	}
-	return client, err
+	return GetClient(ctx, db, clientID)
 }
 
 // create ClientTask for the given Client

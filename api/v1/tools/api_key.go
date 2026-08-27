@@ -70,7 +70,7 @@ var ErrAPIKeyExpired = errors.New("API key is expired")
 
 func ValidateAPIKey(ctx context.Context, db *gorm.DB, apiKeyStr string) (*models.ClientAPIKey, error) {
 	rawKey, err := base64.URLEncoding.DecodeString(apiKeyStr)
-	if err != nil {
+	if err != nil || len(apiKeyStr) < 8 {
 		return nil, ErrAPIKeyInvalid
 	}
 	keyPrefix := apiKeyStr[:8]
@@ -124,8 +124,15 @@ func ChangeRateLimit(ctx context.Context, db *gorm.DB, apiKey *models.ClientAPIK
 	return ratelimit.APIRateLimiter.UpdateRateLimit(ctx, apiKey.ClientID, rateLimit, time.Minute)
 }
 
-// validate api key
 func ValidateAuthorization(ctx context.Context, db *gorm.DB, authorization string) (*models.ClientAPIKey, error) {
+	return validateAuthorization(ctx, db, authorization, true)
+}
+
+func ValidateReadAuthorization(ctx context.Context, db *gorm.DB, authorization string) (*models.ClientAPIKey, error) {
+	return validateAuthorization(ctx, db, authorization, false)
+}
+
+func validateAuthorization(ctx context.Context, db *gorm.DB, authorization string, checkQuota bool) (*models.ClientAPIKey, error) {
 	if !strings.HasPrefix(authorization, "Bearer ") {
 		return nil, response.NewValidationErrorResponse("Authorization", "Authorization header must start with 'Bearer '")
 	}
@@ -143,7 +150,7 @@ func ValidateAuthorization(ctx context.Context, db *gorm.DB, authorization strin
 	if !slices.Contains(apiKey.Roles, models.RoleAdmin) && !slices.Contains(apiKey.Roles, models.RoleChat) {
 		return nil, response.NewValidationErrorResponse("Authorization", "API key does not have required role: admin or chat")
 	}
-	if apiKey.UseLimit > 0 && apiKey.UsedCount >= apiKey.UseLimit {
+	if checkQuota && apiKey.UseLimit > 0 && apiKey.UsedCount >= apiKey.UseLimit {
 		return nil, response.NewValidationErrorResponse("Authorization", "API key quota exceeded")
 	}
 

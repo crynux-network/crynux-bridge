@@ -6,7 +6,7 @@
       "ratio": 0.5,
       "model": "crynux-network/sdxl-turbo",
       "min_vram": 14,
-      "fee_cnx": 2.0,
+      "fee_cnx": "2.0",
       "max_pending_tasks": 10,
       "steps": 1,
       "prompts": [
@@ -21,7 +21,7 @@
       "ratio": 0.5,
       "model": "crynux-network/sdxl-turbo",
       "min_vram": 14,
-      "fee_cnx": 2.0,
+      "fee_cnx": "2.0",
       "max_pending_tasks": 10,
       "steps": 4,
       "prompts": [
@@ -36,7 +36,7 @@
       "ratio": 0.5,
       "model": "crynux-network/stable-diffusion-v1-5",
       "min_vram": 4,
-      "fee_cnx": 1.0,
+      "fee_cnx": "1.0",
       "max_pending_tasks": 10,
       "steps": 1
     },
@@ -46,7 +46,7 @@
       "ratio": 0.5,
       "model": "crynux-network/stable-diffusion-v1-5",
       "min_vram": 4,
-      "fee_cnx": 1.0,
+      "fee_cnx": "1.0",
       "max_pending_tasks": 10,
       "steps": 25
     },
@@ -56,7 +56,7 @@
       "ratio": 0.5,
       "model": "Qwen/Qwen2.5-14B",
       "min_vram": 32,
-      "fee_cnx": 20.0,
+      "fee_cnx": "20.0",
       "max_pending_tasks": 10,
       "max_new_tokens": 128,
       "prompts": [
@@ -71,7 +71,7 @@
       "ratio": 0.5,
       "model": "Qwen/Qwen2.5-32B",
       "min_vram": 60,
-      "fee_cnx": 40.0,
+      "fee_cnx": "40.0",
       "max_pending_tasks": 10,
       "max_new_tokens": 250
     },
@@ -81,7 +81,7 @@
       "ratio": 1.0,
       "model": "Qwen/Qwen2.5-7B",
       "min_vram": 24,
-      "fee_cnx": 5.0,
+      "fee_cnx": "5.0",
       "max_pending_tasks": 10,
       "max_new_tokens": 64
     }

@@ -143,7 +143,6 @@ func CreateSDFinetuneLoraTask(c *gin.Context, in *SDFinetuneLoraRequest) (res *S
 	minVram := uint64(24)
 	repeatNum := 1
 	task := &inference_tasks.TaskInput{
-		ClientID:  apiKey.ClientID,
 		TaskArgs:  string(taskArgsStr),
 		TaskType:  &taskType,
 		MinVram:   &minVram,
@@ -151,7 +150,7 @@ func CreateSDFinetuneLoraTask(c *gin.Context, in *SDFinetuneLoraRequest) (res *S
 		Timeout:   in.Timeout,
 	}
 
-	taskResponse, err := inference_tasks.DoCreateTask(ctx, task)
+	taskResponse, err := inference_tasks.DoCreateTask(ctx, apiKey.ClientID, task)
 	if err != nil {
 		return nil, err
 	}

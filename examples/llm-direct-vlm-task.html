@@ -7,14 +7,14 @@
   <body>
     <script>
       const BRIDGE_ENDPOINT = "https://bridge.crynux.ai";
-      const CLIENT_ID = "replace-with-your-client-id";
+      const API_KEY = "replace-with-your-api-key";
 
       // This direct endpoint expects raw GPT task blocks:
       // { type: "text", text: "..." } and { type: "image", base64: "..." }.
       async function createDirectVLMTask(imageBase64Payload) {
         const requestBody = {
-          client_id: CLIENT_ID,
           task_type: 1, // 1 = LLM
+          task_fee: "5000000000000000000",
           task_args: JSON.stringify({
             model: "Qwen/Qwen2.5-VL-7B-Instruct",
             messages: [
@@ -38,12 +38,23 @@
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "Authorization": `Bearer ${API_KEY}`,
           },
           body: JSON.stringify(requestBody),
         });
 
         if (!res.ok) {
           throw new Error(`Create task failed: ${res.status} ${await res.text()}`);
+        }
+        return await res.json();
+      }
+
+      async function downloadLLMResult(clientTaskID) {
+        const res = await fetch(`${BRIDGE_ENDPOINT}/v1/inference_tasks/${clientTaskID}/llm`, {
+          headers: {"Authorization": `Bearer ${API_KEY}`},
+        });
+        if (!res.ok) {
+          throw new Error(`Download result failed: ${res.status} ${await res.text()}`);
         }
         return await res.json();
       }

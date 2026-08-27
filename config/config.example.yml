@@ -36,11 +36,11 @@ blockchain:
 relay:
   base_url: "https://relay.crynux.io"
 task:
-  default_sd_task_fee_cnx: 1.0
-  default_sd_xl_task_fee_cnx: 2.0
-  default_llm_task_fee_cnx: 5.0
+  default_sd_task_fee_cnx: "1.0"
+  default_sd_xl_task_fee_cnx: "2.0"
+  default_llm_task_fee_cnx: "5.0"
   default_llm_max_completion_tokens: 3000
-  default_sd_finetune_task_fee_cnx: 15.0
+  default_sd_finetune_task_fee_cnx: "15.0"
   repeat_num: 1
   sd_finetune_timeout: 120
   default_task_version: "3.1.0"

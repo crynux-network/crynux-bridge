@@ -77,6 +77,7 @@ func TestOrdinaryAbortedGroupMemberRemainsEligibleForValidation(t *testing.T) {
 func TestBuildSDFTValidationTasksPreservesTimeout(t *testing.T) {
 	source := &models.InferenceTask{
 		TaskType: models.TaskTypeSDFTLora,
+		TaskFee:  "123",
 		Timeout:  7200,
 		TaskID:   "task",
 	}
@@ -87,6 +88,9 @@ func TestBuildSDFTValidationTasksPreservesTimeout(t *testing.T) {
 	for i, task := range tasks {
 		if task.Timeout != source.Timeout {
 			t.Fatalf("validation task %d timeout = %d, want %d", i, task.Timeout, source.Timeout)
+		}
+		if task.TaskFee != source.TaskFee {
+			t.Fatalf("validation task %d did not preserve task fee", i)
 		}
 	}
 }

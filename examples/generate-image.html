@@ -5,16 +5,13 @@
 <title>Image Generator</title>
 <script>
 const CRYNUX_BRIDGE_ENDPOINT = "https://api_ig.crynux.ai"
-const CLIENT_ID = "ead13024-085a-4f01-99cf-833a8c5acc9e"
+const API_KEY = "replace-with-your-api-key"
 
 const InferenceTaskStatus = {
-  Pending: 0,
-  TransactionSent: 1,
-  BlockchainConfirmed: 2,
-  ParamsUploaded: 3,
-  PendingResult: 4,
-  Aborted: 5,
-  Success: 6
+  EndAborted: 7,
+  EndGroupRefund: 8,
+  EndInvalidated: 9,
+  ResultDownloaded: 11
 };
 
 async function generate_image(prompt) {
@@ -33,12 +30,12 @@ async function generate_image(prompt) {
   });
 
   let status = await get_task_status(task_id);
-  while (status !== InferenceTaskStatus.Success) {
+  while (status !== InferenceTaskStatus.ResultDownloaded) {
 
     console.log("task status: " + status);
 
-    if (status === InferenceTaskStatus.Aborted) {
-      throw new Error("Task was aborted.");
+    if ([InferenceTaskStatus.EndAborted, InferenceTaskStatus.EndGroupRefund, InferenceTaskStatus.EndInvalidated].includes(status)) {
+      throw new Error("Task ended without a result.");
     }
 
     await new Promise(resolve => setTimeout(resolve, 5000));
@@ -52,13 +49,14 @@ async function create_task(args) {
     const response = await fetch(CRYNUX_BRIDGE_ENDPOINT + '/v1/inference_tasks', {
         method: 'POST',
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${API_KEY}`
         },
         body: JSON.stringify({
-          "client_id": CLIENT_ID,
           "task_args": JSON.stringify(args),
           "task_type": 0,
-          "vram_limit": 10
+          "min_vram": 10,
+          "task_fee": "20000000000000000000"
         }),
     });
     const data = await response.json();
@@ -70,9 +68,9 @@ async function create_task(args) {
 }
 
 async function get_task_status(task_id) {
-  const response = await fetch(CRYNUX_BRIDGE_ENDPOINT + '/v1/inference_tasks/' + CLIENT_ID + '/' + task_id, {
+  const response = await fetch(CRYNUX_BRIDGE_ENDPOINT + '/v1/inference_tasks/' + task_id, {
     method: 'GET',
-    headers: {},
+    headers: {"Authorization": `Bearer ${API_KEY}`},
   });
 
   const data = await response.json();
@@ -81,11 +79,11 @@ async function get_task_status(task_id) {
 }
 
 async function get_image(task_id) {
-  return get_image_as_data_url(CRYNUX_BRIDGE_ENDPOINT + '/v1/inference_tasks/' + CLIENT_ID + '/' + task_id + '/images/0');
+  return get_image_as_data_url(CRYNUX_BRIDGE_ENDPOINT + '/v1/inference_tasks/' + task_id + '/images/0');
 }
 
 async function get_image_as_data_url(image_url) {
-  const res = await fetch(image_url);
+  const res = await fetch(image_url, {headers: {"Authorization": `Bearer ${API_KEY}`}});
   const data_blob = await res.blob();
   return read_blob(data_blob);
 }

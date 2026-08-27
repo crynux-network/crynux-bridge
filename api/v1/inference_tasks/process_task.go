@@ -17,9 +17,9 @@ import (
 
 type TasksCreatedCallback func([]models.InferenceTask)
 
-func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTasksCreated ...TasksCreatedCallback) (*models.GPTTaskResponse, *models.InferenceTask, error) {
+func ProcessGPTTask(ctx context.Context, db *gorm.DB, clientID string, in *TaskInput, onTasksCreated ...TasksCreatedCallback) (*models.GPTTaskResponse, *models.InferenceTask, error) {
 	/* 1. Create GPT task by function CreateTask */
-	taskResponse, err := DoCreateTask(ctx, in)
+	taskResponse, err := DoCreateTask(ctx, clientID, in)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -63,9 +63,9 @@ func ProcessGPTTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTasksCrea
 	return &gptTaskResponse, resultDownloadedTask, nil
 }
 
-func ProcessSDTask(ctx context.Context, db *gorm.DB, in *TaskInput, onTasksCreated ...TasksCreatedCallback) ([]string, *models.InferenceTask, error) {
+func ProcessSDTask(ctx context.Context, db *gorm.DB, clientID string, in *TaskInput, onTasksCreated ...TasksCreatedCallback) ([]string, *models.InferenceTask, error) {
 	/* 1. Create SD task by function CreateTask */
-	taskResponse, err := DoCreateTask(ctx, in)
+	taskResponse, err := DoCreateTask(ctx, clientID, in)
 	if err != nil {
 		return nil, nil, err
 	}

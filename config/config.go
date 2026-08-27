@@ -44,6 +44,9 @@ func InitConfig(configPath string) error {
 	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
 		return err
 	}
+	if appConfig.Task.RepeatNum <= 0 {
+		return errors.New("task.repeat_num must be set to a positive value")
+	}
 	if appConfig.Http.MaxBodyBytes <= 0 {
 		return errors.New("http.max_body_bytes must be set to a positive value")
 	}

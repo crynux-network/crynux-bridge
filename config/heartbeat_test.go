@@ -309,7 +309,7 @@ func TestLoadHeartbeatTasksFileRelativePathAndImagePath(t *testing.T) {
       "ratio": 1.0,
       "model": "qwen/qwen3.6-27b",
       "min_vram": 120,
-      "fee_cnx": 0.0006,
+      "fee_cnx": "0.0006",
       "max_pending_tasks": 1,
       "max_new_tokens": 256,
       "prompts": [
@@ -355,7 +355,7 @@ func TestLoadHeartbeatTasksFileDefaultName(t *testing.T) {
       "ratio": 1.0,
       "model": "crynux-network/sdxl-turbo",
       "min_vram": 14,
-      "fee_cnx": 0.0001,
+      "fee_cnx": "0.0001",
       "max_pending_tasks": 1,
       "steps": 1,
       "prompts": [{"text": "a cat"}]
@@ -382,7 +382,7 @@ func TestLoadHeartbeatTasksFileRejectsImagePathAndBase64(t *testing.T) {
       "ratio": 1.0,
       "model": "qwen/qwen3.6-27b",
       "min_vram": 120,
-      "fee_cnx": 0.0006,
+      "fee_cnx": "0.0006",
       "max_pending_tasks": 1,
       "max_new_tokens": 256,
       "prompts": [
@@ -450,7 +450,7 @@ func TestLoadHeartbeatTasksFileAbsoluteTasksFile(t *testing.T) {
       "ratio": 0,
       "model": "qwen/qwen3-8b",
       "min_vram": 24,
-      "fee_cnx": 0.0003,
+      "fee_cnx": "0.0003",
       "max_new_tokens": 64,
       "prompts": [{"text": "hello"}]
     }

@@ -220,14 +220,13 @@ func CreateImage(c *gin.Context, in *CreateImageRequest) (res *CreateImageRespon
 	}
 	taskType := models.TaskTypeSD
 	task := &inference_tasks.TaskInput{
-		ClientID: apiKey.ClientID,
 		TaskArgs: string(taskArgsStr),
 		TaskType: &taskType,
 	}
 
 	requestPayload := *in
 	requestPayload.Authorization = ""
-	resultFiles, resultDownloadedTask, err := inference_tasks.ProcessSDTask(ctx, db, task, func(createdTasks []models.InferenceTask) {
+	resultFiles, resultDownloadedTask, err := inference_tasks.ProcessSDTask(ctx, db, apiKey.ClientID, task, func(createdTasks []models.InferenceTask) {
 		if len(createdTasks) == 0 {
 			return
 		}

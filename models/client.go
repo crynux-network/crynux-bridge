@@ -13,7 +13,7 @@ import (
 
 type Client struct {
 	RootModel
-	ClientId string `json:"client_id"`
+	ClientId string `json:"client_id" gorm:"uniqueIndex"`
 }
 
 type ClientTaskStatus string
@@ -39,7 +39,7 @@ func (task *ClientTask) BeforeCreate(*gorm.DB) error {
 }
 
 func GetClientTaskByID(ctx context.Context, db *gorm.DB, clientTaskID uint) (*ClientTask, error) {
-	dbCtx, cancel := context.WithTimeout(ctx, 3 * time.Second)
+	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	clientTask := ClientTask{
 		RootModel: RootModel{
@@ -57,7 +57,7 @@ func (task *ClientTask) Update(ctx context.Context, db *gorm.DB, newTask *Client
 	if task.ID == 0 {
 		return errors.New("ClientTask.ID cannot be 0 when update")
 	}
-	dbCtx, cancel := context.WithTimeout(ctx, 3 * time.Second)
+	dbCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	return db.WithContext(dbCtx).Model(task).Updates(newTask).Error
 }
@@ -117,6 +117,8 @@ type ClientAPIKey struct {
 	RateLimit  int64     `json:"rate_limit" gorm:"default:1"`
 }
 
+var ErrAPIKeyQuotaExceeded = errors.New("API key quota exceeded")
+
 func (key *ClientAPIKey) Save(ctx context.Context, db *gorm.DB) error {
 	dbCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
@@ -140,6 +142,25 @@ func (key *ClientAPIKey) Use(ctx context.Context, db *gorm.DB) error {
 		"last_used_at": time.Now(),
 	}
 	return db.WithContext(dbCtx).Model(key).Updates(updates).Error
+}
+
+func (key *ClientAPIKey) UseWithinLimit(ctx context.Context, db *gorm.DB) error {
+	dbCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	result := db.WithContext(dbCtx).Model(&ClientAPIKey{}).
+		Where("id = ?", key.ID).
+		Where("use_limit <= 0 OR used_count < use_limit").
+		Updates(map[string]interface{}{
+			"used_count":   gorm.Expr("used_count + ?", 1),
+			"last_used_at": time.Now(),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrAPIKeyQuotaExceeded
+	}
+	return nil
 }
 
 func (key *ClientAPIKey) Delete(ctx context.Context, db *gorm.DB) error {

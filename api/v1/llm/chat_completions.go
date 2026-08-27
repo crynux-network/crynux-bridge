@@ -135,7 +135,6 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 	}
 
 	task := &inference_tasks.TaskInput{
-		ClientID:        apiKey.ClientID,
 		TaskArgs:        string(taskArgsStr),
 		TaskType:        &taskType,
 		TaskVersion:     nil,
@@ -147,7 +146,7 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 	}
 
 	/* 2. Create task, wait until task finish and get task result. Implemented by function ProcessGPTTask */
-	gptTaskResponse, resultDownloadedTask, err := inference_tasks.ProcessGPTTask(ctx, db, task, func(createdTasks []models.InferenceTask) {
+	gptTaskResponse, resultDownloadedTask, err := inference_tasks.ProcessGPTTask(ctx, db, apiKey.ClientID, task, func(createdTasks []models.InferenceTask) {
 		if len(createdTasks) == 0 {
 			return
 		}

@@ -6,6 +6,14 @@ This document specifies how Bridge creates, reconciles, and completes inference 
 
 Bridge MUST persist each task as an `InferenceTask` before background processing submits it to Relay.
 
+Each accepted raw task-creation request MUST create one new `ClientTask`. The raw endpoint MUST NOT accept a request identifier, deduplicate submissions, or return a task created by an earlier submission. Bridge MUST expand `repeat_num` independent primary tasks before commit, and those primary tasks and their protocol validation members MUST share that `ClientTaskID`.
+
+For raw task creation, Bridge MUST commit the conditional API-key usage increment, Client upsert, `ClientTask` creation, and all initial repeated `InferenceTask` rows in one database transaction. A quota failure, task argument validation failure, task construction failure, persistence failure, or canceled context MUST roll back the usage increment and every created row.
+
+The raw task endpoint MUST authenticate the application API key and MUST require `task_fee` as a base-10 integer string. The value MUST be in the unsigned 256-bit integer range. The submitted value is the final fee in Wei for each repeated primary task. Bridge MUST store it in `inference_tasks.task_fee` as `VARCHAR(78)` and forward it unchanged. Bridge MUST NOT multiply it by task size and MUST NOT read a default fee when the field is absent.
+
+The synchronous image, Chat Completions, Completions, SDFT, and heartbeat paths MUST read configured CNX fees as ordinary decimal strings with at most 9 fractional digits. Bridge MUST calculate Wei with exact integer arithmetic and MUST reject results outside the unsigned 256-bit integer range. Every `InferenceTask.TaskFee` MUST contain a base-10 Wei string, and Bridge MUST forward that stored value to Relay without another unit conversion. Validation and retry tasks MUST copy the Wei value unchanged.
+
 Normal SD and LLM tasks MUST NOT carry a creator-supplied execution timeout. The direct inference-task API MUST reject `timeout` for these task types. The image and OpenAI-compatible LLM APIs MUST NOT expose or forward a timeout. Relay MUST calculate the execution timeout for a normal task after node assignment.
 
 SDFT LoRA tasks MUST retain their Relay timeout input. Bridge MUST reject a request-provided timeout of zero. Bridge MUST store the positive request-provided timeout or `task.sd_finetune_timeout * 60` seconds when the request omits it. Bridge MUST copy that value to validation and retry tasks and include it in every SDFT Relay create request.
@@ -22,11 +30,15 @@ Bridge MUST NOT change an unfinished task to a local cancellation state because 
 
 Persisted tasks MUST remain eligible for `ProcessTasks` after restart. A task with a Relay commitment MUST be queried and reconciled before Bridge performs its next stage action.
 
+A committed raw task creation MUST remain queryable independently of the HTTP request that created it.
+
 ## HTTP Request Lifetime
 
 Synchronous image and LLM handlers MUST use the incoming HTTP context while waiting for local task completion. Bridge MUST NOT add a fixed three-minute wait deadline.
 
 If the HTTP context is canceled or reaches its caller-provided deadline, the handler MUST return a request error. This event MUST NOT change the stored inference-task status, stop the background worker, or submit cancellation to Relay.
+
+The raw status endpoint MUST select from the current persisted rows and return immediately. It MUST NOT call a blocking task wait function.
 
 ## Relay State Synchronization
 
@@ -47,6 +59,17 @@ Bridge MUST map both Relay success statuses to local `EndSuccess`. Bridge MUST d
 After a non-success terminal status is synchronized, the worker MUST stop active-stage processing and update the owning client task. After success is synchronized, the worker MUST download the result and persist `ResultDownloaded` before updating the owning client task.
 
 When updating the owning client task after a non-success finished inference task, Bridge MUST inspect every `InferenceTask` with the same `ClientTaskID`. Bridge MUST mark the client task `Failed` only when every such inference task is finished and none has reached `ResultDownloaded`. Bridge MUST NOT mark the client task `Failed` because only the current `TaskID` validation group has finished unsuccessfully while another inference task under the same client task is still unfinished. When any inference task under the client task reaches `ResultDownloaded` while the client task is still `Running`, Bridge MUST mark the client task `Success`.
+
+Raw status and result reads for ordinary SD and LLM client tasks MUST select one member from the current database snapshot in this order:
+
+1. The earliest `ResultDownloaded` member.
+2. An unfinished member when no result has been downloaded.
+3. The earliest `EndAborted` or `EndInvalidated` member when all members are finished.
+4. The earliest `EndGroupRefund` member when every member has that status.
+
+Within each selection step, Bridge MUST order members by `UpdatedAt ASC, ID ASC`. The selection MUST NOT write task or client-task state. Raw SDFT status MUST retain its existing SDFT member-selection behavior.
+
+Raw status and result endpoints MUST authenticate API key format, expiration, and the required admin-or-chat role without applying creation `UseLimit`. An exhausted key MUST still read and download tasks owned by its client. An invalid or expired key, a key with the wrong role, and access to another client's task MUST be rejected.
 
 ## Validation Tasks
 
