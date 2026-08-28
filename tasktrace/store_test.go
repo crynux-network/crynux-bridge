@@ -95,3 +95,43 @@ func TestStoreIndexesRelatedTasksAndRecordsEvents(t *testing.T) {
 		t.Fatalf("expected one event on validation task, got %d", len(trace.ParallelTasks[1].Events))
 	}
 }
+
+func TestTraceStartsFromClientTaskBeforePrimaryExpansion(t *testing.T) {
+	ResetForTest()
+	taskType := models.TaskTypeLLM
+	requestTime := time.Unix(100, 0)
+	traceKey := StartTrace(StartTraceInput{
+		Source:       SourceOpenAICompletions,
+		Endpoint:     "/v1/llm/completions",
+		ClientID:     "client",
+		ClientTaskID: 42,
+		TaskType:     &taskType,
+		RequestTime:  requestTime,
+		Request:      map[string]any{"model": "test"},
+	}, 10)
+	if traceKey == "" {
+		t.Fatal("trace was not started from client task")
+	}
+	primary := models.InferenceTask{
+		RootModel:        models.RootModel{ID: 7, CreatedAt: time.Unix(101, 0)},
+		ClientTaskID:     42,
+		TaskType:         taskType,
+		TaskID:           "task",
+		TaskIDCommitment: "commitment",
+	}
+	RegisterClientTasks(42, []models.InferenceTask{primary}, "primary")
+	FinishTrace(traceKey, map[string]any{"ok": true}, nil, &primary)
+	trace, ok := GetTrace("task")
+	if !ok {
+		t.Fatal("expanded primary was not linked to trace")
+	}
+	if !trace.RequestTime.Equal(requestTime) {
+		t.Fatalf("request time = %v, want %v", trace.RequestTime, requestTime)
+	}
+	if trace.PrimaryTaskIDCommitment != "commitment" || trace.FinalTaskIDCommitment != "commitment" {
+		t.Fatalf("trace commitments = %q/%q", trace.PrimaryTaskIDCommitment, trace.FinalTaskIDCommitment)
+	}
+	if trace.ResponseTime == nil {
+		t.Fatal("trace response was not recorded")
+	}
+}

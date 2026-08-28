@@ -26,15 +26,25 @@ const (
 
 type ClientTask struct {
 	RootModel
-	ClientID       uint             `json:"client_id"`
-	Status         ClientTaskStatus `json:"status"`
-	FailedCount    int              `json:"failed_count"`
-	Client         Client           `json:"-"`
-	InferenceTasks []InferenceTask  `json:"-"`
+	ClientID           uint             `json:"client_id" gorm:"index:idx_client_task_pending_submission,priority:1"`
+	Status             ClientTaskStatus `json:"status"`
+	FailedCount        int              `json:"failed_count"`
+	Submission         string           `json:"-" gorm:"type:longtext"`
+	SubmissionTaskType ChainTaskType    `json:"-" gorm:"index:idx_client_task_pending_submission,priority:3"`
+	SubmissionModelID  string           `json:"-" gorm:"index:idx_client_task_pending_submission,priority:4"`
+	EffectiveRepeatNum int              `json:"-" gorm:"not null;default:1"`
+	RepeatExpanded     bool             `json:"-" gorm:"index:idx_client_task_expansion,priority:1;index:idx_client_task_pending_submission,priority:2"`
+	NextActionAt       time.Time        `json:"-" gorm:"index:idx_client_task_expansion,priority:2"`
+	ExpansionError     string           `json:"-" gorm:"type:text"`
+	Client             Client           `json:"-"`
+	InferenceTasks     []InferenceTask  `json:"-"`
 }
 
 func (task *ClientTask) BeforeCreate(*gorm.DB) error {
 	task.Status = ClientTaskStatusRunning
+	if task.NextActionAt.IsZero() {
+		task.NextActionAt = time.Now()
+	}
 	return nil
 }
 

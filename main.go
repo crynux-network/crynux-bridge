@@ -6,6 +6,7 @@ import (
 	"crynux_bridge/config"
 	"crynux_bridge/migrate"
 	"crynux_bridge/relay"
+	"crynux_bridge/taskengine"
 	"crynux_bridge/tasks"
 	"fmt"
 	"os"
@@ -42,6 +43,34 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	engine, err := taskengine.New(config.GetDB(), taskengine.Config{
+		DefaultRepeatNum:             conf.Task.RepeatNum,
+		ScanInterval:                 conf.Task.Engine.ScanInterval,
+		StatusPollInterval:           conf.Task.Engine.StatusPollInterval,
+		ExecutionPollAdvance:         conf.Task.Engine.ExecutionPollAdvance,
+		ExecutionOverrunPollInterval: conf.Task.Engine.ExecutionOverrunPollInterval,
+		RetryInterval:                conf.Task.Engine.RetryInterval,
+		OperationTimeout:             conf.Task.Engine.OperationTimeout,
+		ExpansionBatchSize:           conf.Task.Engine.ExpansionBatchSize,
+		OperationResultBatchSize:     conf.Task.Engine.OperationResultBatchSize,
+		DueTaskBatchSize:             conf.Task.Engine.DueTaskBatchSize,
+		CreateBatchSize:              conf.Task.Engine.CreateBatchSize,
+		StatusBatchSize:              conf.Task.Engine.StatusBatchSize,
+		ValidationBatchSize:          conf.Task.Engine.ValidationBatchSize,
+		CancellationBatchSize:        conf.Task.Engine.CancellationBatchSize,
+		CreateWorkers:                conf.Task.Engine.CreateWorkers,
+		StatusWorkers:                conf.Task.Engine.StatusWorkers,
+		ValidationWorkers:            conf.Task.Engine.ValidationWorkers,
+		CancellationWorkers:          conf.Task.Engine.CancellationWorkers,
+		ResultWorkers:                conf.Task.Engine.ResultWorkers,
+		ResultDirectory:              conf.DataDir.InferenceTasks,
+		PrivateKey:                   conf.Blockchain.Account.PrivateKey,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+	taskengine.SetDefault(engine)
+	engine.Start(context.Background())
 	go tasks.ProcessTasks(context.Background())
 	go tasks.HeartbeatCreateTasks(context.Background())
 	go tasks.ProcessSDFTTasks(context.Background())

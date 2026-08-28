@@ -51,7 +51,8 @@ func CreateClientIfNotExist(ctx context.Context, db *gorm.DB, clientID string) (
 // create ClientTask for the given Client
 func CreateClientTask(ctx context.Context, db *gorm.DB, client *models.Client) (*models.ClientTask, error) {
 	clientTask := models.ClientTask{
-		Client: *client,
+		Client:         *client,
+		RepeatExpanded: true,
 	}
 	err := func() error {
 		dbCtx, cancel := context.WithTimeout(ctx, time.Second)

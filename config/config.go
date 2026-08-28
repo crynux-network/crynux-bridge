@@ -3,7 +3,9 @@ package config
 import (
 	"crypto/ecdsa"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/spf13/viper"
@@ -47,6 +49,12 @@ func InitConfig(configPath string) error {
 	if appConfig.Task.RepeatNum <= 0 {
 		return errors.New("task.repeat_num must be set to a positive value")
 	}
+	if appConfig.Task.TaskStatusPollInterval <= 0 {
+		return errors.New("task.task_status_poll_interval must be set to a positive value")
+	}
+	if err := validateTaskEngineConfig(appConfig.Task.Engine); err != nil {
+		return err
+	}
 	if appConfig.Http.MaxBodyBytes <= 0 {
 		return errors.New("http.max_body_bytes must be set to a positive value")
 	}
@@ -66,6 +74,50 @@ func InitConfig(configPath string) error {
 		}
 	}
 
+	return nil
+}
+
+func validateTaskEngineConfig(engine TaskEngineConfig) error {
+	positiveDurations := []struct {
+		name  string
+		value time.Duration
+	}{
+		{"scan_interval", engine.ScanInterval},
+		{"status_poll_interval", engine.StatusPollInterval},
+		{"execution_overrun_poll_interval", engine.ExecutionOverrunPollInterval},
+		{"retry_interval", engine.RetryInterval},
+		{"operation_timeout", engine.OperationTimeout},
+	}
+	for _, field := range positiveDurations {
+		if field.value <= 0 {
+			return fmt.Errorf("task.engine.%s must be set to a positive value", field.name)
+		}
+	}
+	if engine.ExecutionPollAdvance < 0 {
+		return errors.New("task.engine.execution_poll_advance must not be negative")
+	}
+	positiveIntegers := []struct {
+		name  string
+		value int
+	}{
+		{"expansion_batch_size", engine.ExpansionBatchSize},
+		{"operation_result_batch_size", engine.OperationResultBatchSize},
+		{"due_task_batch_size", engine.DueTaskBatchSize},
+		{"create_batch_size", engine.CreateBatchSize},
+		{"status_batch_size", engine.StatusBatchSize},
+		{"validation_batch_size", engine.ValidationBatchSize},
+		{"cancellation_batch_size", engine.CancellationBatchSize},
+		{"create_workers", engine.CreateWorkers},
+		{"status_workers", engine.StatusWorkers},
+		{"validation_workers", engine.ValidationWorkers},
+		{"cancellation_workers", engine.CancellationWorkers},
+		{"result_workers", engine.ResultWorkers},
+	}
+	for _, field := range positiveIntegers {
+		if field.value <= 0 {
+			return fmt.Errorf("task.engine.%s must be set to a positive value", field.name)
+		}
+	}
 	return nil
 }
 

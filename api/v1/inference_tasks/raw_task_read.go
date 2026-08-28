@@ -7,6 +7,7 @@ import (
 	"crynux_bridge/api/v1/response"
 	"crynux_bridge/api/v1/tools"
 	"crynux_bridge/models"
+	"crynux_bridge/taskengine"
 
 	"gorm.io/gorm"
 )
@@ -21,22 +22,27 @@ func loadRawClientTask(
 	if err != nil {
 		return nil, err
 	}
-	client, err := tools.GetClient(ctx, db, apiKey.ClientID)
+	engine, err := taskengine.Default()
+	if err != nil {
+		client, clientErr := tools.GetClient(ctx, db, apiKey.ClientID)
+		if clientErr != nil {
+			return nil, rawClientTaskLoadError(clientErr)
+		}
+		clientTask, clientTaskErr := tools.GetClientTask(ctx, db, client.ID, clientTaskID)
+		if clientTaskErr != nil {
+			return nil, rawClientTaskLoadError(clientTaskErr)
+		}
+		return clientTask, nil
+	}
+	clientTask, err := engine.Status(ctx, apiKey.ClientID, clientTaskID)
 	if err != nil {
 		return nil, rawClientTaskLoadError(err)
-	}
-	clientTask, err := tools.GetClientTask(ctx, db, client.ID, clientTaskID)
-	if err != nil {
-		return nil, rawClientTaskLoadError(err)
-	}
-	if len(clientTask.InferenceTasks) == 0 {
-		return nil, response.NewValidationErrorResponse("client_task_id", "Client task has no associated tasks")
 	}
 	return clientTask, nil
 }
 
 func rawClientTaskLoadError(err error) error {
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, taskengine.ErrTaskNotFound) {
 		return response.NewValidationErrorResponse("client_task_id", "Client task not found")
 	}
 	return response.NewExceptionResponse(err)

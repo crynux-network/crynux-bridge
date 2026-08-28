@@ -5,7 +5,9 @@
 - `heartbeat_sd_calibration.md`: SD heartbeat workload grid that Relay execution-time fitting requires, including the two `steps` classes per model.
 - `improve_task_success_rate_with_repeat_tasks.md`: Repeat-task design for improving API task success rate.
 - `task_lifecycle.md`: HTTP request lifetime, Relay-owned deadlines, per-inference-task reconciliation, terminal synchronization, and validation-group stopping rules.
-- `task_processing_concurrency.md`: Current Bridge worker and database-write concurrency behavior, concrete conflicting-write sequences, and the Raw Task API update boundary.
+- `task_processing_concurrency.md`: Single-loop lifecycle-write ownership, bounded batch request concurrency, persisted scheduling, restart recovery, and capacity verification.
+- `task_engine.md`: Authoritative Bridge TaskEngine design covering the database-driven main loop, bounded I/O workers, task creation and reads, VSS groups, repeat tasks, recovery, and integration boundaries for raw, OpenAI-compatible, and heartbeat callers.
+- `sdft_tasks.md`: Existing SDFT multi-round behavior, its boundary from the TaskEngine replacement, and the separate component contract that keeps SDFT branches out of TaskEngine.
 - `model-compatibility/`: End-to-end OpenAI-compatible LLM request adaptation, transparent task transport, gpt-task execution boundary, and response normalization.
 
 ## Model Compatibility Authority

@@ -83,6 +83,26 @@ const (
 	TaskErrorParametersValidationFailed
 )
 
+type TaskOperationType string
+
+const (
+	TaskOperationNone       TaskOperationType = ""
+	TaskOperationSyncStatus TaskOperationType = "status"
+	TaskOperationCreate     TaskOperationType = "create"
+	TaskOperationValidate   TaskOperationType = "validate"
+	TaskOperationCancel     TaskOperationType = "cancel"
+	TaskOperationResult     TaskOperationType = "result"
+)
+
+type TaskOperationStatus string
+
+const (
+	TaskOperationStatusNone      TaskOperationStatus = ""
+	TaskOperationStatusRunning   TaskOperationStatus = "running"
+	TaskOperationStatusCompleted TaskOperationStatus = "completed"
+	TaskOperationStatusFailed    TaskOperationStatus = "failed"
+)
+
 type StringArray []string
 
 func (arr *StringArray) Scan(val interface{}) error {
@@ -118,7 +138,7 @@ type InferenceTask struct {
 	RootModel
 	ClientID        uint          `json:"client_id"`
 	Client          Client        `json:"-"`
-	ClientTaskID    uint          `json:"client_task_id"`
+	ClientTaskID    uint          `json:"client_task_id" gorm:"index:idx_inference_task_client_status,priority:1"`
 	ClientTask      ClientTask    `json:"-"`
 	TaskArgs        string        `json:"task_args"`
 	TaskType        ChainTaskType `json:"task_type"`
@@ -131,11 +151,11 @@ type InferenceTask struct {
 	TaskSize        uint64        `json:"task_size"`
 	Timeout         uint64        `json:"timeout"`
 
-	Status           TaskStatus `json:"status"`
-	TaskID           string     `json:"task_id"`
+	Status           TaskStatus `json:"status" gorm:"index:idx_inference_task_client_status,priority:2"`
+	TaskID           string     `json:"task_id" gorm:"index:idx_inference_task_group,priority:1"`
 	TaskIDCommitment string     `json:"task_id_commitment"`
 	Nonce            string     `json:"nonce"`
-	Sequence         uint64     `json:"sequence"`
+	Sequence         uint64     `json:"sequence" gorm:"index:idx_inference_task_group,priority:2"`
 	NeedResult       bool       `json:"need_result"`
 	SamplingSeed     string     `json:"sampling_seed"`
 	VRFProof         string     `json:"vrf_proof"`
@@ -143,10 +163,30 @@ type InferenceTask struct {
 
 	AbortReason TaskAbortReason `json:"abort_reason"`
 	TaskError   TaskError       `json:"task_error"`
+
+	NextActionAt                time.Time           `json:"-" gorm:"index:idx_inference_task_due,priority:2"`
+	OperationType               TaskOperationType   `json:"-" gorm:"type:varchar(16)"`
+	OperationStatus             TaskOperationStatus `json:"-" gorm:"type:varchar(16);index:idx_inference_task_due,priority:1;index:idx_inference_task_operation,priority:1"`
+	OperationStartedAt          *time.Time          `json:"-"`
+	OperationResult             string              `json:"-" gorm:"type:longtext"`
+	OperationError              string              `json:"-" gorm:"type:text"`
+	OperationRetryCount         uint                `json:"-"`
+	OperationUnknown            bool                `json:"-"`
+	RelayChecked                bool                `json:"-"`
+	RelayFound                  bool                `json:"-"`
+	SelectedExecutionGPU        string              `json:"-"`
+	SelectedExecutionGPUVram    uint64              `json:"-"`
+	EstimatedCompletionAt       *time.Time          `json:"-"`
+	ResultAvailable             bool                `json:"-"`
+	ValidationSubmitted         bool                `json:"-"`
+	SiblingCancellationRequired bool                `json:"-"`
 }
 
 func (t *InferenceTask) BeforeCreate(*gorm.DB) error {
 	t.Status = InferenceTaskPending
+	if t.NextActionAt.IsZero() {
+		t.NextActionAt = time.Now()
+	}
 	return nil
 }
 

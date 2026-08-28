@@ -6,7 +6,7 @@ import (
 	"crynux_bridge/config"
 	"crynux_bridge/llmtask"
 	"crynux_bridge/models"
-	crand "crypto/rand"
+	"crynux_bridge/taskengine"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,30 +14,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	log "github.com/sirupsen/logrus"
 	"gonum.org/v1/gonum/stat/sampleuv"
-	"gorm.io/gorm"
 )
 
-func generateHeartbeatTask(client models.Client, heartbeatTaskConfig config.HeartbeatTaskConfig) (*models.InferenceTask, error) {
+func generateHeartbeatTask(heartbeatTaskConfig config.HeartbeatTaskConfig) (taskengine.Submission, error) {
 	taskArgs, taskType, err := buildHeartbeatTaskArgs(heartbeatTaskConfig)
 	if err != nil {
-		return nil, err
+		return taskengine.Submission{}, err
 	}
 	taskModelIDs, _ := models.GetTaskConfigModelIDs(taskArgs, taskType)
 	taskFee, err := config.CNXToWei(heartbeatTaskConfig.FeeCNX)
 	if err != nil {
-		return nil, err
+		return taskengine.Submission{}, err
 	}
-
-	taskIDBytes := make([]byte, 32)
-	crand.Read(taskIDBytes)
-	taskID := hexutil.Encode(taskIDBytes)
-
-	task := &models.InferenceTask{
-		Client:       client,
-		ClientTask:   models.ClientTask{Client: client},
+	repeatNum := 1
+	return taskengine.Submission{
 		TaskArgs:     taskArgs,
 		TaskType:     taskType,
 		TaskModelIDs: taskModelIDs,
@@ -45,9 +37,8 @@ func generateHeartbeatTask(client models.Client, heartbeatTaskConfig config.Hear
 		MinVram:      heartbeatTaskConfig.MinVram,
 		TaskFee:      taskFee,
 		TaskSize:     1,
-		TaskID:       taskID,
-	}
-	return task, nil
+		RepeatNum:    &repeatNum,
+	}, nil
 }
 
 func heartbeatTypeModelKey(taskType string, model string) string {
@@ -328,36 +319,20 @@ func buildLLMHeartbeatMessageContent(prompt config.HeartbeatPromptConfig) (any, 
 
 func getPendingHeartbeatTasksCount(
 	ctx context.Context,
-	client models.Client,
+	clientID string,
 	taskType models.ChainTaskType,
 	modelID string,
 ) (uint64, error) {
-	dbCtx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-
-	var count int64
-	err := config.GetDB().WithContext(dbCtx).
-		Model(&models.InferenceTask{}).
-		Where("client_id = ?", client.ID).
-		Where("task_type = ?", taskType).
-		Where("task_model_ids = ?", modelID).
-		Where("status NOT IN ?", []models.TaskStatus{
-			models.InferenceTaskEndAborted,
-			models.InferenceTaskEndGroupRefund,
-			models.InferenceTaskEndInvalidated,
-			models.InferenceTaskEndSuccess,
-			models.InferenceTaskResultDownloaded,
-		}).
-		Count(&count).Error
+	engine, err := taskengine.Default()
 	if err != nil {
 		return 0, err
 	}
-	return uint64(count), nil
+	return engine.CountPending(ctx, clientID, taskType, modelID)
 }
 
 func getPendingHeartbeatTasksCounts(
 	ctx context.Context,
-	client models.Client,
+	clientID string,
 	heartbeatTaskConfigs []config.HeartbeatTaskConfig,
 ) (map[string]uint64, error) {
 	counts := make(map[string]uint64)
@@ -373,7 +348,7 @@ func getPendingHeartbeatTasksCounts(
 		if err != nil {
 			return nil, err
 		}
-		count, err := getPendingHeartbeatTasksCount(ctx, client, taskType, modelID)
+		count, err := getPendingHeartbeatTasksCount(ctx, clientID, taskType, modelID)
 		if err != nil {
 			return nil, err
 		}
@@ -386,23 +361,13 @@ func heartbeatCreateTasks(ctx context.Context) error {
 	appConfig := config.GetConfig()
 
 	clientID := "heartbeat-task"
-	client := models.Client{ClientId: clientID}
+	engine, err := taskengine.Default()
+	if err != nil {
+		return err
+	}
 	currentHour := time.Now().Truncate(time.Hour)
-	tasksCreatedInHour := uint64(0)
-
-	if err := func() error {
-		dbCtx, cancel := context.WithTimeout(ctx, time.Second)
-		defer cancel()
-		err := config.GetDB().WithContext(dbCtx).Model(&client).Where(&client).First(&client).Error
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return config.GetDB().WithContext(dbCtx).Create(&client).Error
-			}
-			return err
-		}
-		return nil
-	}(); err != nil {
-		log.Errorf("HeartbeatTask: create client failed: %v", err)
+	tasksCreatedInHour, err := engine.CountSubmittedSince(ctx, clientID, currentHour)
+	if err != nil {
 		return err
 	}
 
@@ -413,7 +378,10 @@ func heartbeatCreateTasks(ctx context.Context) error {
 			hour := now.Truncate(time.Hour)
 			if hour.After(currentHour) {
 				currentHour = hour
-				tasksCreatedInHour = 0
+				tasksCreatedInHour, err = engine.CountSubmittedSince(ctx, clientID, currentHour)
+				if err != nil {
+					return err
+				}
 			}
 
 			maxTasksPerHour := appConfig.Task.HeartbeatTasks.MaxTasksPerHour
@@ -430,7 +398,7 @@ func heartbeatCreateTasks(ctx context.Context) error {
 				}
 			}
 
-			pendingCounts, err := getPendingHeartbeatTasksCounts(ctx, client, appConfig.Task.HeartbeatTasks.Tasks)
+			pendingCounts, err := getPendingHeartbeatTasksCounts(ctx, clientID, appConfig.Task.HeartbeatTasks.Tasks)
 			if err != nil {
 				log.Errorf("HeartbeatTask: cannot get pending heartbeat tasks counts %v", err)
 				time.Sleep(2 * time.Second)
@@ -438,7 +406,7 @@ func heartbeatCreateTasks(ctx context.Context) error {
 			}
 			log.Infof("HeartbeatTask: in-flight heartbeat tasks counts: %v", pendingCounts)
 
-			tasks := make([]*models.InferenceTask, 0, batchSize)
+			submissions := make([]taskengine.Submission, 0, batchSize)
 			batchIncrements := make(map[string]uint64)
 			generationFailed := false
 			for i := 0; i < batchSize; i++ {
@@ -450,13 +418,13 @@ func heartbeatCreateTasks(ctx context.Context) error {
 				if err != nil {
 					break
 				}
-				task, err := generateHeartbeatTask(client, heartbeatTaskConfig)
+				submission, err := generateHeartbeatTask(heartbeatTaskConfig)
 				if err != nil {
 					log.Errorf("HeartbeatTask: cannot generate heartbeat task: %v", err)
 					generationFailed = true
 					break
 				}
-				tasks = append(tasks, task)
+				submissions = append(submissions, submission)
 				key := heartbeatTypeModelKey(heartbeatTaskConfig.Type, heartbeatTaskConfig.Model)
 				batchIncrements[key]++
 			}
@@ -464,15 +432,17 @@ func heartbeatCreateTasks(ctx context.Context) error {
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			if len(tasks) == 0 {
+			if len(submissions) == 0 {
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			if err := models.SaveTasks(ctx, config.GetDB(), tasks); err != nil {
-				log.Errorf("HeartbeatTask: cannot save heartbeat tasks: %v", err)
-				return err
+			for _, submission := range submissions {
+				if _, err := engine.CreateTask(ctx, clientID, nil, submission); err != nil {
+					log.Errorf("HeartbeatTask: cannot create heartbeat task: %v", err)
+					return err
+				}
+				tasksCreatedInHour++
 			}
-			tasksCreatedInHour += uint64(len(tasks))
 		}
 		time.Sleep(2 * time.Second)
 	}

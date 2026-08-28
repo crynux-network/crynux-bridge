@@ -12,10 +12,10 @@ When `task.heartbeat_tasks.batch_size` is greater than `0`, each loop iteration 
 
 1. Enforce `max_tasks_per_hour` when it is greater than `0`.
 2. Select eligible heartbeat task entries by weighted sampling on `ratio`, excluding entries whose in-flight count exceeds `max_pending_tasks`.
-3. Create up to `batch_size` heartbeat tasks from eligible entries and persist them as local `InferenceTask` records with status `Pending`.
+3. Convert up to `batch_size` selected entries into normalized logical task submissions and call `TaskEngine.CreateTask` for each submission with `repeat_num` equal to `1`.
 4. When no eligible entry exists, sleep and continue the loop without creating tasks.
 
-Created heartbeat tasks MUST be submitted to Relay by the shared task processing pipeline.
+The heartbeat creation loop MUST NOT create or process `ClientTask` or `InferenceTask` records directly. After it calls `TaskEngine.CreateTask`, the submitted task MUST use the standard `ClientTask` persistence, repeat expansion, `InferenceTask` creation, and Relay processing flow.
 
 Each created heartbeat task MUST use:
 
@@ -72,13 +72,13 @@ When any prompt under an LLM entry contains assistant `tool_calls`, that entry's
 
 Bridge MUST select one eligible task entry by weighted sampling on `ratio`. Entries with `ratio <= 0` MUST be skipped.
 
-In-flight counting MUST use local heartbeat tasks whose `ClientId` is `heartbeat-task` and whose status is not terminal.
+In-flight counting MUST include both unexpanded heartbeat `ClientTask` submissions and expanded heartbeat `InferenceTask` records whose status is not terminal.
 
 Terminal statuses MUST be: `EndAborted`, `EndGroupRefund`, `EndInvalidated`, `EndSuccess`, and `ResultDownloaded`.
 
-`max_pending_tasks` MUST limit how many unfinished heartbeat tasks of that entry remain in Bridge and Relay. Tasks that have already been submitted to Relay and are still unfinished MUST count toward the limit.
+`max_pending_tasks` MUST limit how many unfinished heartbeat tasks of that entry remain in Bridge and Relay. A committed `ClientTask` MUST count before repeat expansion. Expansion MUST atomically replace that logical submission count with its created `InferenceTask` count so the same heartbeat task is not counted twice.
 
-In-flight counts MUST be keyed by `task_type` and the entry `model`. The stored `task_model_ids` value MUST match the base model id produced by `GetTaskConfigModelIDs` for that entry. Entries that share the same `type` and `model` MUST share one in-flight count pool.
+In-flight counts MUST be keyed by `task_type` and the entry `model`. An unexpanded `ClientTask` MUST persist indexed submission task type and model-id fields. The stored submission model id and expanded `task_model_ids` value MUST match the base model id produced by `GetTaskConfigModelIDs` for that entry. Entries that share the same `type` and `model` MUST share one in-flight count pool.
 
 An entry MUST be excluded from sampling when its in-flight count is greater than its `max_pending_tasks`. An entry whose in-flight count equals `max_pending_tasks` MUST remain eligible.
 

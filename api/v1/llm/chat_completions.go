@@ -146,20 +146,16 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 	}
 
 	/* 2. Create task, wait until task finish and get task result. Implemented by function ProcessGPTTask */
-	gptTaskResponse, resultDownloadedTask, err := inference_tasks.ProcessGPTTask(ctx, db, apiKey.ClientID, task, func(createdTasks []models.InferenceTask) {
-		if len(createdTasks) == 0 {
-			return
-		}
-		taskIDCommitment = createdTasks[0].TaskIDCommitment
+	gptTaskResponse, resultDownloadedTask, err := inference_tasks.ProcessGPTTask(ctx, db, apiKey.ClientID, task, func(clientTask *models.ClientTask) {
 		tracePrimaryTaskIDCommitment = tasktrace.StartTrace(tasktrace.StartTraceInput{
-			Source:      tasktrace.SourceOpenAIChatCompletions,
-			Endpoint:    c.FullPath(),
-			ClientID:    apiKey.ClientID,
-			Model:       in.Model,
-			TaskType:    &taskType,
-			Request:     logRequestPayload,
-			RequestTime: requestStart,
-			Tasks:       createdTasks,
+			Source:       tasktrace.SourceOpenAIChatCompletions,
+			Endpoint:     c.FullPath(),
+			ClientID:     apiKey.ClientID,
+			ClientTaskID: clientTask.ID,
+			Model:        in.Model,
+			TaskType:     &taskType,
+			Request:      logRequestPayload,
+			RequestTime:  requestStart,
 		}, config.GetConfig().Admin.TaskTraceMaxTasks)
 	})
 	if resultDownloadedTask != nil {

@@ -5,104 +5,76 @@ import (
 	"crynux_bridge/api/v1/response"
 	"crynux_bridge/config"
 	"crynux_bridge/models"
+	"crynux_bridge/taskengine"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path"
 	"sync"
+	"time"
 
 	"gorm.io/gorm"
 )
 
-type TasksCreatedCallback func([]models.InferenceTask)
+type ClientTaskCreatedCallback func(*models.ClientTask)
 
-func ProcessGPTTask(ctx context.Context, db *gorm.DB, clientID string, in *TaskInput, onTasksCreated ...TasksCreatedCallback) (*models.GPTTaskResponse, *models.InferenceTask, error) {
-	/* 1. Create GPT task by function CreateTask */
+func ProcessGPTTask(ctx context.Context, db *gorm.DB, clientID string, in *TaskInput, onTaskCreated ...ClientTaskCreatedCallback) (*models.GPTTaskResponse, *models.InferenceTask, error) {
 	taskResponse, err := DoCreateTask(ctx, clientID, in)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	/* 2. Get tasks, wait until they are finished and the taks result is downloaded  */
-	tasks := taskResponse.Data.InferenceTasks
-	if len(tasks) == 0 {
-		err := errors.New("no task created")
+	engine, err := taskengine.Default()
+	if err != nil {
 		return nil, nil, response.NewExceptionResponse(err)
 	}
-	createdTask := &tasks[0]
-	for _, callback := range onTasksCreated {
+	for _, callback := range onTaskCreated {
 		if callback != nil {
-			callback(tasks)
+			callback(taskResponse.Data)
 		}
 	}
-	taskGroups, err := models.WaitAllTaskGroup(ctx, db, tasks)
+	if err := engine.RegisterTraceTasks(ctx, taskResponse.Data.ID); err != nil {
+		return nil, nil, response.NewExceptionResponse(err)
+	}
+	pollInterval := config.GetConfig().Task.TaskStatusPollInterval
+	for {
+		status, err := engine.Status(ctx, clientID, taskResponse.Data.ID)
+		if err != nil {
+			return nil, nil, response.NewExceptionResponse(err)
+		}
+		if status.Status == models.ClientTaskStatusFailed {
+			return nil, nil, response.NewExceptionResponse(taskengine.ErrTaskFailed)
+		}
+		if status.Status == models.ClientTaskStatusSuccess {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, nil, mapTaskTimeoutError(ctx.Err())
+		case <-time.After(pollInterval):
+		}
+	}
+	result, err := engine.Result(ctx, clientID, taskResponse.Data.ID)
 	if err != nil {
-		if timeoutErr := mapTaskTimeoutError(err); timeoutErr != nil {
-			return nil, createdTask, timeoutErr
-		}
-		return nil, createdTask, response.NewExceptionResponse(err)
+		return nil, nil, response.NewExceptionResponse(err)
 	}
-	resultDownloadedTask, err := models.WaitResultTask(ctx, db, taskGroups)
-	if err != nil {
-		if timeoutErr := mapTaskTimeoutError(err); timeoutErr != nil {
-			return nil, createdTask, timeoutErr
-		}
-		return nil, createdTask, response.NewExceptionResponse(err)
+	resultDownloadedTask := &models.InferenceTask{
+		RootModel: models.RootModel{
+			ID:        result.TaskID,
+			CreatedAt: result.CreatedAt,
+		},
+		TaskID:           result.TaskIDValue,
+		TaskIDCommitment: result.TaskIDCommitment,
+		TaskType:         result.TaskType,
+		TaskSize:         result.TaskSize,
+		Status:           models.InferenceTaskResultDownloaded,
 	}
-
-	/* 3. Read task result and return */
 	results, err := readGPTTaskResults(resultDownloadedTask)
 	if err != nil {
 		return nil, resultDownloadedTask, response.NewExceptionResponse(err)
 	}
-
-	// without stream, the response is a single object, i.e. results[0]
 	gptTaskResponse := results[0]
-
 	return &gptTaskResponse, resultDownloadedTask, nil
-}
-
-func ProcessSDTask(ctx context.Context, db *gorm.DB, clientID string, in *TaskInput, onTasksCreated ...TasksCreatedCallback) ([]string, *models.InferenceTask, error) {
-	/* 1. Create SD task by function CreateTask */
-	taskResponse, err := DoCreateTask(ctx, clientID, in)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	/* 2. Get tasks, wait until they are finished and the taks result is downloaded  */
-	tasks := taskResponse.Data.InferenceTasks
-	if len(tasks) == 0 {
-		err := errors.New("no task created")
-		return nil, nil, response.NewExceptionResponse(err)
-	}
-	for _, callback := range onTasksCreated {
-		if callback != nil {
-			callback(tasks)
-		}
-	}
-	taskGroups, err := models.WaitAllTaskGroup(ctx, db, tasks)
-	if err != nil {
-		if timeoutErr := mapTaskTimeoutError(err); timeoutErr != nil {
-			return nil, nil, timeoutErr
-		}
-		return nil, nil, response.NewExceptionResponse(err)
-	}
-	resultDownloadedTask, err := models.WaitResultTask(ctx, db, taskGroups)
-	if err != nil {
-		if timeoutErr := mapTaskTimeoutError(err); timeoutErr != nil {
-			return nil, nil, timeoutErr
-		}
-		return nil, nil, response.NewExceptionResponse(err)
-	}
-
-	/* 3. Read task result and return */
-	results, err := readSDTaskResults(resultDownloadedTask)
-	if err != nil {
-		return nil, nil, response.NewExceptionResponse(err)
-	}
-
-	return results, resultDownloadedTask, nil
 }
 
 func readGPTTaskResults(task *models.InferenceTask) ([]models.GPTTaskResponse, error) {

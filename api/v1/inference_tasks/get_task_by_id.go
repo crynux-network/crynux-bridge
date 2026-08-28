@@ -15,7 +15,7 @@ type GetTaskInput struct {
 
 type GetTaskResponse struct {
 	response.Response
-	Data *models.InferenceTask `json:"data"`
+	Data *models.ClientTask `json:"data"`
 }
 
 func GetTaskById(c *gin.Context, in *GetTaskInput) (*GetTaskResponse, error) {
@@ -27,14 +27,7 @@ func GetTaskById(c *gin.Context, in *GetTaskInput) (*GetTaskResponse, error) {
 		return nil, err
 	}
 
-	var task *models.InferenceTask
-	if clientTask.InferenceTasks[0].TaskType == models.TaskTypeSDFTLora {
-		task = selectSDFTRawInferenceTask(clientTask.InferenceTasks)
-	} else {
-		task = selectRawInferenceTask(clientTask.InferenceTasks)
-	}
-
 	return &GetTaskResponse{
-		Data: task,
+		Data: clientTask,
 	}, nil
 }

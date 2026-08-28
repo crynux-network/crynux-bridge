@@ -897,6 +897,7 @@ func getUnprocessedTasks(ctx context.Context) ([]models.InferenceTask, error) {
 			defer cancel()
 			tasks := make([]models.InferenceTask, 0)
 			err := config.GetDB().WithContext(dbCtx).Model(&models.InferenceTask{}).
+				Where("task_type = ?", models.TaskTypeSDFTLora).
 				Where("status != ?", models.InferenceTaskEndAborted).
 				Where("status != ?", models.InferenceTaskEndInvalidated).
 				Where("status != ?", models.InferenceTaskEndGroupRefund).

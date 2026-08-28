@@ -1,38 +1,41 @@
 # Task Processing Concurrency
 
-This document specifies the concurrency behavior of the current Bridge task-processing implementation and the boundary of the Raw Task API update.
+This document specifies how Bridge bounds task-processing concurrency and prevents conflicting lifecycle writes. The complete state machine and interface contract are specified in [task_engine.md](./task_engine.md).
 
-## Worker Ownership
+## State Ownership
 
-`ProcessTasks` MUST use its process-local `sync.Map` to prevent two primary workers in the same Bridge process from being started for the same local `InferenceTask.ID`.
+One Bridge database MUST be processed by exactly one TaskEngine instance. TaskEngine MUST run one main loop, and only that loop may:
 
-This map does not provide exclusive write ownership for an `InferenceTask` row. A primary worker that processes a validation group calls `syncTaskGroup`, which reads Relay state and writes local state for every member of that group. A member can therefore be written by its own primary worker and by another member's primary worker.
+- apply Relay operation results to `InferenceTask` lifecycle state;
+- create repeat and VSS members;
+- decide VSS group readiness and validation ownership;
+- update `ClientTask.Status` and `ClientTask.FailedCount`;
+- calculate retry time and `next_action_at`.
 
-The map is local to one Bridge process. It does not coordinate writers across Bridge processes.
+Request workers MUST NOT write task lifecycle, VSS group, or client-task state. They MUST write only the persisted result of their assigned external operation. This separation MUST prevent a stale Relay response from replacing a newer local state such as `ResultDownloaded`.
 
-## Inference Task Writes
+## Bounded External Requests
 
-Relay query responses are applied with ordinary model updates. The update does not compare the stored status with the status that the worker previously read.
+TaskEngine MUST use separately bounded request workers for Relay batch creation, batch status, batch validation, batch cancellation, and whole-task result download.
 
-The following write order can replace newer local state with older Relay data:
+The main loop MUST group due create, status, validation, and cancellation operations by creator and operation type, split them by configured batch limits, persist every included item as running, and submit one HTTP request job per batch. It MUST NOT create one long-running goroutine per task or wait beyond the normal scan iteration to fill a batch.
 
-1. One worker queries Relay and receives a task status.
-2. Another worker downloads the result and stores `ResultDownloaded`.
-3. The first worker applies its earlier Relay response.
-4. The stored status becomes the status from the earlier response.
+One task MUST have at most one running external operation. A request timeout, response loss, process interruption, or whole-request error MUST leave mutation results unknown until TaskEngine reconciles every affected commitment through batch status. TaskEngine MUST retry only operations that Relay confirms did not take effect and still remain required.
 
-The Relay not-found path also writes a local terminal status. That write can occur while another worker is downloading a result or storing `ResultDownloaded`.
+A batch mutation MUST allow partial success. The request worker MUST persist one outcome per task or validation unit, and the main loop MUST apply those outcomes independently. One item failure MUST NOT roll back, retry, or locally fail another successful item.
 
-## Client Task Writes
+## Database Scheduling
 
-Each member worker can call `updateClientTaskStatus` for the shared `ClientTask`. The function reads the current `ClientTask` and its member tasks, then writes `Status` and, on failure, `FailedCount`.
+The main loop MUST select only bounded due batches through the indexes defined in `task_engine.md`. It MUST NOT load every unfinished task or use `OFFSET` pagination over a changing unfinished set.
 
-These reads and writes are not one conditional database operation. Two member workers can read `Running`, calculate updates from different snapshots, and then write the same `ClientTask`. The final `Status` and `FailedCount` depend on the order of those writes.
+Waiting for Relay progress and retry backoff MUST be represented by `next_action_at`. No task-processing function may hold a goroutine while sleeping for a later lifecycle stage.
 
-`ProcessTasks` scans locally unfinished inference tasks. It does not scan all `Running` client tasks to repair their status. If Bridge exits after all member tasks finish but before a member worker updates the client task, that client task can remain `Running` after restart.
+## Restart Recovery
 
-## Ownership Boundary
+TaskEngine MUST treat every persisted running operation as interrupted after restart. It MUST reconcile interrupted mutations with Relay before retrying them and MUST verify or discard incomplete LLM result files and SD result archives before another download.
 
-`InferenceTask.Status`, including the local `ResultDownloaded` value, `ClientTask.Status`, and `ClientTask.FailedCount` are Bridge database state. Relay supplies network task state but does not serialize or repair these Bridge writes.
+TaskEngine MUST recalculate every `Running` ClientTask whose members may already be finished. A process exit between member completion and client-task aggregation MUST therefore not leave the client task permanently running.
 
-The Raw Task API update MUST retain this processing behavior. It MUST NOT add status compare-and-swap updates, a single database writer for each task, or a client-task recovery scan. Raw status and result reads MUST select from one current database snapshot without writing processing state.
+## Capacity Verification
+
+Load tests MUST cover batch item partial success, unknown mutation reconciliation, VSS groups, repeats, whole-task result downloads, and restart recovery. They MUST verify configured request concurrency limits, bounded goroutine count, bounded due-query sizes, stable database and ledger backlogs, and Relay request count and items per request at the target sustained task rate.

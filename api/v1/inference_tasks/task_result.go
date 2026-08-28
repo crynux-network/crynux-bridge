@@ -2,8 +2,10 @@ package inference_tasks
 
 import (
 	"crynux_bridge/api/v1/response"
+	"crynux_bridge/api/v1/tools"
 	"crynux_bridge/config"
 	"crynux_bridge/models"
+	"crynux_bridge/taskengine"
 	"errors"
 	"fmt"
 	"os"
@@ -35,22 +37,33 @@ func getTaskResult(c *gin.Context, clientTaskID uint, authorization string, inde
 	ctx := c.Request.Context()
 	db := config.GetDB()
 
-	clientTask, err := loadRawClientTask(ctx, db, authorization, clientTaskID)
+	_, err := loadRawClientTask(ctx, db, authorization, clientTaskID)
 	if err != nil {
 		return err
 	}
-
-	task := selectRawInferenceTask(clientTask.InferenceTasks)
-	if task == nil {
-		return response.NewExceptionResponse(errors.New("client task evaluation returned no task"))
+	engine, err := taskengine.Default()
+	if err != nil {
+		return response.NewExceptionResponse(err)
 	}
-	if task.TaskType != expectedTaskType {
-		return response.NewValidationErrorResponse("client_task_id", "Task result type does not match the endpoint")
+	apiKey, err := tools.ValidateReadAuthorization(ctx, db, authorization)
+	if err != nil {
+		return err
 	}
-	if task.Status != models.InferenceTaskResultDownloaded {
+	result, err := engine.Result(ctx, apiKey.ClientID, clientTaskID)
+	if errors.Is(err, taskengine.ErrTaskRunning) || errors.Is(err, taskengine.ErrTaskFailed) {
 		return response.NewValidationErrorResponse("client_task_id", "Client task was not successful")
 	}
-
+	if err != nil {
+		return response.NewExceptionResponse(err)
+	}
+	if result.TaskType != expectedTaskType {
+		return response.NewValidationErrorResponse("client_task_id", "Task result type does not match the endpoint")
+	}
+	task := &models.InferenceTask{
+		TaskIDCommitment: result.TaskIDCommitment,
+		TaskType:         result.TaskType,
+		TaskSize:         result.TaskSize,
+	}
 	return serveAuthenticatedTaskResultFile(c, task, index)
 }
 

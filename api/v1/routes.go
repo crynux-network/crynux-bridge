@@ -125,12 +125,6 @@ func InitRoutes(r *fizz.Fizz) {
 	}, tonic.Handler(llm.ChatCompletions, 200))
 
 	imagesGroup := v1g.Group("images", "Images", "Images related APIs")
-	imagesGroup.POST("", []fizz.OperationOption{
-		fizz.ID("images_generations"),
-		fizz.Summary("Api for image generations"),
-		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
-		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
-	}, tonic.Handler(image.CreateImage, 200))
 	imagesGroup.POST("/models", []fizz.OperationOption{
 		fizz.ID("images_models"),
 		fizz.Summary("Api for finetune lora model for image generations"),

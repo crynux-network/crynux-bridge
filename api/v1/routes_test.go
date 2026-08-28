@@ -37,3 +37,19 @@ func TestTaskResultOpenAPIResponseContent(t *testing.T) {
 		}
 	}
 }
+
+func TestOrdinaryImageGenerationRouteIsNotRegistered(t *testing.T) {
+	r := fizz.NewFromEngine(gin.New())
+	InitRoutes(r)
+	if errs := r.Errors(); len(errs) > 0 {
+		t.Fatalf("route generation errors: %v", errs)
+	}
+	path := r.Generator().API().Paths["/v1/images"]
+	if path != nil && path.POST != nil {
+		t.Fatal("POST /v1/images is still registered")
+	}
+	modelsPath := r.Generator().API().Paths["/v1/images/models"]
+	if modelsPath == nil || modelsPath.POST == nil {
+		t.Fatal("POST /v1/images/models is not registered")
+	}
+}

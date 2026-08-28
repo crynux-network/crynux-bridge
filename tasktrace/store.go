@@ -19,14 +19,15 @@ const (
 )
 
 type StartTraceInput struct {
-	Source      string
-	Endpoint    string
-	ClientID    string
-	Model       string
-	TaskType    *models.ChainTaskType
-	Request     any
-	RequestTime time.Time
-	Tasks       []models.InferenceTask
+	Source       string
+	Endpoint     string
+	ClientID     string
+	Model        string
+	TaskType     *models.ChainTaskType
+	Request      any
+	RequestTime  time.Time
+	ClientTaskID uint
+	Tasks        []models.InferenceTask
 }
 
 type Trace struct {
@@ -42,6 +43,7 @@ type Trace struct {
 	Request                 any           `json:"request,omitempty"`
 	Response                any           `json:"response,omitempty"`
 	Error                   string        `json:"error,omitempty"`
+	ClientTaskID            uint          `json:"client_task_id,omitempty"`
 	PrimaryTaskIDCommitment string        `json:"primary_task_id_commitment"`
 	FinalTaskIDCommitment   string        `json:"final_task_id_commitment,omitempty"`
 	ParallelTasks           []TaskTrace   `json:"parallel_tasks"`
@@ -126,6 +128,10 @@ func RegisterTasks(parentTask *models.InferenceTask, tasks []models.InferenceTas
 	defaultStore.registerRelatedTasks(parentTask, tasks, role)
 }
 
+func RegisterClientTasks(clientTaskID uint, tasks []models.InferenceTask, role string) {
+	defaultStore.registerClientTasks(clientTaskID, tasks, role)
+}
+
 func RegisterTask(parentTask *models.InferenceTask, task *models.InferenceTask, role string) {
 	if task == nil {
 		return
@@ -150,12 +156,20 @@ func ResetForTest() {
 }
 
 func (s *store) startTrace(input StartTraceInput, maxTraces int) string {
-	if maxTraces <= 0 || len(input.Tasks) == 0 {
+	if maxTraces <= 0 || len(input.Tasks) == 0 && input.ClientTaskID == 0 {
 		return ""
 	}
 
-	primary := input.Tasks[0].TaskIDCommitment
-	if primary == "" {
+	traceKey := ""
+	primaryCommitment := ""
+	if len(input.Tasks) > 0 {
+		primaryCommitment = input.Tasks[0].TaskIDCommitment
+		traceKey = primaryCommitment
+	}
+	if traceKey == "" && input.ClientTaskID != 0 {
+		traceKey = fmt.Sprintf("client:%d", input.ClientTaskID)
+	}
+	if traceKey == "" {
 		return ""
 	}
 	requestTime := input.RequestTime
@@ -167,11 +181,11 @@ func (s *store) startTrace(input StartTraceInput, maxTraces int) string {
 	defer s.mu.Unlock()
 
 	s.maxTraces = maxTraces
-	if existing, ok := s.traces[primary]; ok {
+	if existing, ok := s.traces[traceKey]; ok {
 		existing.trace.Request = normalizePayload(input.Request)
 		existing.trace.RequestTime = requestTime
-		s.addTasks(existing, primary, input.Tasks, "primary")
-		return primary
+		s.addTasks(existing, traceKey, input.Tasks, "primary")
+		return traceKey
 	}
 
 	traceType, traceTypeCode := taskTypeFields(input.TaskType)
@@ -185,17 +199,21 @@ func (s *store) startTrace(input StartTraceInput, maxTraces int) string {
 			TaskTypeCode:            traceTypeCode,
 			RequestTime:             requestTime,
 			Request:                 normalizePayload(input.Request),
-			PrimaryTaskIDCommitment: primary,
+			ClientTaskID:            input.ClientTaskID,
+			PrimaryTaskIDCommitment: primaryCommitment,
 		},
 		tasks:     make(map[string]*TaskTrace),
 		eventKeys: make(map[string]struct{}),
 	}
-	s.traces[primary] = record
-	s.order = append(s.order, primary)
-	s.addTasks(record, primary, input.Tasks, "primary")
+	s.traces[traceKey] = record
+	s.order = append(s.order, traceKey)
+	if input.ClientTaskID != 0 {
+		s.clientIndex[input.ClientTaskID] = traceKey
+	}
+	s.addTasks(record, traceKey, input.Tasks, "primary")
 	s.evictLocked()
 
-	return primary
+	return traceKey
 }
 
 func (s *store) finishTrace(primaryTaskIDCommitment string, response any, err error, finalTask *models.InferenceTask) {
@@ -238,6 +256,23 @@ func (s *store) registerRelatedTasks(parentTask *models.InferenceTask, tasks []m
 	}
 	record := s.traces[primary]
 	s.addTasks(record, primary, tasks, role)
+}
+
+func (s *store) registerClientTasks(clientTaskID uint, tasks []models.InferenceTask, role string) {
+	if clientTaskID == 0 || len(tasks) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	traceKey := s.clientIndex[clientTaskID]
+	if traceKey == "" {
+		return
+	}
+	record := s.traces[traceKey]
+	if record == nil {
+		return
+	}
+	s.addTasks(record, traceKey, tasks, role)
 }
 
 func (s *store) recordEvent(task *models.InferenceTask, name string, details map[string]any) {
@@ -324,6 +359,9 @@ func (s *store) addTasks(record *traceRecord, primary string, tasks []models.Inf
 
 		if task.TaskIDCommitment != "" {
 			s.taskCommitmentIndex[task.TaskIDCommitment] = primary
+			if record.trace.PrimaryTaskIDCommitment == "" && role == "primary" {
+				record.trace.PrimaryTaskIDCommitment = task.TaskIDCommitment
+			}
 		}
 		if task.TaskID != "" {
 			s.taskIDIndex[task.TaskID] = primary
@@ -371,6 +409,9 @@ func (s *store) evictLocked() {
 		delete(s.traces, primary)
 		if record == nil {
 			continue
+		}
+		if record.trace.ClientTaskID != 0 {
+			delete(s.clientIndex, record.trace.ClientTaskID)
 		}
 		for _, task := range record.tasks {
 			if task.TaskIDCommitment != "" {

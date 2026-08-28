@@ -7,6 +7,7 @@ import (
 	"crynux_bridge/api/v1/tools"
 	"crynux_bridge/config"
 	"crynux_bridge/models"
+	"crynux_bridge/taskengine"
 	"crynux_bridge/tasktrace"
 	"crypto/rand"
 	"encoding/json"
@@ -218,6 +219,53 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 	return tasks, nil
 }
 
+func buildSubmission(in *TaskInput, appConfig *config.AppConfig) (taskengine.Submission, error) {
+	taskType := *in.TaskType
+	taskVersion := appConfig.Task.DefaultTaskVersion
+	if in.TaskVersion != nil {
+		taskVersion = *in.TaskVersion
+	}
+	var minVram uint64
+	if in.MinVram == nil {
+		value, err := getDefaultMinVram(taskType, in.TaskArgs)
+		if err != nil {
+			return taskengine.Submission{}, err
+		}
+		minVram = value
+	} else {
+		minVram = *in.MinVram
+	}
+	taskSize, err := getTaskSize(taskType, in.TaskArgs)
+	if err != nil {
+		return taskengine.Submission{}, err
+	}
+	taskFee, err := resolveTaskFee(in.TaskFee, taskType, in.TaskArgs, taskSize, appConfig)
+	if err != nil {
+		return taskengine.Submission{}, err
+	}
+	modelIDs, err := models.GetTaskConfigModelIDs(in.TaskArgs, taskType)
+	if err != nil {
+		return taskengine.Submission{}, err
+	}
+	timeout, err := resolveTaskTimeout(taskType, in.Timeout, appConfig)
+	if err != nil {
+		return taskengine.Submission{}, err
+	}
+	return taskengine.Submission{
+		TaskArgs:        in.TaskArgs,
+		TaskType:        taskType,
+		TaskModelIDs:    modelIDs,
+		TaskVersion:     taskVersion,
+		TaskFee:         taskFee,
+		MinVram:         minVram,
+		RequiredGPU:     in.RequiredGPU,
+		RequiredGPUVram: in.RequiredGPUVram,
+		TaskSize:        taskSize,
+		Timeout:         timeout,
+		RepeatNum:       in.RepeatNum,
+	}, nil
+}
+
 func isTaskArgsJSONError(err error) bool {
 	var syntaxErr *json.SyntaxError
 	if errors.As(err, &syntaxErr) {
@@ -239,12 +287,26 @@ func DoCreateTask(ctx context.Context, clientID string, in *TaskInput) (*TaskRes
 		return nil, err
 	}
 
-	client, err := tools.CreateClientIfNotExist(ctx, db, clientID)
+	if *in.TaskType == models.TaskTypeSDFTLora {
+		client, err := tools.CreateClientIfNotExist(ctx, db, clientID)
+		if err != nil {
+			return nil, response.NewExceptionResponse(err)
+		}
+		clientTask, err := createTaskRecords(ctx, db, client, in, appConfig)
+		if err != nil {
+			return nil, response.NewExceptionResponse(err)
+		}
+		return &TaskResponse{Data: clientTask}, nil
+	}
+	submission, err := buildSubmission(in, appConfig)
 	if err != nil {
 		return nil, response.NewExceptionResponse(err)
 	}
-
-	clientTask, err := createTaskRecords(ctx, db, client, in, appConfig)
+	engine, err := taskengine.Default()
+	if err != nil {
+		return nil, response.NewExceptionResponse(err)
+	}
+	clientTask, err := engine.CreateTask(ctx, clientID, nil, submission)
 	if err != nil {
 		if _, ok := err.(response.ErrorResponseMessage); ok {
 			return nil, err
@@ -335,18 +397,56 @@ func createRawTaskAndConsumeQuota(
 	apiKey *models.ClientAPIKey,
 	in *TaskInput,
 ) (*TaskResponse, error) {
-	var clientTask *models.ClientTask
-	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := apiKey.UseWithinLimit(ctx, tx); err != nil {
+	if apiKey.UseLimit > 0 && apiKey.UsedCount >= apiKey.UseLimit {
+		return nil, response.NewValidationErrorResponse("Authorization", "API key quota exceeded")
+	}
+	if in.TaskType != nil && *in.TaskType == models.TaskTypeSDFTLora {
+		var clientTask *models.ClientTask
+		err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := apiKey.UseWithinLimit(ctx, tx); err != nil {
+				return err
+			}
+			client, err := tools.CreateClientIfNotExist(ctx, tx, apiKey.ClientID)
+			if err != nil {
+				return err
+			}
+			clientTask, err = createTaskRecords(ctx, tx, client, in, config.GetConfig())
 			return err
-		}
-		client, err := tools.CreateClientIfNotExist(ctx, tx, apiKey.ClientID)
+		})
 		if err != nil {
-			return err
+			return nil, response.NewExceptionResponse(err)
 		}
-		clientTask, err = createTaskRecords(ctx, tx, client, in, config.GetConfig())
-		return err
-	})
+		return &TaskResponse{Data: clientTask}, nil
+	}
+	if config.GetConfig() == nil || in.TaskType == nil {
+		err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := apiKey.UseWithinLimit(ctx, tx); err != nil {
+				return err
+			}
+			client, err := tools.CreateClientIfNotExist(ctx, tx, apiKey.ClientID)
+			if err != nil {
+				return err
+			}
+			_, err = tools.CreateClientTask(ctx, tx, client)
+			return err
+		})
+		if err != nil {
+			if errors.Is(err, models.ErrAPIKeyQuotaExceeded) {
+				return nil, response.NewValidationErrorResponse("Authorization", "API key quota exceeded")
+			}
+			return nil, response.NewExceptionResponse(err)
+		}
+		return nil, response.NewExceptionResponse(errors.New("task configuration is not initialized"))
+	}
+	submission, err := buildSubmission(in, config.GetConfig())
+	if err != nil {
+		return nil, response.NewExceptionResponse(err)
+	}
+	engine, err := taskengine.Default()
+	if err != nil {
+		return nil, response.NewExceptionResponse(err)
+	}
+	clientTask, err := engine.CreateTask(ctx, apiKey.ClientID, apiKey, submission)
 	if err != nil {
 		if errors.Is(err, models.ErrAPIKeyQuotaExceeded) {
 			return nil, response.NewValidationErrorResponse("Authorization", "API key quota exceeded")
@@ -387,24 +487,28 @@ func CreateTask(c *gin.Context, in *CreateTaskInput) (*TaskResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	tasks := taskResponse.Data.InferenceTasks
-	primaryTaskIDCommitment := tasktrace.StartTrace(tasktrace.StartTraceInput{
-		Source:      tasktrace.SourceDirectInferenceTask,
-		Endpoint:    "/v1/inference_tasks",
-		ClientID:    apiKey.ClientID,
-		Model:       traceModelIDs(tasks),
-		TaskType:    in.TaskType,
-		Request:     in.TaskInput,
-		RequestTime: requestStart,
-		Tasks:       tasks,
+	clientTask := taskResponse.Data
+	traceKey := tasktrace.StartTrace(tasktrace.StartTraceInput{
+		Source:       tasktrace.SourceDirectInferenceTask,
+		Endpoint:     "/v1/inference_tasks",
+		ClientID:     apiKey.ClientID,
+		Model:        traceClientTaskModel(clientTask),
+		TaskType:     in.TaskType,
+		Request:      in.TaskInput,
+		RequestTime:  requestStart,
+		ClientTaskID: clientTask.ID,
+		Tasks:        clientTask.InferenceTasks,
 	}, config.GetConfig().Admin.TaskTraceMaxTasks)
-	tasktrace.FinishTrace(primaryTaskIDCommitment, taskResponse, nil, nil)
+	tasktrace.FinishTrace(traceKey, taskResponse, nil, nil)
 	return taskResponse, nil
 }
 
-func traceModelIDs(tasks []models.InferenceTask) string {
-	if len(tasks) == 0 {
+func traceClientTaskModel(clientTask *models.ClientTask) string {
+	if clientTask.SubmissionModelID != "" {
+		return clientTask.SubmissionModelID
+	}
+	if len(clientTask.InferenceTasks) == 0 {
 		return ""
 	}
-	return strings.Join(tasks[0].TaskModelIDs, ",")
+	return strings.Join(clientTask.InferenceTasks[0].TaskModelIDs, ",")
 }
