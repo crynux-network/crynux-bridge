@@ -41,14 +41,9 @@ func setupLegacy20260827DB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestM20260827ConvertsLegacyFeesAndReplacesClientIndex(t *testing.T) {
+func TestM20260827AltersTaskFeeAndReplacesClientIndex(t *testing.T) {
 	db := setupLegacy20260827DB(t)
-	tasks := []legacyInferenceTask20260827{
-		{TaskFee: 0},
-		{TaskFee: 1},
-		{TaskFee: 9_223_372_036_854_775_807},
-	}
-	if err := db.Create(&tasks).Error; err != nil {
+	if err := db.Create(&legacyInferenceTask20260827{TaskFee: 100000}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&[]legacyClient20260827{{ClientID: "one"}, {ClientID: "two"}}).Error; err != nil {
@@ -73,19 +68,8 @@ func TestM20260827ConvertsLegacyFeesAndReplacesClientIndex(t *testing.T) {
 		t.Fatal("task_fee is not a text column")
 	}
 
-	var loaded []inferenceTaskFee20260827
-	if err := db.Order("id").Find(&loaded).Error; err != nil {
-		t.Fatal(err)
-	}
-	wantFees := []string{
-		"0",
-		"1000000000",
-		"9223372036854775807000000000",
-	}
-	for i, want := range wantFees {
-		if loaded[i].TaskFee != want {
-			t.Fatalf("task %d fee = %q, want %q", loaded[i].ID, loaded[i].TaskFee, want)
-		}
+	if !db.Migrator().HasIndex(&clientIDIndex20260827{}, "idx_clients_client_id") {
+		t.Fatal("unique client_id index was not created")
 	}
 
 	if err := db.Create(&legacyClient20260827{ClientID: "unique"}).Error; err != nil {

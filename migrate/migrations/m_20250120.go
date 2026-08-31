@@ -1,7 +1,6 @@
 package migrations
 
 import (
-	"crynux_bridge/models"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -51,23 +50,21 @@ func M20250120(db *gorm.DB) *gormigrate.Gormigrate {
 	type TaskError uint8
 
 	type InferenceTask struct {
-		ID              uint              `gorm:"primarykey"`
-		CreatedAt       time.Time         `gorm:"index"`
-		UpdatedAt       time.Time         `gorm:"index"`
-		DeletedAt       gorm.DeletedAt    `gorm:"index"`
-		ClientID        uint              `json:"client_id"`
-		Client          models.Client     `json:"-"`
-		ClientTaskID    uint              `json:"client_task_id"`
-		ClientTask      models.ClientTask `json:"-"`
-		TaskArgs        string            `json:"task_args"`
-		TaskType        ChainTaskType     `json:"task_type" gorm:"index"`
-		TaskModelIDs    StringArray       `json:"task_model_ids" gorm:"text"`
-		TaskVersion     string            `json:"task_version"`
-		TaskFee         uint64            `json:"task_fee"`
-		MinVram         uint64            `json:"min_vram"`
-		RequiredGPU     string            `json:"required_gpu"`
-		RequiredGPUVram uint64            `json:"required_gpu_vram"`
-		TaskSize        uint64            `json:"task_size"`
+		ID              uint           `gorm:"primarykey"`
+		CreatedAt       time.Time      `gorm:"index"`
+		UpdatedAt       time.Time      `gorm:"index"`
+		DeletedAt       gorm.DeletedAt `gorm:"index"`
+		ClientID        uint           `json:"client_id"`
+		ClientTaskID    uint           `json:"client_task_id"`
+		TaskArgs        string         `json:"task_args"`
+		TaskType        ChainTaskType  `json:"task_type" gorm:"index"`
+		TaskModelIDs    StringArray    `json:"task_model_ids" gorm:"text"`
+		TaskVersion     string         `json:"task_version"`
+		TaskFee         uint64         `json:"task_fee"`
+		MinVram         uint64         `json:"min_vram"`
+		RequiredGPU     string         `json:"required_gpu"`
+		RequiredGPUVram uint64         `json:"required_gpu_vram"`
+		TaskSize        uint64         `json:"task_size"`
 
 		Status           TaskStatus `json:"status" gorm:"index"`
 		TaskID           string     `json:"task_id" gorm:"index"`

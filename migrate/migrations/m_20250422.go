@@ -7,7 +7,7 @@ import (
 
 func M20250422(db *gorm.DB) *gormigrate.Gormigrate {
 	type Client struct {
-		ClientId string `json:"client_id" gorm:"type:string;size:255;index"`
+		ClientId string `json:"client_id" gorm:"type:varchar(255);index"`
 	}
 
 	return gormigrate.New(db, gormigrate.DefaultOptions, []*gormigrate.Migration{

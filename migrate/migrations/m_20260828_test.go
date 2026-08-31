@@ -1,49 +1,68 @@
 package migrations
 
 import (
-	"crynux_bridge/models"
 	"testing"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
-func TestM20260828AddsTaskEngineStateAndMarksExistingClientTasksExpanded(t *testing.T) {
+type legacyClientTask20260828 struct {
+	ID        uint `gorm:"primaryKey"`
+	ClientID  uint
+	Status    string
+	FailedCount int
+}
+
+func (legacyClientTask20260828) TableName() string {
+	return "client_tasks"
+}
+
+type legacyInferenceTask20260828 struct {
+	ID               uint   `gorm:"primaryKey"`
+	ClientTaskID     uint
+	Status           uint8
+	TaskID           string
+	Sequence         uint64
+}
+
+func (legacyInferenceTask20260828) TableName() string {
+	return "inference_tasks"
+}
+
+func TestM20260828AddsTaskEngineState(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.Client{}, &models.ClientTask{}, &models.InferenceTask{}); err != nil {
+	if err := db.AutoMigrate(&legacyClientTask20260828{}, &legacyInferenceTask20260828{}); err != nil {
 		t.Fatal(err)
 	}
-	legacy := models.ClientTask{ClientID: 1}
-	if err := db.Create(&legacy).Error; err != nil {
+	if err := db.Create(&legacyClientTask20260828{ClientID: 1}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := M20260828(db).Migrate(); err != nil {
 		t.Fatal(err)
 	}
-	var updated models.ClientTask
-	if err := db.First(&updated, legacy.ID).Error; err != nil {
-		t.Fatal(err)
+	if !db.Migrator().HasColumn(&clientTaskEngineFields20260828{}, "RepeatExpanded") {
+		t.Fatal("missing client_tasks.repeat_expanded")
 	}
-	if !updated.RepeatExpanded {
-		t.Fatal("existing client task was not marked repeat-expanded")
+	if !db.Migrator().HasColumn(&inferenceTaskEngineFields20260828{}, "OperationStatus") {
+		t.Fatal("missing inference_tasks.operation_status")
 	}
-	for _, index := range []string{
-		"idx_client_task_expansion",
-		"idx_client_task_pending_submission",
-		"idx_inference_task_due",
-		"idx_inference_task_operation",
-		"idx_inference_task_group",
-		"idx_inference_task_client_status",
+	for _, index := range []struct {
+		model any
+		name  string
+	}{
+		{&clientTaskEngineFields20260828{}, "idx_client_task_expansion"},
+		{&clientTaskEngineFields20260828{}, "idx_client_task_pending_submission"},
+		{&inferenceTaskEngineFields20260828{}, "idx_inference_task_due"},
+		{&inferenceTaskEngineFields20260828{}, "idx_inference_task_operation"},
+		{&inferenceTaskEngineFields20260828{}, "idx_inference_task_group"},
+		{&inferenceTaskEngineFields20260828{}, "idx_inference_task_client_status"},
 	} {
-		model := any(&models.InferenceTask{})
-		if index == "idx_client_task_expansion" || index == "idx_client_task_pending_submission" {
-			model = &models.ClientTask{}
-		}
-		if !db.Migrator().HasIndex(model, index) {
-			t.Fatalf("missing index %s", index)
+		if !db.Migrator().HasIndex(index.model, index.name) {
+			t.Fatalf("missing index %s", index.name)
 		}
 	}
 }

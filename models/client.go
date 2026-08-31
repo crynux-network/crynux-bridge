@@ -13,7 +13,7 @@ import (
 
 type Client struct {
 	RootModel
-	ClientId string `json:"client_id" gorm:"uniqueIndex"`
+	ClientId string `json:"client_id" gorm:"type:varchar(255);uniqueIndex"`
 }
 
 type ClientTaskStatus string
@@ -31,7 +31,7 @@ type ClientTask struct {
 	FailedCount        int              `json:"failed_count"`
 	Submission         string           `json:"-" gorm:"type:longtext"`
 	SubmissionTaskType ChainTaskType    `json:"-" gorm:"index:idx_client_task_pending_submission,priority:3"`
-	SubmissionModelID  string           `json:"-" gorm:"index:idx_client_task_pending_submission,priority:4"`
+	SubmissionModelID  string           `json:"-" gorm:"type:varchar(255);index:idx_client_task_pending_submission,priority:4"`
 	EffectiveRepeatNum int              `json:"-" gorm:"not null;default:1"`
 	RepeatExpanded     bool             `json:"-" gorm:"index:idx_client_task_expansion,priority:1;index:idx_client_task_pending_submission,priority:2"`
 	NextActionAt       time.Time        `json:"-" gorm:"index:idx_client_task_expansion,priority:2"`
