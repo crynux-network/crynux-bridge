@@ -30,6 +30,18 @@ func InitRoutes(r *fizz.Fizz) {
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, tonic.Handler(inference_tasks.CreateTask, 200))
 
+	tasksGroup.POST("/batch", []fizz.OperationOption{
+		fizz.Summary("Create inference tasks in a batch with API key authentication"),
+		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
+		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
+	}, tonic.Handler(inference_tasks.BatchCreateTask, 200))
+
+	tasksGroup.POST("/batch/status", []fizz.OperationOption{
+		fizz.Summary("Get client task statuses in a batch with API key authentication"),
+		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
+		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
+	}, tonic.Handler(inference_tasks.BatchGetTaskStatus, 200))
+
 	tasksGroup.GET("/:client_task_id", []fizz.OperationOption{
 		fizz.Summary("Get task details by client task id with API key authentication"),
 		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),

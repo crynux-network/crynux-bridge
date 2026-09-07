@@ -55,6 +55,10 @@ The raw task API MUST remain asynchronous:
 3. Status and results MUST remain available through the raw task status and result endpoints.
 4. The response MUST NOT contain an `InferenceTask` or a list of `InferenceTask` records.
 
+`POST /v1/inference_tasks/batch` MUST create multiple logical `ClientTask` submissions in one request. Each item MUST use the same validation and `TaskEngine` creation path as `POST /v1/inference_tasks`. The response MUST contain one result per request item. One item failure MUST NOT roll back another successful item in the same batch. The batch MUST contain at least one item and at most 100 items.
+
+`POST /v1/inference_tasks/batch/status` MUST return ClientTask status for a list of client task IDs owned by the authenticated client. The response MUST contain one result per requested ID in request order. A missing or foreign ID MUST appear as an item-level error and MUST NOT fail the whole batch. The batch MUST contain at least one ID and at most 100 IDs after request validation. Status reads MUST remain authorized after the API key's creation quota is exhausted.
+
 The OpenAI-compatible `/completions` and `/chat/completions` endpoints MUST remain synchronous:
 
 1. The endpoint MUST create the task through the same `TaskEngine` task-creation path.

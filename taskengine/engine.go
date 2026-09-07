@@ -149,6 +149,22 @@ func (e *Engine) Status(ctx context.Context, clientID string, clientTaskID uint)
 	return &clientTask, nil
 }
 
+func (e *Engine) StatusBatch(ctx context.Context, clientID string, clientTaskIDs []uint) ([]models.ClientTask, error) {
+	if len(clientTaskIDs) == 0 {
+		return []models.ClientTask{}, nil
+	}
+	var clientTasks []models.ClientTask
+	err := e.db.WithContext(ctx).
+		Model(&models.ClientTask{}).
+		Joins("JOIN clients ON clients.id = client_tasks.client_id").
+		Where("client_tasks.id IN ? AND clients.client_id = ?", clientTaskIDs, clientID).
+		Find(&clientTasks).Error
+	if err != nil {
+		return nil, err
+	}
+	return clientTasks, nil
+}
+
 func (e *Engine) Result(ctx context.Context, clientID string, clientTaskID uint) (*Result, error) {
 	clientTask, err := e.Status(ctx, clientID, clientTaskID)
 	if err != nil {
