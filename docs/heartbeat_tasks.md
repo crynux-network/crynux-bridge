@@ -54,6 +54,8 @@ Each heartbeat task entry under `task.heartbeat_tasks.tasks` MUST define:
 - `max_new_tokens` when `type` is `llm`
 - `steps` when `type` is `sd`
 - optional `tools` when `type` is `llm`
+- optional `tool_choice` when `type` is `llm`
+- optional `response_format` when `type` is `llm`
 - optional `prompts`
 
 When `ratio > 0`, `max_pending_tasks` MUST be greater than `0`. Config load MUST reject entries that violate this rule.
@@ -68,7 +70,31 @@ When `type` is `llm`, `steps` MUST NOT be set. Config load MUST reject LLM entri
 
 When `type` is `sd`, `tools` MUST NOT be set. Config load MUST reject SD entries that set `tools`.
 
+When `type` is `sd`, `tool_choice` MUST NOT be set. Config load MUST reject SD entries that set `tool_choice`.
+
+When `type` is `sd`, `response_format` MUST NOT be set. Config load MUST reject SD entries that set `response_format`.
+
 When any prompt under an LLM entry contains assistant `tool_calls`, that entry's `tools` MUST be a non-empty array. Config load MUST reject entries that violate this rule.
+
+When `tool_choice` is set on an LLM entry, it MUST be one of:
+
+- the string `none`
+- the string `auto`
+- the string `required`
+- an object `{"type":"function","function":{"name":"<tool-name>"}}`
+
+When `tool_choice` is `auto`, `required`, or a named function object, that entry's `tools` MUST be a non-empty array. Config load MUST reject entries that violate this rule.
+
+When `tool_choice` is a named function object, `function.name` MUST equal the `function.name` of exactly one entry in that task's `tools`. Config load MUST reject entries that violate this rule.
+
+When `response_format` is set on an LLM entry, it MUST be one of:
+
+- `{"type":"json_object"}`
+- `{"type":"json_schema","json_schema":{"name":"<name>","schema":{...}}}`
+
+For `json_schema`, `json_schema.name` MUST be a non-empty string and `json_schema.schema` MUST be an object. Config load MUST reject entries that violate this rule.
+
+An LLM entry MAY set both `tool_choice` and `response_format`.
 
 Bridge MUST select one eligible task entry by weighted sampling on `ratio`. Entries with `ratio <= 0` MUST be skipped.
 
@@ -195,8 +221,12 @@ Selected LLM prompt fields MUST map to Relay GPT inference task args:
 - when the selected prompt uses `text` or `content`, `messages` as a single user message whose `content` is that string or content block list
 - when the selected prompt uses `messages`, `messages` as that configured list after tool-history adaptation
 - `tools` from the task entry `tools` when the array is non-empty; otherwise `tools` MUST be omitted
+- `tool_choice` from the task entry `tool_choice` when set; otherwise `tool_choice` MUST be omitted
+- `response_format` from the task entry `response_format` when set; otherwise `response_format` MUST be omitted
 
 When assistant tool-call history is present, Bridge MUST apply the same tool-history `function.arguments` adaptation used by Chat Completions before serializing task args. That adaptation is defined in `docs/model-compatibility/openai-api-adaptation.md`. Heartbeat MUST NOT redefine the argument-object versus argument-string rules.
+
+Bridge MUST forward configured `tool_choice` and `response_format` unchanged into Relay GPT task args. Bridge MUST NOT interpret these fields as model behavior.
 
 LLM heartbeat generation config MUST use:
 

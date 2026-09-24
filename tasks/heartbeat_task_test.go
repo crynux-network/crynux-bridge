@@ -197,6 +197,69 @@ func TestBuildLLMHeartbeatTaskArgsToolsAndMessages(t *testing.T) {
 	}
 }
 
+func TestBuildLLMHeartbeatTaskArgsToolChoiceAndResponseFormat(t *testing.T) {
+	taskArgs, err := buildLLMHeartbeatTaskArgs(
+		config.HeartbeatTaskConfig{
+			Model:        "Qwen/Qwen3-8B",
+			MaxNewTokens: 128,
+			Tools: []map[string]interface{}{
+				{
+					"type": "function",
+					"function": map[string]interface{}{
+						"name": "search_docs",
+					},
+				},
+			},
+			ToolChoice: "required",
+			ResponseFormat: map[string]interface{}{
+				"type": "json_object",
+			},
+		},
+		config.HeartbeatPromptConfig{},
+		true,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(taskArgs), &parsed); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if parsed["tool_choice"] != "required" {
+		t.Fatalf("unexpected tool_choice %#v", parsed["tool_choice"])
+	}
+	responseFormat, ok := parsed["response_format"].(map[string]interface{})
+	if !ok || responseFormat["type"] != "json_object" {
+		t.Fatalf("unexpected response_format %#v", parsed["response_format"])
+	}
+}
+
+func TestBuildLLMHeartbeatTaskArgsOmitsUnsetToolChoiceAndResponseFormat(t *testing.T) {
+	taskArgs, err := buildLLMHeartbeatTaskArgs(
+		config.HeartbeatTaskConfig{
+			Model:        "Qwen/Qwen3-8B",
+			MaxNewTokens: 128,
+		},
+		config.HeartbeatPromptConfig{},
+		true,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(taskArgs), &parsed); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if _, ok := parsed["tool_choice"]; ok {
+		t.Fatal("expected tool_choice to be omitted")
+	}
+	if _, ok := parsed["response_format"]; ok {
+		t.Fatal("expected response_format to be omitted")
+	}
+}
+
 func TestBuildSDHeartbeatTaskArgsConfiguredPrompt(t *testing.T) {
 	taskArgs, err := buildSDHeartbeatTaskArgs(
 		config.HeartbeatTaskConfig{

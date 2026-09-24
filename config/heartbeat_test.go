@@ -284,6 +284,173 @@ func TestValidateHeartbeatTasksConfigRejectsStepsForLLM(t *testing.T) {
 	}
 }
 
+func searchDocsTool() []map[string]interface{} {
+	return []map[string]interface{}{
+		{
+			"type": "function",
+			"function": map[string]interface{}{
+				"name": "search_docs",
+				"parameters": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"query": map[string]interface{}{"type": "string"},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestValidateHeartbeatTasksConfigAcceptsToolChoiceAndResponseFormat(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen3-8B",
+			MaxPendingTasks: 5,
+			MaxNewTokens:    128,
+			Tools:           searchDocsTool(),
+			ToolChoice:      "auto",
+			ResponseFormat: map[string]interface{}{
+				"type": "json_object",
+			},
+		},
+		{
+			Type:            "llm",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen3-8B",
+			MaxPendingTasks: 5,
+			MaxNewTokens:    128,
+			Tools:           searchDocsTool(),
+			ToolChoice: map[string]interface{}{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name": "search_docs",
+				},
+			},
+			ResponseFormat: map[string]interface{}{
+				"type": "json_schema",
+				"json_schema": map[string]interface{}{
+					"name": "answer",
+					"schema": map[string]interface{}{
+						"type": "object",
+					},
+				},
+			},
+		},
+		{
+			Type:            "llm",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen3-8B",
+			MaxPendingTasks: 5,
+			MaxNewTokens:    128,
+			ToolChoice:      "none",
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRejectsToolChoiceForSD(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "sd",
+			Ratio:           1.0,
+			Model:           "crynux-network/sdxl-turbo",
+			MaxPendingTasks: 5,
+			Steps:           1,
+			ToolChoice:      "auto",
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatalf("expected tool_choice rejection for sd tasks")
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRejectsResponseFormatForSD(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "sd",
+			Ratio:           1.0,
+			Model:           "crynux-network/sdxl-turbo",
+			MaxPendingTasks: 5,
+			Steps:           1,
+			ResponseFormat: map[string]interface{}{
+				"type": "json_object",
+			},
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatalf("expected response_format rejection for sd tasks")
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRejectsToolChoiceWithoutTools(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen3-8B",
+			MaxPendingTasks: 5,
+			MaxNewTokens:    128,
+			ToolChoice:      "required",
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatalf("expected tools required error for tool_choice required")
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRejectsUnknownNamedToolChoice(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen3-8B",
+			MaxPendingTasks: 5,
+			MaxNewTokens:    128,
+			Tools:           searchDocsTool(),
+			ToolChoice: map[string]interface{}{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name": "missing_tool",
+				},
+			},
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatalf("expected named tool_choice mismatch error")
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRejectsInvalidResponseFormat(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen3-8B",
+			MaxPendingTasks: 5,
+			MaxNewTokens:    128,
+			ResponseFormat: map[string]interface{}{
+				"type": "json_schema",
+				"json_schema": map[string]interface{}{
+					"name": "answer",
+				},
+			},
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatalf("expected response_format schema validation error")
+	}
+}
+
 func writeHeartbeatTasksFixture(t *testing.T, dir string, jsonBody string) string {
 	t.Helper()
 	path := filepath.Join(dir, "heartbeat_tasks.json")

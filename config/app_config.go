@@ -165,5 +165,7 @@ type HeartbeatTaskConfig struct {
 	MaxNewTokens    uint64                   `mapstructure:"max_new_tokens" json:"max_new_tokens,omitempty"`
 	Steps           uint64                   `mapstructure:"steps" json:"steps,omitempty"`
 	Tools           []map[string]interface{} `mapstructure:"tools" json:"tools,omitempty"`
+	ToolChoice      any                      `mapstructure:"tool_choice" json:"tool_choice,omitempty"`
+	ResponseFormat  map[string]interface{}   `mapstructure:"response_format" json:"response_format,omitempty"`
 	Prompts         []HeartbeatPromptConfig  `mapstructure:"prompts" json:"prompts,omitempty"`
 }

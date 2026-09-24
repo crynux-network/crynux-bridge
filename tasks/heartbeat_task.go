@@ -216,6 +216,12 @@ func buildLLMHeartbeatTaskArgs(
 	if len(heartbeatTaskConfig.Tools) > 0 {
 		taskArgs["tools"] = heartbeatTaskConfig.Tools
 	}
+	if heartbeatTaskConfig.ToolChoice != nil {
+		taskArgs["tool_choice"] = heartbeatTaskConfig.ToolChoice
+	}
+	if len(heartbeatTaskConfig.ResponseFormat) > 0 {
+		taskArgs["response_format"] = heartbeatTaskConfig.ResponseFormat
+	}
 
 	taskArgsBytes, err := json.Marshal(taskArgs)
 	if err != nil {

@@ -21,6 +21,12 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 			if task.Steps != 0 {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: steps is not supported for llm tasks", i)
 			}
+			if err := validateHeartbeatToolChoice(task.ToolChoice, task.Tools); err != nil {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: %w", i, err)
+			}
+			if err := validateHeartbeatResponseFormat(task.ResponseFormat); err != nil {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: %w", i, err)
+			}
 		case "sd":
 			if task.Steps == 0 {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: steps must be > 0 for sd tasks", i)
@@ -30,6 +36,12 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 			}
 			if len(task.Tools) > 0 {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: tools is not supported for sd tasks", i)
+			}
+			if task.ToolChoice != nil {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: tool_choice is not supported for sd tasks", i)
+			}
+			if len(task.ResponseFormat) > 0 {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: response_format is not supported for sd tasks", i)
 			}
 		default:
 			return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: unsupported heartbeat task type %q", i, task.Type)
@@ -231,4 +243,90 @@ func heartbeatMessagesHaveAssistantToolCalls(messages []HeartbeatMessageConfig) 
 		}
 	}
 	return false
+}
+
+func validateHeartbeatToolChoice(toolChoice any, tools []map[string]interface{}) error {
+	if toolChoice == nil {
+		return nil
+	}
+	switch value := toolChoice.(type) {
+	case string:
+		switch value {
+		case "none":
+			return nil
+		case "auto", "required":
+			if len(tools) == 0 {
+				return fmt.Errorf("tools must be non-empty when tool_choice is %q", value)
+			}
+			return nil
+		default:
+			return fmt.Errorf("tool_choice string must be none, auto, or required")
+		}
+	case map[string]interface{}:
+		typeValue, ok := value["type"].(string)
+		if !ok || typeValue != "function" {
+			return fmt.Errorf("tool_choice object type must be function")
+		}
+		functionValue, ok := value["function"].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("tool_choice.function must be an object")
+		}
+		name, ok := functionValue["name"].(string)
+		if !ok || strings.TrimSpace(name) == "" {
+			return fmt.Errorf("tool_choice.function.name must be a non-empty string")
+		}
+		if len(tools) == 0 {
+			return fmt.Errorf("tools must be non-empty when tool_choice is a named function")
+		}
+		if !heartbeatToolsContainFunctionName(tools, name) {
+			return fmt.Errorf("tool_choice.function.name %q must match a tools entry", name)
+		}
+		return nil
+	default:
+		return fmt.Errorf("tool_choice must be a string or object")
+	}
+}
+
+func heartbeatToolsContainFunctionName(tools []map[string]interface{}, name string) bool {
+	for _, tool := range tools {
+		functionValue, ok := tool["function"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		toolName, ok := functionValue["name"].(string)
+		if ok && toolName == name {
+			return true
+		}
+	}
+	return false
+}
+
+func validateHeartbeatResponseFormat(responseFormat map[string]interface{}) error {
+	if len(responseFormat) == 0 {
+		return nil
+	}
+	typeValue, ok := responseFormat["type"].(string)
+	if !ok {
+		return fmt.Errorf("response_format.type must be a string")
+	}
+	switch typeValue {
+	case "json_object":
+		return nil
+	case "json_schema":
+		schemaValue, ok := responseFormat["json_schema"].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("response_format.json_schema must be an object")
+		}
+		name, ok := schemaValue["name"].(string)
+		if !ok || strings.TrimSpace(name) == "" {
+			return fmt.Errorf("response_format.json_schema.name must be a non-empty string")
+		}
+		schema, ok := schemaValue["schema"].(map[string]interface{})
+		if !ok || schema == nil {
+			return fmt.Errorf("response_format.json_schema.schema must be an object")
+		}
+		return nil
+	default:
+		return fmt.Errorf("response_format.type must be json_object or json_schema")
+	}
 }
