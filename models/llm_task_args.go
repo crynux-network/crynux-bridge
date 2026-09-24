@@ -88,6 +88,8 @@ type GPTTaskArgs struct {
 	Model            string                   `json:"model" validate:"required"`    // Required
 	Messages         []Message                `json:"messages" validate:"required"` // Required
 	Tools            []map[string]interface{} `json:"tools,omitempty"`              // Optional
+	ToolChoice       any                      `json:"tool_choice,omitempty"`        // Optional
+	ResponseFormat   map[string]interface{}   `json:"response_format,omitempty"`    // Optional
 	GenerationConfig *GPTGenerationConfig     `json:"generation_config,omitempty"`  // Optional
 	TemplateArgs     map[string]interface{}   `json:"template_args,omitempty"`      // Optional
 	Seed             int                      `json:"seed"`                         // Optional, default 0

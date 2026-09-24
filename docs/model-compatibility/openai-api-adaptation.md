@@ -4,6 +4,8 @@
 
 `/v1/llm/chat/completions`, its VRAM-limit variant, and `/v1/openrouter/chat/completions` MUST use the Chat Completions adaptation in this document.
 
+This document applies only to requests accepted by Bridge's legacy OpenAI-compatible endpoints. Requests accepted by Crynux AS MUST follow `crynux-as/docs/model-compatibility/`; Bridge MUST receive those requests only through the raw-task API and MUST NOT apply this adaptation.
+
 `/v1/llm/completions` MUST create one user message from `prompt`. It does not expose chat roles, tools, tool history, or structured tool-call output.
 
 Both endpoint families MUST complete the network task before constructing their HTTP response. A request with `stream=true` MUST stream the completed normalized response; it is not token-live model streaming.

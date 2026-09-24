@@ -12,7 +12,7 @@
 
 ## Model Compatibility Authority
 
-OpenAI-compatible request adaptation, canonical `GPTTaskArgs` creation, task transport boundaries, and public response normalization MUST use `docs/model-compatibility/` in this repository as their authority.
+Crynux AS public OpenAI-compatible request adaptation, canonical `GPTTaskArgs` creation, and public response normalization MUST use `crynux-as/docs/model-compatibility/` in the standalone AS repository as their authority. Bridge legacy OpenAI endpoints and Bridge raw-task transport boundaries MUST use `docs/model-compatibility/` in this repository.
 
 Prompt rendering, chat templates, processor behavior, rendering of Bridge-adapted tool history into model input, thinking template controls, AutoClass, remote `auto_map`, execution backends, tensor-parallel fallback, generation, and raw decoding MUST use `gpt-task/docs/model-compatibility/` in the standalone gpt-task repository as their authority.
 

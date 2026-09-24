@@ -7,9 +7,9 @@
 
 ## Authority
 
-This directory is the authoritative specification for OpenAI-compatible LLM request adaptation, task transport boundaries, model execution ownership, and response normalization across Bridge, Relay, Node, Worker, and gpt-task.
+This directory is the authoritative specification for Bridge's legacy OpenAI-compatible endpoints and Bridge raw-task transport boundaries.
 
-Bridge owns OpenAI-compatible request and response adaptation. The standalone gpt-task repository owns the internal execution contract from canonical `GPTTaskArgs` to raw assistant text.
+Crynux AS owns request and response adaptation for its public OpenAI-compatible APIs. Bridge MUST preserve AS canonical raw-task fields and raw results. The standalone gpt-task repository owns the internal execution contract from canonical `GPTTaskArgs` to raw assistant text.
 
 Relay, Node, and Worker MUST preserve canonical task arguments and raw task results. Their component documentation MUST define validation, persistence, scheduling, transport, worker management, GPU selection, and lifecycle behavior without redefining prompt or response semantics.
 

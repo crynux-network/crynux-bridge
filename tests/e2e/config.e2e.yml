@@ -41,12 +41,12 @@ task:
   default_sd_finetune_task_fee_cnx: "15.0"
   repeat_num: 1
   sd_finetune_timeout: 120
-  default_task_version: "3.1.0"
+  default_task_version: "3.6.0"
   heartbeat_tasks:
     batch_size: 0
     max_tasks_per_hour: 0
     tasks_file: "heartbeat_tasks.json"
 task_schema:
   stable_diffusion_inference: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/stable-diffusion-inference-task.json"
-  gpt_inference: "https://raw.githubusercontent.com/crynux-network/gpt-task/refs/tags/v3.1.0/schema/gpt-inference-task.json"
+  gpt_inference: "https://raw.githubusercontent.com/crynux-network/gpt-task/refs/tags/v3.6.0/schema/gpt-inference-task.json"
   stable_diffusion_finetune_lora: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/stable-diffusion-finetune-lora-task.json"
