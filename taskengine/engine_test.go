@@ -39,6 +39,7 @@ func testConfig(t *testing.T) Config {
 		ScanInterval:                 time.Millisecond,
 		StatusPollInterval:           time.Millisecond,
 		ExecutionPollAdvance:         0,
+		MaxExecutionPollInterval:     time.Millisecond,
 		ExecutionOverrunPollInterval: time.Millisecond,
 		RetryInterval:                time.Millisecond,
 		OperationTimeout:             time.Second,

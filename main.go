@@ -48,6 +48,7 @@ func main() {
 		ScanInterval:                 conf.Task.Engine.ScanInterval,
 		StatusPollInterval:           conf.Task.Engine.StatusPollInterval,
 		ExecutionPollAdvance:         conf.Task.Engine.ExecutionPollAdvance,
+		MaxExecutionPollInterval:     conf.Task.Engine.MaxExecutionPollInterval,
 		ExecutionOverrunPollInterval: conf.Task.Engine.ExecutionOverrunPollInterval,
 		RetryInterval:                conf.Task.Engine.RetryInterval,
 		OperationTimeout:             conf.Task.Engine.OperationTimeout,

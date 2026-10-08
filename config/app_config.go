@@ -98,6 +98,7 @@ type TaskEngineConfig struct {
 	ScanInterval                 time.Duration `mapstructure:"scan_interval"`
 	StatusPollInterval           time.Duration `mapstructure:"status_poll_interval"`
 	ExecutionPollAdvance         time.Duration `mapstructure:"execution_poll_advance"`
+	MaxExecutionPollInterval     time.Duration `mapstructure:"max_execution_poll_interval"`
 	ExecutionOverrunPollInterval time.Duration `mapstructure:"execution_overrun_poll_interval"`
 	RetryInterval                time.Duration `mapstructure:"retry_interval"`
 	OperationTimeout             time.Duration `mapstructure:"operation_timeout"`

@@ -289,15 +289,15 @@ TaskEngine MUST use shorter status intervals while waiting for node assignment, 
 After Relay has assigned the exact execution GPU and TaskEngine has created every required VSS member, TaskEngine MUST set:
 
 ```text
-next_action_at = max(
-    current_time + task_scan_interval,
-    estimated_execution_completion_time - execution_poll_advance
-)
+target = estimated_execution_completion_time - execution_poll_advance
+next_action_at = min(target, current_time + max_execution_poll_interval)
+if next_action_at < current_time + task_scan_interval:
+    next_action_at = current_time + execution_overrun_poll_interval
 ```
 
 TaskEngine MUST NOT poll that task again before `next_action_at`. If Relay still reports an execution state at that time, TaskEngine MUST use `execution_overrun_poll_interval` until Relay reports the next state.
 
-`execution_poll_advance`, `execution_overrun_poll_interval`, batch size, scan interval, and the separate create, status, validation, cancellation, and result-download worker limits MUST be configurable.
+`execution_poll_advance`, `max_execution_poll_interval`, `execution_overrun_poll_interval`, batch size, scan interval, and the separate create, status, validation, cancellation, and result-download worker limits MUST be configurable.
 
 ## Relay Batch Mutations
 

@@ -49,6 +49,7 @@ task:
     scan_interval: 1s
     status_poll_interval: 1s
     execution_poll_advance: 5s
+    max_execution_poll_interval: 15s
     execution_overrun_poll_interval: 5s
     retry_interval: 3s
     operation_timeout: 30s

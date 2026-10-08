@@ -10,6 +10,7 @@ func validTaskEngineConfig() TaskEngineConfig {
 		ScanInterval:                 time.Second,
 		StatusPollInterval:           time.Second,
 		ExecutionPollAdvance:         0,
+		MaxExecutionPollInterval:     time.Second,
 		ExecutionOverrunPollInterval: time.Second,
 		RetryInterval:                time.Second,
 		OperationTimeout:             time.Second,
@@ -38,6 +39,7 @@ func TestValidateTaskEngineConfigRequiresEveryBound(t *testing.T) {
 	}{
 		{"scan interval", func(c *TaskEngineConfig) { c.ScanInterval = 0 }},
 		{"retry interval", func(c *TaskEngineConfig) { c.RetryInterval = 0 }},
+		{"max execution poll interval", func(c *TaskEngineConfig) { c.MaxExecutionPollInterval = 0 }},
 		{"create batch", func(c *TaskEngineConfig) { c.CreateBatchSize = 0 }},
 		{"status workers", func(c *TaskEngineConfig) { c.StatusWorkers = 0 }},
 		{"result workers", func(c *TaskEngineConfig) { c.ResultWorkers = 0 }},

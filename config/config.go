@@ -84,6 +84,7 @@ func validateTaskEngineConfig(engine TaskEngineConfig) error {
 	}{
 		{"scan_interval", engine.ScanInterval},
 		{"status_poll_interval", engine.StatusPollInterval},
+		{"max_execution_poll_interval", engine.MaxExecutionPollInterval},
 		{"execution_overrun_poll_interval", engine.ExecutionOverrunPollInterval},
 		{"retry_interval", engine.RetryInterval},
 		{"operation_timeout", engine.OperationTimeout},

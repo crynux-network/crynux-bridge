@@ -26,6 +26,7 @@ type Config struct {
 	ScanInterval                 time.Duration
 	StatusPollInterval           time.Duration
 	ExecutionPollAdvance         time.Duration
+	MaxExecutionPollInterval     time.Duration
 	ExecutionOverrunPollInterval time.Duration
 	RetryInterval                time.Duration
 	OperationTimeout             time.Duration
@@ -55,6 +56,7 @@ func (c Config) validate() error {
 	}{
 		{"scan interval", c.ScanInterval},
 		{"status poll interval", c.StatusPollInterval},
+		{"max execution poll interval", c.MaxExecutionPollInterval},
 		{"execution overrun poll interval", c.ExecutionOverrunPollInterval},
 		{"retry interval", c.RetryInterval},
 		{"operation timeout", c.OperationTimeout},

@@ -194,14 +194,18 @@ func (e *Engine) applyRelayStatus(ctx context.Context, tx *gorm.DB, task *models
 		return tx.Model(task).Updates(updates).Error
 	}
 	localStatus := relayStatusToLocal(status.Status)
-	nextAction := time.Now().Add(e.config.StatusPollInterval)
+	now := time.Now()
+	nextAction := now.Add(e.config.StatusPollInterval)
 	if (localStatus == models.InferenceTaskStarted || localStatus == models.InferenceTaskParamsUploaded) &&
 		status.EstimatedExecutionCompletionAt != nil {
-		nextAction = status.EstimatedExecutionCompletionAt.Add(-e.config.ExecutionPollAdvance)
-		minimum := time.Now().Add(e.config.ScanInterval)
-		if nextAction.Before(minimum) {
-			nextAction = time.Now().Add(e.config.ExecutionOverrunPollInterval)
-		}
+		nextAction = executionStatusNextActionAt(
+			now,
+			*status.EstimatedExecutionCompletionAt,
+			e.config.ScanInterval,
+			e.config.ExecutionPollAdvance,
+			e.config.MaxExecutionPollInterval,
+			e.config.ExecutionOverrunPollInterval,
+		)
 	}
 	updates := map[string]any{
 		"status":                      localStatus,
@@ -355,6 +359,26 @@ func relayStatusToLocal(status models.ChainTaskStatus) models.TaskStatus {
 	default:
 		return models.InferenceTaskCreated
 	}
+}
+
+func executionStatusNextActionAt(
+	now time.Time,
+	estimatedCompletion time.Time,
+	scanInterval time.Duration,
+	executionPollAdvance time.Duration,
+	maxExecutionPollInterval time.Duration,
+	executionOverrunPollInterval time.Duration,
+) time.Time {
+	nextAction := estimatedCompletion.Add(-executionPollAdvance)
+	maximum := now.Add(maxExecutionPollInterval)
+	if nextAction.After(maximum) {
+		nextAction = maximum
+	}
+	minimum := now.Add(scanInterval)
+	if nextAction.Before(minimum) {
+		return now.Add(executionOverrunPollInterval)
+	}
+	return nextAction
 }
 
 func terminalStatuses() []models.TaskStatus {
