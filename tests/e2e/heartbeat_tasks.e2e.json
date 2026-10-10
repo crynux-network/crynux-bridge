@@ -61,7 +61,7 @@
       "max_new_tokens": 128,
       "prompts": [
         {
-          "text": "I want to create an AI agent. Any suggestions?"
+          "text": "Ticket {{hb_rand}} needs a one-sentence triage note that repeats the ticket number."
         }
       ]
     },

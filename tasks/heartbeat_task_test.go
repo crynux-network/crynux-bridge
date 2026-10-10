@@ -4,6 +4,8 @@ import (
 	"crynux_bridge/config"
 	"crynux_bridge/models"
 	"encoding/json"
+	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -49,7 +51,7 @@ func TestBuildLLMHeartbeatTaskArgsDefault(t *testing.T) {
 	}
 	messages := parsed["messages"].([]interface{})
 	msg := messages[0].(map[string]interface{})
-	if msg["content"] != "I want to create an AI agent. Any suggestions?" {
+	if msg["content"] != defaultLLMHeartbeatPromptText() {
 		t.Fatalf("unexpected default content: %#v", msg["content"])
 	}
 	if _, ok := parsed["tools"]; ok {
@@ -299,7 +301,7 @@ func TestBuildHeartbeatTaskArgsWithPrompts(t *testing.T) {
 		Model:        "Qwen/Qwen2.5-7B",
 		MaxNewTokens: 64,
 		Prompts: []config.HeartbeatPromptConfig{
-			{Text: "only-one"},
+			{Text: "ticket {{hb_rand}} is acknowledged"},
 		},
 	})
 	if err != nil {
@@ -315,8 +317,15 @@ func TestBuildHeartbeatTaskArgsWithPrompts(t *testing.T) {
 	}
 	messages := parsed["messages"].([]interface{})
 	msg := messages[0].(map[string]interface{})
-	if msg["content"] != "only-one" {
+	content, ok := msg["content"].(string)
+	if !ok {
 		t.Fatalf("unexpected content %#v", msg["content"])
+	}
+	if content == "ticket {{hb_rand}} is acknowledged" {
+		t.Fatalf("expected placeholder replacement, got %#v", content)
+	}
+	if !strings.HasPrefix(content, "ticket ") || !strings.HasSuffix(content, " is acknowledged") {
+		t.Fatalf("unexpected content %#v", content)
 	}
 	generationConfig := parsed["generation_config"].(map[string]interface{})
 	if generationConfig["max_new_tokens"] != float64(64) {
@@ -440,6 +449,116 @@ func TestSelectHeartbeatTaskConfigBatchIncrementsBlockFurtherSamples(t *testing.
 	if err == nil {
 		t.Fatalf("expected no eligible heartbeat task config after batch increment")
 	}
+}
+
+func TestBuildHeartbeatTaskArgsReplacesLLMPlaceholder(t *testing.T) {
+	cfg := config.HeartbeatTaskConfig{
+		Type:         "llm",
+		Model:        "Qwen/Qwen2.5-7B",
+		MaxNewTokens: 64,
+		Prompts: []config.HeartbeatPromptConfig{
+			{Text: "Ticket {{hb_rand}} needs a one-sentence triage note."},
+		},
+	}
+	hexRe := regexp.MustCompile(`^[0-9a-f]{16}$`)
+	first := heartbeatLLMUserText(t, cfg)
+	second := heartbeatLLMUserText(t, cfg)
+	if first == second {
+		t.Fatalf("expected different replacements, both %q", first)
+	}
+	if strings.Contains(first, config.HeartbeatRandPlaceholder) || strings.Contains(second, config.HeartbeatRandPlaceholder) {
+		t.Fatalf("placeholder still present: %q %q", first, second)
+	}
+	firstVal := strings.TrimPrefix(first, "Ticket ")
+	firstVal = strings.TrimSuffix(firstVal, " needs a one-sentence triage note.")
+	secondVal := strings.TrimPrefix(second, "Ticket ")
+	secondVal = strings.TrimSuffix(secondVal, " needs a one-sentence triage note.")
+	if !hexRe.MatchString(firstVal) || !hexRe.MatchString(secondVal) {
+		t.Fatalf("expected 16 hex replacements, got %q and %q", firstVal, secondVal)
+	}
+	if cfg.Prompts[0].Text != "Ticket {{hb_rand}} needs a one-sentence triage note." {
+		t.Fatalf("config prompt was mutated: %#v", cfg.Prompts[0].Text)
+	}
+}
+
+func TestBuildHeartbeatTaskArgsReplacesLLMMessagePlaceholder(t *testing.T) {
+	cfg := config.HeartbeatTaskConfig{
+		Type:         "llm",
+		Model:        "Qwen/Qwen2.5-7B",
+		MaxNewTokens: 64,
+		Prompts: []config.HeartbeatPromptConfig{
+			{
+				Messages: []config.HeartbeatMessageConfig{
+					{Role: "user", Content: "Follow up ticket {{hb_rand}}"},
+				},
+			},
+		},
+	}
+	first := heartbeatLLMUserText(t, cfg)
+	second := heartbeatLLMUserText(t, cfg)
+	if first == second {
+		t.Fatalf("expected different replacements, both %q", first)
+	}
+	if strings.Contains(first, config.HeartbeatRandPlaceholder) {
+		t.Fatalf("placeholder still present: %q", first)
+	}
+}
+
+func TestBuildHeartbeatTaskArgsRejectsLLMPromptWithoutPlaceholder(t *testing.T) {
+	_, _, err := buildHeartbeatTaskArgs(config.HeartbeatTaskConfig{
+		Type:         "llm",
+		Model:        "Qwen/Qwen2.5-7B",
+		MaxNewTokens: 64,
+		Prompts: []config.HeartbeatPromptConfig{
+			{Text: "no placeholder"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected missing placeholder error")
+	}
+}
+
+func TestBuildHeartbeatTaskArgsDoesNotReplaceSDPlaceholder(t *testing.T) {
+	taskArgs, taskType, err := buildHeartbeatTaskArgs(config.HeartbeatTaskConfig{
+		Type:  "sd",
+		Model: "crynux-network/sdxl-turbo",
+		Steps: 4,
+		Prompts: []config.HeartbeatPromptConfig{
+			{Text: "keep {{hb_rand}} literal"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if taskType != models.TaskTypeSD {
+		t.Fatalf("unexpected task type %v", taskType)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(taskArgs), &parsed); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if parsed["prompt"] != "keep {{hb_rand}} literal" {
+		t.Fatalf("sd prompt was changed: %#v", parsed["prompt"])
+	}
+}
+
+func heartbeatLLMUserText(t *testing.T, cfg config.HeartbeatTaskConfig) string {
+	t.Helper()
+	taskArgs, _, err := buildHeartbeatTaskArgs(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(taskArgs), &parsed); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	messages := parsed["messages"].([]interface{})
+	msg := messages[0].(map[string]interface{})
+	content, ok := msg["content"].(string)
+	if !ok {
+		t.Fatalf("unexpected content %#v", msg["content"])
+	}
+	return content
 }
 
 func TestHeartbeatTaskTypeAndModelID(t *testing.T) {

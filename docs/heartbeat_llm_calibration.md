@@ -32,7 +32,7 @@ Input class MUST be one of:
 
 | Input class | Prompt form | Size | Construction |
 |---|---|---|---|
-| one-line | `text` | 20 to 80 characters | generation instruction only |
+| one-line | `text` | the stop-early or fill-cap instruction, counting each `{{hb_rand}}` as 16 characters | generation instruction only |
 | paragraph | `text` | 400 to 800 characters | one paragraph of request context, then a newline, then the generation instruction |
 | medium-text | `text` | 3000 characters | a realistic multi-paragraph user request, then a newline, then the generation instruction |
 | long-text | `text` | 9000 characters | a realistic long user request, then a newline, then the generation instruction |
@@ -41,11 +41,13 @@ Input class MUST be one of:
 
 Sized `text` bodies, tool result bodies, and chat-history user/assistant text MUST read as a single technical request, documentation page, or operator transcript. They MUST NOT be a short phrase repeated to reach the required length. `paragraph` context MUST be ordinary prose.
 
-The sized field MUST reach the required length, including the trailing generation instruction.
+The sized field MUST reach the required length, including the trailing generation instruction. Length MUST count each `{{hb_rand}}` as 16 characters, which is the hex value Bridge substitutes at task creation. Runtime substitution MUST change only those 16 characters and MUST NOT change prompt length.
+
+Each generation instruction MUST contain `{{hb_rand}}` as a ticket number or other request value inside the instruction sentence. The instruction MUST NOT append a labeled side field such as `Request id:`.
 
 `one-line`, `paragraph`, `medium-text`, and `long-text` entries MUST use prompt `text` and MUST NOT set `content`, `messages`, or `tools`.
 
-`tool-call` entries MUST set `tools` to a non-empty function-tool array. Assistant `tool_calls` and `tool` messages MUST follow [heartbeat_tasks.md](./heartbeat_tasks.md). Two prompts of a `tool-call` entry MUST share the same tool history and MUST differ only by the last user message.
+`tool-call` entries MUST set `tools` to a single `search_docs` function-tool array. Assistant `tool_calls` and `tool` messages MUST follow [heartbeat_tasks.md](./heartbeat_tasks.md). Two prompts of a `tool-call` entry MUST share the same tool history and MUST differ only by the last user message. The last user message MUST name ticket `{{hb_rand}}` and MUST require a `search_docs` call whose `query` and `limit` depend on the last hex digit of that ticket. The two prompts MUST NOT share one fixed function name plus one fixed arguments object.
 
 `chat-history` entries MUST use prompt `messages` and MUST NOT set `content` or `tools`. Assistant messages MUST have non-empty `content` and MUST NOT set `tool_calls`. Two prompts of a `chat-history` entry MUST share the same prior turns and MUST differ only by the last user message.
 
@@ -53,8 +55,26 @@ Each entry MUST contain exactly two prompts that share the same input class and 
 
 | Output class | Generation instruction | Actual completion tokens |
 |---|---|---|
-| stop-early | `Ignore the filler. Reply with exactly the single word OK.` | far below `max_new_tokens` |
-| fill-cap | `Ignore the filler. Write consecutive integers starting from 1, separated by commas, and do not stop until the maximum output length is reached.` | equal to `max_new_tokens` |
+| stop-early | `Reply in one sentence that ticket {{hb_rand}} is acknowledged and the 27B pool stays drained until first-token p95 is back under 1.5s. Repeat the ticket number in that sentence.` | far below `max_new_tokens` |
+| fill-cap | `Write the on-call investigation for ticket {{hb_rand}}. Start every paragraph with that ticket number. Cover tokenizer hash, KV-cache versus context, and model-switch seconds. Do not stop until the maximum output length is reached.` | equal to `max_new_tokens` |
+
+For `tool-call`, the stop-early last user message MUST be:
+
+```
+Ticket {{hb_rand}} needs a follow-up search. If the last hex digit of that ticket is 0, 2, 4, 6, or 8, call search_docs with query equal to the ticket and limit 1. Otherwise call search_docs with query execution timeout {{hb_rand}} and limit 3. Then reply in one sentence that repeats the ticket.
+```
+
+The fill-cap last user message MUST be:
+
+```
+Ticket {{hb_rand}} needs a follow-up search. If the last hex digit of that ticket is 0, 2, 4, 6, or 8, call search_docs with query equal to the ticket and limit 1. Otherwise call search_docs with query execution timeout {{hb_rand}} and limit 3. Then write the full investigation for that ticket, start every paragraph with the ticket number, and do not stop until the maximum output length is reached.
+```
+
+The `tool-call` system message MUST be:
+
+```
+You are an ops assistant for a GPU inference network. When the latest user message names a ticket, call search_docs before you answer, and put that ticket into the query.
+```
 
 Relay fitting uses verified `usage.completion_tokens`, not `max_new_tokens`. Those two prompts MUST give that entry two different actual completion-token values at the same input bytes and the same `max_new_tokens`. Bridge prompt selection MUST keep both prompts; uniform sampling of the prompt list MUST expose both values.
 

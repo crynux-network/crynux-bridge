@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const HeartbeatRandPlaceholder = "{{hb_rand}}"
+
 func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 	for i, task := range appConfig.Task.HeartbeatTasks.Tasks {
 		if task.Ratio > 0 && task.MaxPendingTasks == 0 {
@@ -53,6 +55,12 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 			if err := validateAndNormalizeHeartbeatPrompt(taskType, prompt); err != nil {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d].prompts[%d]: %w", i, j, err)
 			}
+			if taskType == "llm" && task.Ratio > 0 && !heartbeatPromptContainsRandPlaceholder(prompt) {
+				return fmt.Errorf(
+					"task.heartbeat_tasks.tasks[%d].prompts[%d]: llm prompts must contain %s when ratio > 0",
+					i, j, HeartbeatRandPlaceholder,
+				)
+			}
 			if heartbeatMessagesHaveAssistantToolCalls(prompt.Messages) {
 				promptHasToolCalls = true
 			}
@@ -62,6 +70,45 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 		}
 	}
 	return nil
+}
+
+func heartbeatPromptContainsRandPlaceholder(prompt *HeartbeatPromptConfig) bool {
+	if strings.Contains(prompt.Text, HeartbeatRandPlaceholder) {
+		return true
+	}
+	for _, block := range prompt.Content {
+		if block.Type == "text" && strings.Contains(block.Text, HeartbeatRandPlaceholder) {
+			return true
+		}
+	}
+	for _, message := range prompt.Messages {
+		if heartbeatMessageContentContainsRandPlaceholder(message.Content) {
+			return true
+		}
+	}
+	return false
+}
+
+func heartbeatMessageContentContainsRandPlaceholder(content any) bool {
+	switch typed := content.(type) {
+	case string:
+		return strings.Contains(typed, HeartbeatRandPlaceholder)
+	case []any:
+		for _, item := range typed {
+			block, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if block["type"] != "text" {
+				continue
+			}
+			text, ok := block["text"].(string)
+			if ok && strings.Contains(text, HeartbeatRandPlaceholder) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func validateAndNormalizeHeartbeatPrompt(taskType string, prompt *HeartbeatPromptConfig) error {

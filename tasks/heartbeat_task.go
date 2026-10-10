@@ -2,21 +2,25 @@ package tasks
 
 import (
 	"context"
+	"crypto/rand"
 	"crynux_bridge/api/v1/llm/structs"
 	"crynux_bridge/config"
 	"crynux_bridge/llmtask"
 	"crynux_bridge/models"
 	"crynux_bridge/taskengine"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
+	mathrand "math/rand"
 	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"gonum.org/v1/gonum/stat/sampleuv"
 )
+
+const heartbeatRandHexLen = 16
 
 func generateHeartbeatTask(heartbeatTaskConfig config.HeartbeatTaskConfig) (taskengine.Submission, error) {
 	taskArgs, taskType, err := buildHeartbeatTaskArgs(heartbeatTaskConfig)
@@ -111,6 +115,10 @@ func buildHeartbeatTaskArgs(heartbeatTaskConfig config.HeartbeatTaskConfig) (str
 		taskArgs, err := buildSDHeartbeatTaskArgs(heartbeatTaskConfig, prompt, useDefault)
 		return taskArgs, models.TaskTypeSD, err
 	case "llm":
+		prompt, useDefault, err = applyHeartbeatRandPlaceholder(prompt, useDefault)
+		if err != nil {
+			return "", 0, err
+		}
 		taskArgs, err := buildLLMHeartbeatTaskArgs(heartbeatTaskConfig, prompt, useDefault)
 		return taskArgs, models.TaskTypeLLM, err
 	default:
@@ -122,12 +130,164 @@ func selectHeartbeatPrompt(prompts []config.HeartbeatPromptConfig) (config.Heart
 	if len(prompts) == 0 {
 		return config.HeartbeatPromptConfig{}, true, nil
 	}
-	return prompts[rand.Intn(len(prompts))], false, nil
+	return prompts[mathrand.Intn(len(prompts))], false, nil
+}
+
+func newHeartbeatRandValue() (string, error) {
+	raw := make([]byte, heartbeatRandHexLen/2)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("generate heartbeat rand: %w", err)
+	}
+	return hex.EncodeToString(raw), nil
+}
+
+func applyHeartbeatRandPlaceholder(
+	prompt config.HeartbeatPromptConfig,
+	useDefault bool,
+) (config.HeartbeatPromptConfig, bool, error) {
+	value, err := newHeartbeatRandValue()
+	if err != nil {
+		return config.HeartbeatPromptConfig{}, false, err
+	}
+	if useDefault {
+		text := strings.ReplaceAll(defaultLLMHeartbeatPromptText(), config.HeartbeatRandPlaceholder, value)
+		if !strings.Contains(text, value) {
+			return config.HeartbeatPromptConfig{}, false, fmt.Errorf(
+				"llm heartbeat prompt must contain %s", config.HeartbeatRandPlaceholder,
+			)
+		}
+		return config.HeartbeatPromptConfig{Text: text}, false, nil
+	}
+
+	copied, err := cloneHeartbeatPrompt(prompt)
+	if err != nil {
+		return config.HeartbeatPromptConfig{}, false, err
+	}
+	replaced := replaceHeartbeatRandInPrompt(&copied, value)
+	if !replaced || !heartbeatPromptContainsValue(copied, value) {
+		return config.HeartbeatPromptConfig{}, false, fmt.Errorf(
+			"llm heartbeat prompt must contain %s", config.HeartbeatRandPlaceholder,
+		)
+	}
+	return copied, false, nil
+}
+
+func defaultLLMHeartbeatPromptText() string {
+	return "Ticket " + config.HeartbeatRandPlaceholder +
+		" needs a one-sentence triage note that repeats the ticket number and says whether the 27B pool should stay drained."
+}
+
+func heartbeatPromptContainsValue(prompt config.HeartbeatPromptConfig, value string) bool {
+	if strings.Contains(prompt.Text, value) {
+		return true
+	}
+	for _, block := range prompt.Content {
+		if block.Type == "text" && strings.Contains(block.Text, value) {
+			return true
+		}
+	}
+	for _, message := range prompt.Messages {
+		if heartbeatMessageContentContainsValue(message.Content, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func heartbeatMessageContentContainsValue(content any, value string) bool {
+	switch typed := content.(type) {
+	case string:
+		return strings.Contains(typed, value)
+	case []any:
+		for _, item := range typed {
+			block, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if block["type"] != "text" {
+				continue
+			}
+			text, ok := block["text"].(string)
+			if ok && strings.Contains(text, value) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func cloneHeartbeatPrompt(prompt config.HeartbeatPromptConfig) (config.HeartbeatPromptConfig, error) {
+	raw, err := json.Marshal(prompt)
+	if err != nil {
+		return config.HeartbeatPromptConfig{}, err
+	}
+	var copied config.HeartbeatPromptConfig
+	if err := json.Unmarshal(raw, &copied); err != nil {
+		return config.HeartbeatPromptConfig{}, err
+	}
+	return copied, nil
+}
+
+func replaceHeartbeatRandInPrompt(prompt *config.HeartbeatPromptConfig, value string) bool {
+	replaced := false
+	placeholder := config.HeartbeatRandPlaceholder
+	if strings.Contains(prompt.Text, placeholder) {
+		prompt.Text = strings.ReplaceAll(prompt.Text, placeholder, value)
+		replaced = true
+	}
+	for i := range prompt.Content {
+		if prompt.Content[i].Type == "text" && strings.Contains(prompt.Content[i].Text, placeholder) {
+			prompt.Content[i].Text = strings.ReplaceAll(prompt.Content[i].Text, placeholder, value)
+			replaced = true
+		}
+	}
+	for i := range prompt.Messages {
+		if replaceHeartbeatRandInMessageContent(&prompt.Messages[i].Content, value) {
+			replaced = true
+		}
+	}
+	return replaced
+}
+
+func replaceHeartbeatRandInMessageContent(content *any, value string) bool {
+	placeholder := config.HeartbeatRandPlaceholder
+	switch typed := (*content).(type) {
+	case string:
+		if !strings.Contains(typed, placeholder) {
+			return false
+		}
+		*content = strings.ReplaceAll(typed, placeholder, value)
+		return true
+	case []any:
+		replaced := false
+		for i, item := range typed {
+			block, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if block["type"] != "text" {
+				continue
+			}
+			text, ok := block["text"].(string)
+			if !ok || !strings.Contains(text, placeholder) {
+				continue
+			}
+			block["text"] = strings.ReplaceAll(text, placeholder, value)
+			typed[i] = block
+			replaced = true
+		}
+		if replaced {
+			*content = typed
+		}
+		return replaced
+	default:
+		return false
+	}
 }
 
 func buildSDHeartbeatTaskArgs(heartbeatTaskConfig config.HeartbeatTaskConfig, prompt config.HeartbeatPromptConfig, useDefault bool) (string, error) {
 	model := heartbeatTaskConfig.Model
-	seed := rand.Intn(100000000)
+	seed := mathrand.Intn(100000000)
 	baseModel := map[string]interface{}{
 		"name":    model,
 		"variant": "fp16",
@@ -210,7 +370,7 @@ func buildLLMHeartbeatTaskArgs(
 			"temperature":        0,
 			"repetition_penalty": 1.1,
 		},
-		"seed":  rand.Intn(100000000),
+		"seed":  mathrand.Intn(100000000),
 		"dtype": "bfloat16",
 	}
 	if len(heartbeatTaskConfig.Tools) > 0 {
@@ -234,7 +394,7 @@ func buildLLMHeartbeatMessages(prompt config.HeartbeatPromptConfig, useDefault b
 	if useDefault {
 		return []models.Message{{
 			Role:    models.LLMRoleUser,
-			Content: "I want to create an AI agent. Any suggestions?",
+			Content: defaultLLMHeartbeatPromptText(),
 		}}, nil
 	}
 	if len(prompt.Messages) > 0 {

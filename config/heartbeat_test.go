@@ -93,7 +93,7 @@ func TestValidateHeartbeatTasksConfigRequiresToolsForToolCalls(t *testing.T) {
 			Prompts: []HeartbeatPromptConfig{
 				{
 					Messages: []HeartbeatMessageConfig{
-						{Role: "user", Content: "search"},
+						{Role: "user", Content: "search ticket {{hb_rand}}"},
 						{
 							Role: "assistant",
 							ToolCalls: []HeartbeatMessageToolCall{
@@ -176,9 +176,10 @@ func TestValidateHeartbeatTasksConfig(t *testing.T) {
 			MaxPendingTasks: 5,
 			MaxNewTokens:    250,
 			Prompts: []HeartbeatPromptConfig{
-				{Text: "ok"},
+				{Text: "ticket {{hb_rand}} is acknowledged"},
 				{
 					Content: []HeartbeatContentBlock{
+						{Type: "text", Text: "Describe ticket {{hb_rand}}"},
 						{Type: "image", Base64: "aGVsbG8="},
 					},
 				},
@@ -482,7 +483,7 @@ func TestLoadHeartbeatTasksFileRelativePathAndImagePath(t *testing.T) {
       "prompts": [
         {
           "content": [
-            {"type": "text", "text": "What is in this image?"},
+            {"type": "text", "text": "What is in this image for ticket {{hb_rand}}?"},
             {"type": "image", "image_path": "vl_sample.png"}
           ]
         }
@@ -604,6 +605,25 @@ func TestLoadAndValidateRepoHeartbeatTasksJSON(t *testing.T) {
 		if len(steps) < 2 {
 			t.Fatalf("sd model %s has %d distinct steps, want at least 2", model, len(steps))
 		}
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRejectsLLMPromptWithoutRandPlaceholder(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen2.5-7B",
+			MaxPendingTasks: 5,
+			MaxNewTokens:    64,
+			Prompts: []HeartbeatPromptConfig{
+				{Text: "no placeholder here"},
+			},
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatalf("expected missing %s error", HeartbeatRandPlaceholder)
 	}
 }
 

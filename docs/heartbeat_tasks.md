@@ -118,6 +118,16 @@ When `prompts` is absent or empty, Bridge MUST use the built-in default prompt f
 
 When `prompts` is non-empty, Bridge MUST select exactly one prompt from the list by uniform random selection for each created task.
 
+When `type` is `llm` and `ratio > 0`, each prompt MUST contain at least one `{{hb_rand}}` token in `text`, a `type: text` content block, or a string `content` on a message. Config load MUST reject those prompts that omit the token.
+
+When creating an LLM heartbeat task, Bridge MUST copy the selected prompt, generate a 16-character lowercase hex value with `crypto/rand`, and replace every `{{hb_rand}}` in that copy. Replacement MUST cover `text`, `type: text` content blocks, and every string `content` on `messages`, including tool messages when the configured string contains the token. Bridge MUST NOT mutate the in-memory config prompt. After replacement, the 16-character hex value MUST appear in the prompt. If the selected LLM prompt contains no `{{hb_rand}}`, Bridge MUST fail that task creation and log the error.
+
+The built-in default LLM prompt MUST contain `{{hb_rand}}`. Bridge MUST apply the same replacement to that default prompt.
+
+`{{hb_rand}}` MUST be used as a value inside the task request, such as a ticket number, a query string, or a branch condition. LLM prompts MUST NOT append a labeled side field such as `Request id:` that is unrelated to the request body.
+
+When `type` is `sd`, Bridge MUST NOT replace `{{hb_rand}}`.
+
 Each prompt entry MUST define exactly one of:
 
 - `text`
