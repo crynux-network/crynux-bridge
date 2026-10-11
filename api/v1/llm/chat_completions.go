@@ -141,7 +141,6 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 		MinVram:         &minVram,
 		RequiredGPU:     "",
 		RequiredGPUVram: 0,
-		RepeatNum:       nil,
 		TaskFee:         nil,
 	}
 

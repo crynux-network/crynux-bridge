@@ -124,7 +124,6 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 		MinVram:         &minVram,
 		RequiredGPU:     "",
 		RequiredGPUVram: 0,
-		RepeatNum:       nil,
 		TaskFee:         nil,
 	}
 

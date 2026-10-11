@@ -75,21 +75,10 @@ func TestValidateRawTaskInputRequiresTaskFee(t *testing.T) {
 
 func TestValidateTaskInputRejectsUnsupportedTaskType(t *testing.T) {
 	taskType := models.ChainTaskType(3)
-	err := validateTaskInput(&TaskInput{TaskType: &taskType}, &config.AppConfig{})
+	err := validateTaskInput(&TaskInput{TaskType: &taskType})
 	var validationErr *response.ValidationErrorResponse
 	if !errors.As(err, &validationErr) || validationErr.GetFieldName() != "task_type" {
 		t.Fatalf("error = %#v, want task_type validation error", err)
-	}
-}
-
-func TestValidateTaskInputRejectsNonPositiveRepeatNum(t *testing.T) {
-	taskType := models.TaskTypeLLM
-	for _, repeatNum := range []int{0, -1} {
-		err := validateTaskInput(&TaskInput{TaskType: &taskType, RepeatNum: &repeatNum}, &config.AppConfig{})
-		var validationErr *response.ValidationErrorResponse
-		if !errors.As(err, &validationErr) || validationErr.GetFieldName() != "repeat_num" {
-			t.Fatalf("repeat_num %d error = %#v", repeatNum, err)
-		}
 	}
 }
 

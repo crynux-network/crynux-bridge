@@ -74,7 +74,7 @@ HTTP request cancellation MUST stop only that request's API-layer status polling
 
 A raw, OpenAI-compatible, or heartbeat submission MUST represent one logical task. Its caller MUST pass that submission to the common TaskEngine creation method and MUST NOT create repeat tasks itself.
 
-TaskEngine's logical-task submission MUST contain an optional `repeat_num`. When `repeat_num` is present, TaskEngine MUST use that value. When it is absent, TaskEngine MUST use `task.repeat_num` from Bridge configuration. The selected value MUST be greater than `0`.
+TaskEngine's logical-task submission MAY contain an optional `repeat_num` for Bridge-internal callers. When `repeat_num` is present, TaskEngine MUST use that value. When it is absent, TaskEngine MUST use `task.repeat_num` from Bridge configuration. The selected value MUST be greater than `0`.
 
 TaskEngine's task-creation method MUST execute the database transaction that creates exactly one `ClientTask` for the submission. The `ClientTask` MUST persist the normalized task specification, selected `repeat_num`, repeat-expansion state, and `next_action_at`. The method MUST NOT create an `InferenceTask`.
 
@@ -91,9 +91,9 @@ Each repeat primary MUST:
 - reference the same `ClientTaskID`;
 - enter scheduling with `next_action_at` set to the current time.
 
-Heartbeat task submissions MUST explicitly set `repeat_num` to `1`. OpenAI-compatible submissions MUST omit `repeat_num` and use the configured value. A raw task submission MAY provide `repeat_num`; when it omits the field, TaskEngine MUST use the configured value.
+Raw and OpenAI-compatible handlers MUST build TaskEngine submissions without setting `repeat_num`, so TaskEngine uses `task.repeat_num`. Heartbeat task submissions MUST explicitly set `repeat_num` to `1`. SDFT round creation MUST use `repeat_num` equal to `1`.
 
-VSS expansion is separate from repeat expansion. After Relay returns the sampling seed for a primary, TaskEngine MUST calculate the VRF result and create two additional VSS members when validation is required.
+Repeat expansion is Bridge reliability fan-out. It MUST NOT decide whether validation runs, how many validation members exist, or how scores are compared. VSS expansion is separate from repeat expansion. After Relay returns the sampling seed for a primary, TaskEngine MUST calculate the VRF result and create two additional VSS members when validation is required. Whether VSS runs and how many members it creates MUST follow the protocol and VRF result, not `repeat_num`.
 
 The external API MUST expose only the logical task:
 

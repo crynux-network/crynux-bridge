@@ -55,8 +55,8 @@ Each entry MUST contain exactly two prompts that share the same input class and 
 
 | Output class | Generation instruction | Actual completion tokens |
 |---|---|---|
-| stop-early | `Reply in one sentence that ticket {{hb_rand}} is acknowledged and the 27B pool stays drained until first-token p95 is back under 1.5s. Repeat the ticket number in that sentence.` | far below `max_new_tokens` |
-| fill-cap | `Write the on-call investigation for ticket {{hb_rand}}. Start every paragraph with that ticket number. Cover tokenizer hash, KV-cache versus context, and model-switch seconds. Do not stop until the maximum output length is reached.` | equal to `max_new_tokens` |
+| stop-early | `Ticket {{hb_rand}} is a random hex id. In one short sentence, give an integer score from 0 to 100 for how much you like that id, and name the two hex digits that most influenced the score.` | far below `max_new_tokens` |
+| fill-cap | `Ticket {{hb_rand}} is a random hex id. Write continuously until the maximum output length is reached. The first character of your output must be the last hex character of that ticket. Keep inventing new concrete plot details that depend on different pairs of hex digits from the ticket; do not follow a fixed outline.` | equal to `max_new_tokens` |
 
 For `tool-call`, the stop-early last user message MUST be:
 

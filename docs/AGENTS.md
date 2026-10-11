@@ -3,12 +3,20 @@
 - `heartbeat_tasks.md`: Heartbeat background task creation, backpressure limits, weighted task selection, configurable multi-prompt sampling, LLM text/image content mapping, and SD prompt mapping.
 - `heartbeat_llm_calibration.md`: LLM heartbeat workload grid that Relay execution-time fitting requires, including input classes, output classes, and the per-model entry set.
 - `heartbeat_sd_calibration.md`: SD heartbeat workload grid that Relay execution-time fitting requires, including the two `steps` classes per model.
-- `improve_task_success_rate_with_repeat_tasks.md`: Repeat-task design for improving API task success rate.
+- `improve_task_success_rate_with_repeat_tasks.md`: Bridge config-controlled repeat fan-out for logical-task reliability. This is not protocol task validation.
 - `task_lifecycle.md`: HTTP request lifetime, Relay-owned deadlines, per-inference-task reconciliation, terminal synchronization, and validation-group stopping rules.
 - `task_processing_concurrency.md`: Single-loop lifecycle-write ownership, bounded batch request concurrency, persisted scheduling, restart recovery, and capacity verification.
-- `task_engine.md`: Authoritative Bridge TaskEngine design covering the database-driven main loop, bounded I/O workers, task creation and reads, VSS groups, repeat tasks, recovery, and integration boundaries for raw, OpenAI-compatible, and heartbeat callers.
+- `task_engine.md`: Authoritative Bridge TaskEngine design covering the database-driven main loop, bounded I/O workers, task creation and reads, VSS groups, repeat expansion, recovery, and integration boundaries for raw, OpenAI-compatible, and heartbeat callers. Repeat expansion and VSS expansion are separate paths.
 - `sdft_tasks.md`: Existing SDFT multi-round behavior, its boundary from the TaskEngine replacement, and the separate component contract that keeps SDFT branches out of TaskEngine.
 - `model-compatibility/`: End-to-end OpenAI-compatible LLM request adaptation, transparent task transport, gpt-task execution boundary, and response normalization.
+
+## Repeat Fan-out and Protocol Validation
+
+`task.repeat_num` controls Bridge repeat expansion: one logical `ClientTask` MUST expand into that many independent primary tasks with distinct `TaskID` values. Those primaries run concurrently, and the first successfully downloaded result completes the logical task. The value MUST come from Bridge configuration, except that Bridge-internal callers such as heartbeat and SDFT MAY override it to `1` on the TaskEngine submission. This mechanism improves success rate, reliability, and effective completion speed. It MUST NOT be treated as task validation: it MUST NOT replace, trigger, or configure VSS or single-task validation, and it MUST NOT decide validation membership or participate in score comparison.
+
+Protocol validation is separate. When VRF selects multi-node validation for one primary, TaskEngine MUST create additional members under that same `TaskID` for result comparison. Whether validation runs and how many members it uses MUST follow the protocol and VRF result, not `repeat_num`. Each repeat primary MAY still enter its own validation path; that path is protocol validation, not the meaning of `repeat_num`.
+
+Details are specified in `improve_task_success_rate_with_repeat_tasks.md` and `task_engine.md`.
 
 ## Model Compatibility Authority
 

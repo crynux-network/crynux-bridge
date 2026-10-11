@@ -13,13 +13,18 @@ The mechanism MUST:
 - return the earliest successful result at API layer;
 - keep request ownership and tracking under one Bridge client task record.
 
-Raw task and OpenAI-compatible submissions MUST use this mechanism. Heartbeat submissions MUST explicitly set `repeat_num` to `1` and therefore MUST create one primary task.
+This mechanism is Bridge reliability fan-out. It MUST NOT be described or implemented as task validation. It MUST NOT replace, trigger, or configure VSS or single-task validation. It MUST NOT decide whether validation runs, how many validation members exist, or how scores are compared.
+
+Each repeat primary has a distinct `TaskID`. Protocol validation members for one primary share that primary's `TaskID`. Those are separate mechanisms: repeat expansion creates independent primaries under one `ClientTaskID`; VSS expansion, when required, creates validation members under one primary `TaskID`.
+
+Raw task and OpenAI-compatible submissions MUST use this mechanism with the configured `task.repeat_num`. Heartbeat submissions MUST explicitly set `repeat_num` to `1` on the TaskEngine submission and therefore MUST create one primary task. SDFT round creation MUST use `repeat_num` equal to `1`.
 
 ## Functional Requirements
 
 ### Configuration
 
-- TaskEngine's logical-task submission MUST contain an optional `repeat_num`.
+- The effective `repeat_num` MUST come from `task.repeat_num` in Bridge configuration when the TaskEngine submission does not override it.
+- TaskEngine's logical-task submission MAY contain an optional `repeat_num` for Bridge-internal callers.
 - When the submission provides `repeat_num`, TaskEngine MUST use that value.
 - When the submission omits `repeat_num`, TaskEngine MUST use `task.repeat_num`.
 - The selected value MUST be greater than `0`.

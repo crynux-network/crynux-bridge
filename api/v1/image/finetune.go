@@ -141,13 +141,11 @@ func CreateSDFinetuneLoraTask(c *gin.Context, in *SDFinetuneLoraRequest) (res *S
 
 	taskType := models.TaskTypeSDFTLora
 	minVram := uint64(24)
-	repeatNum := 1
 	task := &inference_tasks.TaskInput{
-		TaskArgs:  string(taskArgsStr),
-		TaskType:  &taskType,
-		MinVram:   &minVram,
-		RepeatNum: &repeatNum,
-		Timeout:   in.Timeout,
+		TaskArgs: string(taskArgsStr),
+		TaskType: &taskType,
+		MinVram:  &minVram,
+		Timeout:  in.Timeout,
 	}
 
 	taskResponse, err := inference_tasks.DoCreateTask(ctx, apiKey.ClientID, task)

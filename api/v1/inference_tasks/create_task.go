@@ -28,7 +28,6 @@ type TaskInput struct {
 	MinVram         *uint64               `json:"min_vram,omitempty" description:"Task minimal vram requirement" validate:"omitempty"`
 	RequiredGPU     string                `json:"required_gpu,omitempty" description:"Task required GPU name" validate:"omitempty"`
 	RequiredGPUVram uint64                `json:"required_gpu_vram,omitempty" description:"Task required GPU Vram" validate:"omitempty"`
-	RepeatNum       *int                  `json:"repeat_num,omitempty" description:"Task repeat number" validate:"omitempty"`
 	TaskFee         *string               `json:"task_fee" description:"Final task fee in Wei as a decimal string" validate:"required"`
 	Timeout         *uint64               `json:"timeout,omitempty" description:"Task timeout" validate:"omitempty"`
 }
@@ -174,11 +173,6 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 		return nil, response.NewExceptionResponse(err)
 	}
 
-	repeatNum := appConfig.Task.RepeatNum
-	if in.RepeatNum != nil {
-		repeatNum = *in.RepeatNum
-	}
-
 	modelIDs, err := models.GetTaskConfigModelIDs(in.TaskArgs, taskType)
 	if err != nil {
 		return nil, response.NewValidationErrorResponse("task_args", fmt.Sprintf("invalid task_args: %v", err))
@@ -189,34 +183,30 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 		return nil, err
 	}
 
-	tasks := make([]*models.InferenceTask, 0)
-	for i := 0; i < repeatNum; i++ {
-		taskIDBytes := make([]byte, 32)
-		rand.Read(taskIDBytes)
-		taskID := hexutil.Encode(taskIDBytes)
-		nonce, taskIDCommitment := models.GenerateTaskIDCommitment(taskID)
+	taskIDBytes := make([]byte, 32)
+	rand.Read(taskIDBytes)
+	taskID := hexutil.Encode(taskIDBytes)
+	nonce, taskIDCommitment := models.GenerateTaskIDCommitment(taskID)
 
-		task := &models.InferenceTask{
-			Client:           *client,
-			ClientTask:       *clientTask,
-			TaskArgs:         in.TaskArgs,
-			TaskType:         taskType,
-			TaskModelIDs:     modelIDs,
-			TaskVersion:      taskVersion,
-			TaskFee:          taskFee,
-			MinVram:          minVram,
-			RequiredGPU:      in.RequiredGPU,
-			RequiredGPUVram:  in.RequiredGPUVram,
-			TaskSize:         taskSize,
-			TaskID:           taskID,
-			TaskIDCommitment: taskIDCommitment,
-			Nonce:            nonce,
-			Timeout:          timeout,
-		}
-		tasks = append(tasks, task)
+	task := &models.InferenceTask{
+		Client:           *client,
+		ClientTask:       *clientTask,
+		TaskArgs:         in.TaskArgs,
+		TaskType:         taskType,
+		TaskModelIDs:     modelIDs,
+		TaskVersion:      taskVersion,
+		TaskFee:          taskFee,
+		MinVram:          minVram,
+		RequiredGPU:      in.RequiredGPU,
+		RequiredGPUVram:  in.RequiredGPUVram,
+		TaskSize:         taskSize,
+		TaskID:           taskID,
+		TaskIDCommitment: taskIDCommitment,
+		Nonce:            nonce,
+		Timeout:          timeout,
 	}
 
-	return tasks, nil
+	return []*models.InferenceTask{task}, nil
 }
 
 func buildSubmission(in *TaskInput, appConfig *config.AppConfig) (taskengine.Submission, error) {
@@ -262,7 +252,6 @@ func buildSubmission(in *TaskInput, appConfig *config.AppConfig) (taskengine.Sub
 		RequiredGPUVram: in.RequiredGPUVram,
 		TaskSize:        taskSize,
 		Timeout:         timeout,
-		RepeatNum:       in.RepeatNum,
 	}, nil
 }
 
@@ -283,7 +272,7 @@ func isTaskArgsJSONError(err error) bool {
 func DoCreateTask(ctx context.Context, clientID string, in *TaskInput) (*TaskResponse, error) {
 	appConfig := config.GetConfig()
 	db := config.GetDB()
-	if err := validateTaskInput(in, appConfig); err != nil {
+	if err := validateTaskInput(in); err != nil {
 		return nil, err
 	}
 
@@ -366,19 +355,12 @@ func validateRawTaskInput(in *TaskInput) error {
 	if _, err := config.ValidateWei(*in.TaskFee); err != nil {
 		return response.NewValidationErrorResponse("task_fee", err.Error())
 	}
-	return validateTaskInput(in, config.GetConfig())
+	return validateTaskInput(in)
 }
 
-func validateTaskInput(in *TaskInput, appConfig *config.AppConfig) error {
+func validateTaskInput(in *TaskInput) error {
 	if in.TaskType == nil || *in.TaskType > models.TaskTypeSDFTLora {
 		return response.NewValidationErrorResponse("task_type", "task_type must be 0, 1, or 2")
-	}
-	repeatNum := appConfig.Task.RepeatNum
-	if in.RepeatNum != nil {
-		repeatNum = *in.RepeatNum
-	}
-	if repeatNum <= 0 {
-		return response.NewValidationErrorResponse("repeat_num", "repeat_num must be greater than 0")
 	}
 	if result, err := models.ValidateTaskArgsJsonStr(in.TaskArgs, *in.TaskType); err != nil {
 		if isTaskArgsJSONError(err) {

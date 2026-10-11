@@ -6,7 +6,7 @@ This document specifies how Bridge creates, reconciles, and completes inference 
 
 Bridge MUST persist each logical task as a `ClientTask` submission before background processing creates its `InferenceTask` members and submits them to Relay.
 
-Each accepted raw task-creation request MUST create one new `ClientTask`. The raw endpoint MUST NOT accept a request identifier, deduplicate submissions, or return a task created by an earlier submission. The TaskEngine main loop MUST later expand `repeat_num` independent primary tasks in one transaction, and those primary tasks and their protocol validation members MUST share that `ClientTaskID`.
+Each accepted raw task-creation request MUST create one new `ClientTask`. The raw endpoint MUST NOT accept a request identifier, deduplicate submissions, or return a task created by an earlier submission. The TaskEngine main loop MUST later expand the effective `repeat_num` from Bridge configuration or an internal TaskEngine submission override into that many independent primary tasks in one transaction. Those primary tasks share the `ClientTaskID`. Protocol validation members created later for a primary share that primary's `TaskID`. Repeat expansion and protocol validation are separate mechanisms.
 
 For raw task creation, Bridge MUST commit the conditional API-key usage increment, Client upsert, and `ClientTask` submission in one database transaction. A quota failure, task argument validation failure, task construction failure, persistence failure, or canceled context MUST roll back the usage increment and every created row. Repeat expansion MUST create all primary `InferenceTask` rows and mark expansion complete in a separate all-or-nothing main-loop transaction.
 
