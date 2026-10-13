@@ -91,3 +91,35 @@ func TestBuildAbortTaskInputUsesCreatorCancelled(t *testing.T) {
 		t.Fatalf("abort payload missing commitment: %s", payload)
 	}
 }
+
+func TestBuildCreateTaskInputOmitsDerivedParallelFields(t *testing.T) {
+	plain, err := json.Marshal(buildCreateTaskInput(&models.InferenceTask{
+		TaskModelIDs: models.StringArray{"base:org/model"},
+		TaskVersion:  "3.7.0",
+		TaskSize:     2,
+		TaskArgs:     `{"version":"3.7.0","model":"org/model","messages":[]}`,
+	}, "1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"task_model_ids", "task_version", "task_size", "required_model_files"} {
+		if strings.Contains(string(plain), field) {
+			t.Fatalf("create input must omit %s: %s", field, plain)
+		}
+	}
+	if !strings.Contains(string(plain), `"task_args":"{\"version\":\"3.7.0\",\"model\":\"org/model\",\"messages\":[]}"`) &&
+		!strings.Contains(string(plain), `"task_args":`) {
+		t.Fatalf("create input must keep task_args: %s", plain)
+	}
+}
+
+func TestBatchStatusItemDecodesExecutionModelFiles(t *testing.T) {
+	var item BatchStatusItem
+	payload := `{"task_id_commitment":"0x1","found":true,"execution_gpu":"gpu","execution_gpu_vram":24,"execution_model_files":[{"source_type":"huggingface","repository":"org/model","revision":"abc","format":"","format_kwargs":{}}]}`
+	if err := json.Unmarshal([]byte(payload), &item); err != nil {
+		t.Fatal(err)
+	}
+	if len(item.ExecutionModelFiles) != 1 || item.ExecutionModelFiles[0].Repository != "org/model" || item.ExecutionModelFiles[0].Revision != "abc" {
+		t.Fatalf("execution model files = %#v", item.ExecutionModelFiles)
+	}
+}

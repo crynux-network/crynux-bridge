@@ -43,17 +43,18 @@ type BatchCreateResult struct {
 }
 
 type BatchStatusItem struct {
-	TaskIDCommitment               string                 `json:"task_id_commitment"`
-	Found                          bool                   `json:"found"`
-	Status                         models.ChainTaskStatus `json:"status"`
-	AbortReason                    models.TaskAbortReason `json:"abort_reason"`
-	TaskError                      models.TaskError       `json:"task_error"`
-	Sequence                       uint64                 `json:"sequence"`
-	SamplingSeed                   string                 `json:"sampling_seed"`
-	SelectedExecutionGPU           string                 `json:"execution_gpu"`
-	SelectedExecutionGPUVram       uint64                 `json:"execution_gpu_vram"`
-	EstimatedExecutionCompletionAt *time.Time             `json:"estimated_completion_time,omitempty"`
-	ResultAvailable                bool                   `json:"result_available"`
+	TaskIDCommitment               string                  `json:"task_id_commitment"`
+	Found                          bool                    `json:"found"`
+	Status                         models.ChainTaskStatus  `json:"status"`
+	AbortReason                    models.TaskAbortReason  `json:"abort_reason"`
+	TaskError                      models.TaskError        `json:"task_error"`
+	Sequence                       uint64                  `json:"sequence"`
+	SamplingSeed                   string                  `json:"sampling_seed"`
+	SelectedExecutionGPU           string                  `json:"execution_gpu"`
+	SelectedExecutionGPUVram       uint64                  `json:"execution_gpu_vram"`
+	ExecutionModelFiles            models.ModelFileEntries `json:"execution_model_files,omitempty"`
+	EstimatedExecutionCompletionAt *time.Time              `json:"estimated_completion_time,omitempty"`
+	ResultAvailable                bool                    `json:"result_available"`
 }
 
 type BatchValidationItem struct {

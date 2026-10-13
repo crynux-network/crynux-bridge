@@ -85,6 +85,7 @@ type GPTTaskStreamResponse struct {
 }
 
 type GPTTaskArgs struct {
+	Version          string                   `json:"version" validate:"required"`  // Required
 	Model            string                   `json:"model" validate:"required"`    // Required
 	Messages         []Message                `json:"messages" validate:"required"` // Required
 	Tools            []map[string]interface{} `json:"tools,omitempty"`              // Optional

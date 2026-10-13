@@ -472,7 +472,7 @@ func TestLoadHeartbeatTasksFileRelativePathAndImagePath(t *testing.T) {
 	writeHeartbeatTasksFixture(t, dir, `{
   "tasks": [
     {
-      "task_version": "3.5.0",
+      "task_version": "3.6.0",
       "type": "llm",
       "ratio": 1.0,
       "model": "qwen/qwen3.6-27b",
@@ -518,7 +518,7 @@ func TestLoadHeartbeatTasksFileDefaultName(t *testing.T) {
 	writeHeartbeatTasksFixture(t, dir, `{
   "tasks": [
     {
-      "task_version": "3.5.0",
+      "task_version": "3.6.0",
       "type": "sd",
       "ratio": 1.0,
       "model": "crynux-network/sdxl-turbo",
@@ -545,7 +545,7 @@ func TestLoadHeartbeatTasksFileRejectsImagePathAndBase64(t *testing.T) {
 	writeHeartbeatTasksFixture(t, dir, `{
   "tasks": [
     {
-      "task_version": "3.5.0",
+      "task_version": "3.6.0",
       "type": "llm",
       "ratio": 1.0,
       "model": "qwen/qwen3.6-27b",
@@ -632,7 +632,7 @@ func TestLoadHeartbeatTasksFileAbsoluteTasksFile(t *testing.T) {
 	absTasks := writeHeartbeatTasksFixture(t, dir, `{
   "tasks": [
     {
-      "task_version": "3.5.0",
+      "task_version": "3.6.0",
       "type": "llm",
       "ratio": 0,
       "model": "qwen/qwen3-8b",

@@ -97,6 +97,7 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	}
 
 	taskArgs := models.GPTTaskArgs{
+		Version:          config.GetConfig().Task.DefaultTaskVersion,
 		Model:            in.Model,
 		Messages:         messages,
 		GenerationConfig: generationConfig,
@@ -120,7 +121,6 @@ func Completions(c *gin.Context, in *CompletionsRequest) (res *structs.Completio
 	task := &inference_tasks.TaskInput{
 		TaskArgs:        string(taskArgsStr),
 		TaskType:        &taskType,
-		TaskVersion:     nil,
 		MinVram:         &minVram,
 		RequiredGPU:     "",
 		RequiredGPUVram: 0,

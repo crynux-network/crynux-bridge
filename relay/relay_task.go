@@ -29,18 +29,15 @@ type GetTaskByCommitmentInput struct {
 }
 
 type CreateTaskInput struct {
-	TaskIDCommitment string   `json:"task_id_commitment"`
-	MinVram          uint64   `json:"min_vram"`
-	Nonce            string   `json:"nonce"`
-	RequiredGpu      string   `json:"required_gpu"`
-	RequiredGpuVram  uint64   `json:"required_gpu_vram"`
-	TaskArgs         string   `json:"task_args"`
-	TaskModelIds     []string `json:"task_model_ids"`
-	TaskSize         uint64   `json:"task_size"`
-	TaskType         int      `json:"task_type"`
-	TaskVersion      string   `json:"task_version"`
-	Timeout          *uint64  `json:"timeout,omitempty"`
-	TaskFee          string   `json:"task_fee"`
+	TaskIDCommitment string  `json:"task_id_commitment"`
+	MinVram          uint64  `json:"min_vram"`
+	Nonce            string  `json:"nonce"`
+	RequiredGpu      string  `json:"required_gpu"`
+	RequiredGpuVram  uint64  `json:"required_gpu_vram"`
+	TaskArgs         string  `json:"task_args"`
+	TaskType         int     `json:"task_type"`
+	Timeout          *uint64 `json:"timeout,omitempty"`
+	TaskFee          string  `json:"task_fee"`
 }
 
 type ValidateTaskInput struct {
@@ -79,10 +76,7 @@ func buildCreateTaskInput(task *models.InferenceTask, taskFee string) *CreateTas
 		RequiredGpu:      task.RequiredGPU,
 		RequiredGpuVram:  task.RequiredGPUVram,
 		TaskArgs:         task.TaskArgs,
-		TaskModelIds:     task.TaskModelIDs,
-		TaskSize:         task.TaskSize,
 		TaskType:         int(task.TaskType),
-		TaskVersion:      task.TaskVersion,
 		TaskFee:          taskFee,
 		Timeout:          timeout,
 	}
@@ -229,17 +223,12 @@ func CreateTask(ctx context.Context, task *models.InferenceTask) error {
 		form.Add("required_gpu", task.RequiredGPU)
 		form.Add("required_gpu_vram", strconv.FormatUint(task.RequiredGPUVram, 10))
 		form.Add("task_args", task.TaskArgs)
-		form.Add("task_size", strconv.FormatUint(task.TaskSize, 10))
 		form.Add("task_type", strconv.Itoa(int(task.TaskType)))
-		form.Add("task_version", task.TaskVersion)
 		form.Add("task_fee", taskFee)
 		form.Add("timestamp", strconv.FormatInt(timestamp, 10))
 		form.Add("signature", signature)
 		if timeout != nil {
 			form.Add("timeout", strconv.FormatUint(*timeout, 10))
-		}
-		for _, modelID := range task.TaskModelIDs {
-			form.Add("task_model_ids", modelID)
 		}
 		body = strings.NewReader(form.Encode())
 		contentType = "application/x-www-form-urlencoded"
@@ -256,17 +245,12 @@ func CreateTask(ctx context.Context, task *models.InferenceTask) error {
 			multipartWriter.WriteField("required_gpu", task.RequiredGPU)
 			multipartWriter.WriteField("required_gpu_vram", strconv.FormatUint(task.RequiredGPUVram, 10))
 			multipartWriter.WriteField("task_args", task.TaskArgs)
-			multipartWriter.WriteField("task_size", strconv.FormatUint(task.TaskSize, 10))
 			multipartWriter.WriteField("task_type", strconv.Itoa(int(task.TaskType)))
-			multipartWriter.WriteField("task_version", task.TaskVersion)
 			multipartWriter.WriteField("task_fee", taskFee)
 			multipartWriter.WriteField("timestamp", strconv.FormatInt(timestamp, 10))
 			multipartWriter.WriteField("signature", signature)
 			if timeout != nil {
 				multipartWriter.WriteField("timeout", strconv.FormatUint(*timeout, 10))
-			}
-			for _, modelID := range task.TaskModelIDs {
-				multipartWriter.WriteField("task_model_ids", modelID)
 			}
 
 			file, err := os.Open(checkpointFilePath)

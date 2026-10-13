@@ -148,8 +148,9 @@ type InferenceTask struct {
 	MinVram         uint64        `json:"min_vram"`
 	RequiredGPU     string        `json:"required_gpu"`
 	RequiredGPUVram uint64        `json:"required_gpu_vram"`
-	TaskSize        uint64        `json:"task_size"`
-	Timeout         uint64        `json:"timeout"`
+	RequiredModelFiles ModelFileEntries `json:"-" gorm:"type:longtext"`
+	TaskSize           uint64           `json:"task_size"`
+	Timeout            uint64           `json:"timeout"`
 
 	Status           TaskStatus `json:"status" gorm:"index:idx_inference_task_client_status,priority:2"`
 	TaskID           string     `json:"task_id" gorm:"index:idx_inference_task_group,priority:1"`
@@ -176,6 +177,7 @@ type InferenceTask struct {
 	RelayFound                  bool                `json:"-"`
 	SelectedExecutionGPU        string              `json:"-"`
 	SelectedExecutionGPUVram    uint64              `json:"-"`
+	SelectedExecutionModelFiles ModelFileEntries    `json:"-" gorm:"type:longtext"`
 	EstimatedCompletionAt       *time.Time          `json:"-"`
 	ResultAvailable             bool                `json:"-"`
 	ValidationSubmitted         bool                `json:"-"`

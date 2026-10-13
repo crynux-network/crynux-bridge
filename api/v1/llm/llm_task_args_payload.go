@@ -3,6 +3,7 @@ package llm
 import "crynux_bridge/models"
 
 type llmTaskArgsPayload struct {
+	Version          string                      `json:"version"`
 	Model            string                      `json:"model" validate:"required"`
 	Messages         any                         `json:"messages" validate:"required"`
 	Tools            []map[string]interface{}    `json:"tools,omitempty"`
@@ -15,6 +16,7 @@ type llmTaskArgsPayload struct {
 
 func buildLLMTaskArgsPayload(args models.GPTTaskArgs, messages any) llmTaskArgsPayload {
 	return llmTaskArgsPayload{
+		Version:          args.Version,
 		Model:            args.Model,
 		Messages:         messages,
 		Tools:            args.Tools,

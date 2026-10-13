@@ -44,7 +44,7 @@ Deployment MUST place the tasks JSON file next to `config.yml`. Image files refe
 
 Each heartbeat task entry under `task.heartbeat_tasks.tasks` MUST define:
 
-- `task_version`
+- `task_version`, which Bridge MUST write into TaskArgs.`version` for both SD and LLM heartbeat TaskArgs
 - `type` (`sd` or `llm`)
 - `ratio`
 - `model`
@@ -145,7 +145,7 @@ For `type: sd`, each prompt MUST use `text`.
 - `content` MUST be rejected at config load
 - `messages` MUST be rejected at config load
 
-SD generation parameters other than prompt text, `negative_prompt`, and `steps` (scheduler, cfg, seed, safety checker, omitted image width and height) MUST follow the existing model-specific heartbeat defaults.
+SD generation parameters other than prompt text, `negative_prompt`, and `steps` (scheduler, cfg, seed, safety checker) MUST follow the existing model-specific heartbeat defaults. SD heartbeat task args MUST set `task_config.image_width` and `task_config.image_height` to `512`.
 
 SD heartbeat entries used for Relay execution-time fitting MUST follow [heartbeat_sd_calibration.md](./heartbeat_sd_calibration.md).
 
@@ -215,11 +215,13 @@ For `tool`:
 
 Selected SD prompt fields MUST map to Relay SD inference task args:
 
+- `version` from the task entry `task_version`
 - `prompt` from selected prompt `text` or built-in default
 - `negative_prompt` from selected prompt `negative_prompt` or built-in default
 - `base_model.name` from task `model`
 - `task_config.steps` from the selected task entry `steps`
-- `task_config.num_images` `1`
+- `task_config.image_width` and `task_config.image_height` `512`
+- `task_config.num_images_per_prompt` `1`
 
 SD heartbeat entries used for Relay execution-time fitting MUST follow [heartbeat_sd_calibration.md](./heartbeat_sd_calibration.md).
 
@@ -227,6 +229,7 @@ SD heartbeat entries used for Relay execution-time fitting MUST follow [heartbea
 
 Selected LLM prompt fields MUST map to Relay GPT inference task args:
 
+- `version` from the task entry `task_version`
 - `model` from task `model`
 - when the selected prompt uses `text` or `content`, `messages` as a single user message whose `content` is that string or content block list
 - when the selected prompt uses `messages`, `messages` as that configured list after tool-history adaptation

@@ -265,9 +265,10 @@ func TestBuildLLMHeartbeatTaskArgsOmitsUnsetToolChoiceAndResponseFormat(t *testi
 func TestBuildSDHeartbeatTaskArgsConfiguredPrompt(t *testing.T) {
 	taskArgs, err := buildSDHeartbeatTaskArgs(
 		config.HeartbeatTaskConfig{
-			Type:  "sd",
-			Model: "crynux-network/sdxl-turbo",
-			Steps: 4,
+			Type:        "sd",
+			Model:       "crynux-network/sdxl-turbo",
+			Steps:       4,
+			TaskVersion: "3.7.0",
 		},
 		config.HeartbeatPromptConfig{
 			Text:           "custom sd prompt",
@@ -292,6 +293,33 @@ func TestBuildSDHeartbeatTaskArgsConfiguredPrompt(t *testing.T) {
 	taskConfig := parsed["task_config"].(map[string]interface{})
 	if taskConfig["steps"] != float64(4) {
 		t.Fatalf("unexpected steps %#v", taskConfig["steps"])
+	}
+	if parsed["version"] != "3.7.0" {
+		t.Fatalf("unexpected version %#v", parsed["version"])
+	}
+	baseModel := parsed["base_model"].(map[string]interface{})
+	if baseModel["name"] != "crynux-network/sdxl-turbo" || len(baseModel) != 1 {
+		t.Fatalf("unexpected base_model %#v", baseModel)
+	}
+	for key, want := range map[string]float64{
+		"image_width":           512,
+		"image_height":          512,
+		"num_images_per_prompt": 1,
+		"guidance_scale":        0,
+	} {
+		if taskConfig[key] != want {
+			t.Fatalf("unexpected task_config.%s %#v", key, taskConfig[key])
+		}
+	}
+	for _, removed := range []string{"scheduler", "controlnet"} {
+		if _, ok := parsed[removed]; ok {
+			t.Fatalf("unexpected legacy field %s", removed)
+		}
+	}
+	for _, removed := range []string{"num_images", "cfg", "safety_checker"} {
+		if _, ok := taskConfig[removed]; ok {
+			t.Fatalf("unexpected legacy task_config field %s", removed)
+		}
 	}
 }
 
@@ -413,7 +441,7 @@ func TestSelectHeartbeatTaskConfigNoEligible(t *testing.T) {
 		},
 	}
 	pendingCounts := map[string]uint64{
-		"llm|Qwen/Qwen2.5-7B":               2,
+		"llm|Qwen/Qwen2.5-7B":          2,
 		"sd|crynux-network/sdxl-turbo": 2,
 	}
 	_, err := selectHeartbeatTaskConfig(configs, pendingCounts, map[string]uint64{})
@@ -581,7 +609,7 @@ func TestHeartbeatTaskTypeAndModelID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if sdType != models.TaskTypeSD || sdModelID != "base:crynux-network/sdxl-turbo+fp16" {
+	if sdType != models.TaskTypeSD || sdModelID != "base:crynux-network/sdxl-turbo" {
 		t.Fatalf("unexpected sd identity: type=%v modelID=%q", sdType, sdModelID)
 	}
 }

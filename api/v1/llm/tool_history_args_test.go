@@ -139,7 +139,8 @@ func buildTestLLMTaskArgsPayload(args models.GPTTaskArgs) (llmTaskArgsPayload, e
 
 func testGPTTaskArgs(model string, tools []map[string]interface{}) models.GPTTaskArgs {
 	return models.GPTTaskArgs{
-		Model: model,
+		Version: "3.7.0",
+		Model:   model,
 		Messages: []models.Message{
 			{
 				Role:    models.LLMRoleUser,

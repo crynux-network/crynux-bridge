@@ -109,6 +109,7 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 	}
 
 	taskArgs := models.GPTTaskArgs{
+		Version:          config.GetConfig().Task.DefaultTaskVersion,
 		Model:            in.Model,
 		Messages:         messages,
 		Tools:            in.Tools,
@@ -137,7 +138,6 @@ func ChatCompletions(c *gin.Context, in *ChatCompletionsRequest) (res *structs.C
 	task := &inference_tasks.TaskInput{
 		TaskArgs:        string(taskArgsStr),
 		TaskType:        &taskType,
-		TaskVersion:     nil,
 		MinVram:         &minVram,
 		RequiredGPU:     "",
 		RequiredGPUVram: 0,

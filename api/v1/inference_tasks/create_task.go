@@ -24,7 +24,6 @@ import (
 type TaskInput struct {
 	TaskArgs        string                `json:"task_args" description:"Task args" validate:"required"`
 	TaskType        *models.ChainTaskType `json:"task_type" description:"Task type. 0 - SD task, 1 - LLM task, 2 - SD Finetune task" validate:"required"`
-	TaskVersion     *string               `json:"task_version,omitempty" description:"Task version. Default is task.default_task_version" validate:"omitempty"`
 	MinVram         *uint64               `json:"min_vram,omitempty" description:"Task minimal vram requirement" validate:"omitempty"`
 	RequiredGPU     string                `json:"required_gpu,omitempty" description:"Task required GPU name" validate:"omitempty"`
 	RequiredGPUVram uint64                `json:"required_gpu_vram,omitempty" description:"Task required GPU Vram" validate:"omitempty"`
@@ -140,11 +139,6 @@ func resolveTaskTimeout(taskType models.ChainTaskType, requested *uint64, appCon
 func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientTask, appConfig *config.AppConfig) ([]*models.InferenceTask, error) {
 	taskType := *in.TaskType
 
-	var taskVersion = appConfig.Task.DefaultTaskVersion
-	if in.TaskVersion != nil {
-		taskVersion = *in.TaskVersion
-	}
-
 	result, err := models.ValidateTaskArgsJsonStr(in.TaskArgs, taskType)
 	if err != nil {
 		if isTaskArgsJSONError(err) {
@@ -155,6 +149,11 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 
 	if result != nil {
 		return nil, response.NewValidationErrorResponse("task_args", fmt.Sprintf("invalid task_args: %s", result.Error()))
+	}
+
+	taskVersion, err := models.ParseTaskArgsVersion(in.TaskArgs)
+	if err != nil {
+		return nil, response.NewValidationErrorResponse("task_args", err.Error())
 	}
 
 	var minVram uint64
@@ -211,9 +210,9 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 
 func buildSubmission(in *TaskInput, appConfig *config.AppConfig) (taskengine.Submission, error) {
 	taskType := *in.TaskType
-	taskVersion := appConfig.Task.DefaultTaskVersion
-	if in.TaskVersion != nil {
-		taskVersion = *in.TaskVersion
+	taskVersion, err := models.ParseTaskArgsVersion(in.TaskArgs)
+	if err != nil {
+		return taskengine.Submission{}, err
 	}
 	var minVram uint64
 	if in.MinVram == nil {

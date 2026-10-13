@@ -274,6 +274,7 @@ The response for each commitment MUST contain only the fields required by TaskEn
 - sequence;
 - sampling seed;
 - selected execution GPU name and GPU VRAM when available;
+- selected execution model file entries when available;
 - estimated execution completion time when Relay has assigned the exact execution GPU;
 - result availability;
 - not-found state.
@@ -325,8 +326,8 @@ For each due task, the main loop MUST use the following rules:
 2. If Relay does not contain the commitment, the next operation MUST create the Relay task.
 3. If Relay contains the task, TaskEngine MUST synchronize Relay state before taking another lifecycle action.
 4. Sequence, sampling seed, VRF proof, and VRF number MUST be persisted before validation.
-5. When VRF selects VSS validation for an LLM task, TaskEngine MUST wait until batch status returns the primary task's selected execution GPU name and GPU VRAM. It MUST create exactly two additional members in the same database transaction that persists the primary task's VRF data, and both members MUST set `RequiredGPU` and `RequiredGPUVram` to that exact GPU variant.
-6. When VRF selects VSS validation for a non-LLM task, TaskEngine MUST create exactly two additional members in the same database transaction that persists the primary task's VRF data and MUST retain the primary task's submitted GPU requirements.
+5. When VRF selects VSS validation for an LLM task, TaskEngine MUST wait until batch status returns the primary task's selected execution GPU name, GPU VRAM, and execution model file entries. It MUST create exactly two additional members in the same database transaction that persists the primary task's VRF data. Both members MUST set `RequiredGPU` and `RequiredGPUVram` to that exact GPU variant and MUST create with TaskArgs that pin those exact model file revisions.
+6. When VRF selects VSS validation for a non-LLM task, TaskEngine MUST wait until batch status returns the primary task's execution model file entries. It MUST create exactly two additional members in the same database transaction that persists the primary task's VRF data. Both members MUST retain the primary task's submitted GPU requirements and MUST create with TaskArgs that pin those exact model file revisions.
 7. A task waiting for Relay progress MUST receive a new `next_action_at`; the current iteration MUST not block on that task.
 8. A single task reaching `ScoreReady` or `ErrorReported` MUST schedule single-task validation.
 9. A VSS group meeting the group readiness rules MUST schedule exactly one group-validation operation.
@@ -339,6 +340,10 @@ For each due task, the main loop MUST use the following rules:
 The three VSS members MUST execute as independent Relay tasks. Bounded workers MUST allow their create and status operations to run concurrently.
 
 LLM generation is deterministic only within the same GPU variant. A numerical difference produced by another GPU variant can change one generated token, and that token becomes input to the remainder of the generation. Relay compares LLM validation scores by exact equality, so such a difference can cause an honest node to be invalidated. All three members of an LLM VSS group MUST therefore execute on the primary member's selected execution GPU variant. The two additional members MUST set that GPU name and GPU VRAM as their exact `RequiredGPU` and `RequiredGPUVram` requirements. TaskEngine MUST obtain that immutable task execution data from Relay batch status and MUST NOT query the mutable node record separately.
+
+The two additional members of every VSS group MUST copy the primary task's TaskArgs and MUST write each primary execution model file's revision into the matching TaskArgs field by repository and format: LLM `revision`, or Image `base_model.revision` / `components.*.revision`. Bridge create requests to Relay MUST NOT send `task_version`, `task_model_ids`, `task_size`, or `required_model_files`. Relay derives those values from TaskArgs.
+
+Before submitting group validation for three members, TaskEngine MUST confirm that every member that started execution recorded the same set of execution model file entries, compared independent of order. A member that reached a ready status without recorded entries MUST fail the check. An `EndAborted` member that never recorded entries MUST be ignored by the check. When the check fails, TaskEngine MUST NOT submit validation to Relay and MUST complete the validation operation with a permanent error, so the group is not reported as successful.
 
 The main loop MUST evaluate a VSS group by loading all members with the same `TaskID`. A member worker MUST NOT query or update its siblings.
 

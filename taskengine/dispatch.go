@@ -372,32 +372,44 @@ func (e *Engine) executeValidationBatch(ctx context.Context, batch []operationDe
 	if err != nil {
 		return err
 	}
-	items := make([]relay.BatchValidationItem, len(batch))
+	outcomes := make([]mutationOperationResult, len(batch))
+	submitted := make([]int, 0, len(batch))
+	items := make([]relay.BatchValidationItem, 0, len(batch))
 	for i := range batch {
 		group := batch[i].group
+		if len(group) == 3 {
+			if err := models.CheckGroupExecutionModelFiles(group); err != nil {
+				log.Errorf("TaskEngine: refuse validation of group %s: %v", batch[i].task.TaskID, err)
+				outcomes[i] = mutationOperationResult{Outcome: relay.BatchOutcomePermanentError, Error: err.Error()}
+				continue
+			}
+		}
 		commitments := make([]string, len(group))
 		for j := range group {
 			commitments[j] = group[j].TaskIDCommitment
 		}
-		items[i] = relay.BatchValidationItem{
+		submitted = append(submitted, i)
+		items = append(items, relay.BatchValidationItem{
 			PublicKey:         publicKey,
 			TaskID:            batch[i].task.TaskID,
 			TaskIDCommitments: commitments,
 			VrfProof:          batch[i].task.VRFProof,
+		})
+	}
+	if len(items) > 0 {
+		results, err := relay.BatchValidateTasks(ctx, items)
+		if err != nil {
+			return err
+		}
+		if len(results) != len(items) {
+			return fmt.Errorf("validation batch returned %d results for %d units", len(results), len(items))
+		}
+		for i, index := range submitted {
+			outcomes[index] = mutationOperationResult{Outcome: results[i].Outcome, Error: results[i].Error}
 		}
 	}
-	results, err := relay.BatchValidateTasks(ctx, items)
-	if err != nil {
-		return err
-	}
-	if len(results) != len(batch) {
-		return fmt.Errorf("validation batch returned %d results for %d units", len(results), len(batch))
-	}
 	for i := range batch {
-		if err := e.writeOperationCompleted(ctx, batch[i].task.ID, mutationOperationResult{
-			Outcome: results[i].Outcome,
-			Error:   results[i].Error,
-		}); err != nil {
+		if err := e.writeOperationCompleted(ctx, batch[i].task.ID, outcomes[i]); err != nil {
 			return err
 		}
 	}

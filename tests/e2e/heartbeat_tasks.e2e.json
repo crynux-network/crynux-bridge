@@ -1,7 +1,7 @@
 {
   "tasks": [
     {
-      "task_version": "3.1.0",
+      "task_version": "3.7.0",
       "type": "sd",
       "ratio": 0.5,
       "model": "crynux-network/sdxl-turbo",
@@ -16,7 +16,7 @@
       ]
     },
     {
-      "task_version": "3.1.0",
+      "task_version": "3.7.0",
       "type": "sd",
       "ratio": 0.5,
       "model": "crynux-network/sdxl-turbo",
@@ -31,7 +31,7 @@
       ]
     },
     {
-      "task_version": "3.1.0",
+      "task_version": "3.7.0",
       "type": "sd",
       "ratio": 0.5,
       "model": "crynux-network/stable-diffusion-v1-5",
@@ -41,7 +41,7 @@
       "steps": 1
     },
     {
-      "task_version": "3.1.0",
+      "task_version": "3.7.0",
       "type": "sd",
       "ratio": 0.5,
       "model": "crynux-network/stable-diffusion-v1-5",
@@ -51,7 +51,7 @@
       "steps": 25
     },
     {
-      "task_version": "3.1.0",
+      "task_version": "3.7.0",
       "type": "llm",
       "ratio": 0.5,
       "model": "Qwen/Qwen2.5-14B",
@@ -66,7 +66,7 @@
       ]
     },
     {
-      "task_version": "3.1.0",
+      "task_version": "3.7.0",
       "type": "llm",
       "ratio": 0.5,
       "model": "Qwen/Qwen2.5-32B",
@@ -76,7 +76,7 @@
       "max_new_tokens": 250
     },
     {
-      "task_version": "3.1.0",
+      "task_version": "3.7.0",
       "type": "llm",
       "ratio": 1.0,
       "model": "Qwen/Qwen2.5-7B",

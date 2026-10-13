@@ -3,15 +3,18 @@ package models_test
 import (
 	"crynux_bridge/models"
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
+const sdTaskArgsJSON = `{"version":"3.7.0","base_model":{"name":"crynux-network/sdxl-turbo"},"prompt":"a lazy man sitting on a brown chair","negative_prompt":"","task_config":{"image_width":512,"image_height":512,"steps":1,"num_images_per_prompt":2,"seed":70813424,"guidance_scale":0}}`
+
 func TestValidateSDTaskArgs(t *testing.T) {
 
-	jsonStr := `{"base_model":"crynux-network/sdxl-turbo","prompt":"a lazy man sitting on a brown chair","negative_prompt":"","lora":null,"controlnet":null,"task_config":{"image_width":512,"image_height":512,"steps":1,"num_images":1,"seed":70813424,"safety_checker":false,"cfg":0},"scheduler":{"method":"EulerAncestralDiscreteScheduler","args":{"timestep_spacing":"trailing"}}}`
-	sdInferenceTaskSchema, err := jsonschema.Compile("https://raw.githubusercontent.com/crynux-ai/stable-diffusion-task/main/schema/stable-diffusion-inference-task.json")
+	jsonStr := sdTaskArgsJSON
+	sdInferenceTaskSchema, err := jsonschema.Compile("https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/image-task.json")
 
 	if err != nil {
 		t.Fatalf("failed to compile schema: %v", err)
@@ -30,21 +33,56 @@ func TestValidateSDTaskArgs(t *testing.T) {
 }
 
 func TestGetSDTaskConfigBaseModel(t *testing.T) {
-	jsonStr := `{"base_model":"crynux-ai/sdxl-turbo","prompt":"a lazy man sitting on a brown chair","negative_prompt":"","lora":null,"controlnet":null,"task_config":{"image_width":512,"image_height":512,"steps":1,"num_images":1,"seed":70813424,"safety_checker":false,"cfg":0},"scheduler":{"method":"EulerAncestralDiscreteScheduler","args":{"timestep_spacing":"trailing"}}}`
-	baseModel, err := models.GetSDTaskConfigBaseModel(jsonStr)
+	baseModel, err := models.GetSDTaskConfigBaseModel(sdTaskArgsJSON)
 	if err != nil {
 		t.Fatalf("failed to get base model: %v", err)
 	}
-	t.Logf("base model: %s", baseModel)
+	if baseModel != "crynux-network/sdxl-turbo" {
+		t.Fatalf("base model = %q", baseModel)
+	}
 }
 
 func TestGetSDTaskConfigModelIDs(t *testing.T) {
-	jsonStr := `{"base_model":"crynux-ai/sdxl-turbo","prompt":"a lazy man sitting on a brown chair","negative_prompt":"","lora":null,"controlnet":null,"task_config":{"image_width":512,"image_height":512,"steps":1,"num_images":1,"seed":70813424,"safety_checker":false,"cfg":0},"scheduler":{"method":"EulerAncestralDiscreteScheduler","args":{"timestep_spacing":"trailing"}}}`
+	modelIDs, err := models.GetTaskConfigModelIDs(sdTaskArgsJSON, models.TaskTypeSD)
+	if err != nil {
+		t.Fatalf("failed to get model ids: %v", err)
+	}
+	if !slices.Equal(modelIDs, []string{"base:crynux-network/sdxl-turbo"}) {
+		t.Fatalf("model ids = %v", modelIDs)
+	}
+}
+
+func TestGetSDTaskConfigModelIDsIncludesLoraAndComponents(t *testing.T) {
+	jsonStr := `{"base_model":{"name":"a/base","revision":"abc"},"lora":{"model":"a/lora"},"components":{"vae":{"format":"diffusers","repo":"a/vae"},"text_encoder":{"format":"diffusers","repo":"a/te","revision":"def"}},"prompt":"p","task_config":{}}`
 	modelIDs, err := models.GetTaskConfigModelIDs(jsonStr, models.TaskTypeSD)
 	if err != nil {
 		t.Fatalf("failed to get model ids: %v", err)
 	}
-	t.Logf("model ids: %v", modelIDs)
+	want := []string{"base:a/base", "lora:a/lora", "component:text_encoder:a/te", "component:vae:a/vae"}
+	if !slices.Equal(modelIDs, want) {
+		t.Fatalf("model ids = %v, want %v", modelIDs, want)
+	}
+}
+
+func TestGetLLMTaskConfigModelIDsIgnoresRevision(t *testing.T) {
+	modelIDs, err := models.GetTaskConfigModelIDs(`{"model":"a/llm","revision":"abc","messages":[]}`, models.TaskTypeLLM)
+	if err != nil {
+		t.Fatalf("failed to get model ids: %v", err)
+	}
+	if !slices.Equal(modelIDs, []string{"base:a/llm"}) {
+		t.Fatalf("model ids = %v", modelIDs)
+	}
+}
+
+func TestGetTaskConfigNumImages(t *testing.T) {
+	num, err := models.GetTaskConfigNumImages(sdTaskArgsJSON)
+	if err != nil || num != 2 {
+		t.Fatalf("num images = %d, err = %v", num, err)
+	}
+	num, err = models.GetTaskConfigNumImages(`{"base_model":{"name":"a/base"},"task_config":{}}`)
+	if err != nil || num != 1 {
+		t.Fatalf("default num images = %d, err = %v", num, err)
+	}
 }
 
 func TestIsNil(t *testing.T) {
@@ -121,19 +159,9 @@ func TestJsonNullHandling(t *testing.T) {
 }
 
 func TestGetTaskConfigNumImagesWithNull(t *testing.T) {
-	// Test with null num_images
-	jsonStr := `{
-		"task_config": {
-			"num_images": null
-		}
-	}`
-
-	_, err := models.GetTaskConfigNumImages(jsonStr)
-	if err == nil {
-		t.Error("Expected error when num_images is null")
-	}
-	if err.Error() != "num_images is missing or null" {
-		t.Errorf("Expected error message about null num_images, got: %v", err)
+	num, err := models.GetTaskConfigNumImages(`{"task_config":{"num_images_per_prompt":null}}`)
+	if err != nil || num != 1 {
+		t.Errorf("null num_images_per_prompt = %d, err = %v, want default 1", num, err)
 	}
 }
 
@@ -147,7 +175,7 @@ func TestGetSDTaskConfigBaseModelWithNull(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error when base_model is null")
 	}
-	if err.Error() != "base_model is missing or null" {
+	if err.Error() != "base_model.name is missing or empty" {
 		t.Errorf("Expected error message about null base_model, got: %v", err)
 	}
 }

@@ -26,7 +26,7 @@ LLM heartbeat `dtype` MUST remain `bfloat16` as required by [heartbeat_tasks.md]
 
 ## Independent Workload Axes
 
-Each LLM model that heartbeat emits MUST have its own grid. Entries in that grid MUST share `type` `llm`, `model`, `min_vram`, and `task_version`. `min_vram` MUST be the VRAM required to run that model. `task_version` MUST be the LLM inference task version used by heartbeat LLM tasks. Entries MUST differ only by input class and `max_new_tokens`.
+Each LLM model that heartbeat emits MUST have its own grid. Entries in that grid MUST share `type` `llm`, `model`, `min_vram`, and `task_version`. `min_vram` MUST be the VRAM required to run that model. Entries MUST differ only by input class and `max_new_tokens`.
 
 Input class MUST be one of:
 

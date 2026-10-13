@@ -208,18 +208,19 @@ func (e *Engine) applyRelayStatus(ctx context.Context, tx *gorm.DB, task *models
 		)
 	}
 	updates := map[string]any{
-		"status":                      localStatus,
-		"abort_reason":                status.AbortReason,
-		"task_error":                  status.TaskError,
-		"sequence":                    status.Sequence,
-		"relay_checked":               true,
-		"relay_found":                 true,
-		"operation_unknown":           false,
-		"selected_execution_gpu":      status.SelectedExecutionGPU,
-		"selected_execution_gpu_vram": status.SelectedExecutionGPUVram,
-		"estimated_completion_at":     status.EstimatedExecutionCompletionAt,
-		"result_available":            status.ResultAvailable,
-		"next_action_at":              nextAction,
+		"status":                         localStatus,
+		"abort_reason":                   status.AbortReason,
+		"task_error":                     status.TaskError,
+		"sequence":                       status.Sequence,
+		"relay_checked":                  true,
+		"relay_found":                    true,
+		"operation_unknown":              false,
+		"selected_execution_gpu":         status.SelectedExecutionGPU,
+		"selected_execution_gpu_vram":    status.SelectedExecutionGPUVram,
+		"selected_execution_model_files": status.ExecutionModelFiles,
+		"estimated_completion_at":        status.EstimatedExecutionCompletionAt,
+		"result_available":               status.ResultAvailable,
+		"next_action_at":                 nextAction,
 	}
 	if task.SiblingCancellationRequired && localStatus != models.InferenceTaskCreated {
 		updates["sibling_cancellation_required"] = false
@@ -255,7 +256,7 @@ func (e *Engine) persistVRFAndMembers(
 	if err != nil {
 		return err
 	}
-	if utils.VrfNeedValidation(vrfNumber) && task.TaskType == models.TaskTypeLLM && status.SelectedExecutionGPU == "" {
+	if utils.VrfNeedValidation(vrfNumber) && !executionAssigned(task.TaskType, status) {
 		return nil
 	}
 	updates := map[string]any{
@@ -276,6 +277,31 @@ func (e *Engine) persistVRFAndMembers(
 	if count != 1 {
 		return nil
 	}
+	members, err := newVSSMembers(task, status, hexutil.Encode(vrfNumber), hexutil.Encode(vrfProof))
+	if err != nil {
+		return err
+	}
+	return tx.WithContext(ctx).Create(&members).Error
+}
+
+// executionAssigned reports whether Relay has frozen the primary task's execution
+// resources that VSS members must reuse: the exact model files for every task
+// type, and additionally the exact GPU for LLM tasks.
+func executionAssigned(taskType models.ChainTaskType, status relay.BatchStatusItem) bool {
+	if len(status.ExecutionModelFiles) == 0 {
+		return false
+	}
+	return taskType != models.TaskTypeLLM || status.SelectedExecutionGPU != ""
+}
+
+// newVSSMembers builds the two additional validation members of a primary task.
+// Members copy the primary TaskArgs with execution model revisions pinned into
+// TaskArgs; LLM members also require the primary's exact GPU.
+func newVSSMembers(task *models.InferenceTask, status relay.BatchStatusItem, vrfNumber, vrfProof string) ([]models.InferenceTask, error) {
+	pinnedArgs, err := models.PinTaskArgsRevisions(task.TaskArgs, task.TaskType, status.ExecutionModelFiles)
+	if err != nil {
+		return nil, err
+	}
 	requiredGPU := task.RequiredGPU
 	requiredGPUVram := task.RequiredGPUVram
 	if task.TaskType == models.TaskTypeLLM {
@@ -286,29 +312,29 @@ func (e *Engine) persistVRFAndMembers(
 	members := make([]models.InferenceTask, 2)
 	for i := range members {
 		members[i] = models.InferenceTask{
-			ClientID:        task.ClientID,
-			ClientTaskID:    task.ClientTaskID,
-			TaskArgs:        task.TaskArgs,
-			TaskType:        task.TaskType,
-			TaskModelIDs:    task.TaskModelIDs,
-			TaskVersion:     task.TaskVersion,
-			TaskFee:         task.TaskFee,
-			MinVram:         task.MinVram,
-			RequiredGPU:     requiredGPU,
-			RequiredGPUVram: requiredGPUVram,
-			TaskSize:        task.TaskSize,
-			Timeout:         task.Timeout,
-			TaskID:          task.TaskID,
-			SamplingSeed:    status.SamplingSeed,
-			VRFNumber:       hexutil.Encode(vrfNumber),
-			VRFProof:        hexutil.Encode(vrfProof),
-			NextActionAt:    now,
+			ClientID:         task.ClientID,
+			ClientTaskID:     task.ClientTaskID,
+			TaskArgs:         pinnedArgs,
+			TaskType:         task.TaskType,
+			TaskModelIDs:     task.TaskModelIDs,
+			TaskVersion:      task.TaskVersion,
+			TaskFee:          task.TaskFee,
+			MinVram:          task.MinVram,
+			RequiredGPU:      requiredGPU,
+			RequiredGPUVram:  requiredGPUVram,
+			TaskSize:         task.TaskSize,
+			Timeout:          task.Timeout,
+			TaskID:           task.TaskID,
+			SamplingSeed:     status.SamplingSeed,
+			VRFNumber:        vrfNumber,
+			VRFProof:         vrfProof,
+			NextActionAt:     now,
 		}
 		nonce, commitment := models.GenerateTaskIDCommitment(task.TaskID)
 		members[i].Nonce = nonce
 		members[i].TaskIDCommitment = commitment
 	}
-	return tx.WithContext(ctx).Create(&members).Error
+	return members, nil
 }
 
 func (e *Engine) scheduleSiblingCancellation(tx *gorm.DB, task *models.InferenceTask) error {

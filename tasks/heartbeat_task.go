@@ -33,11 +33,15 @@ func generateHeartbeatTask(heartbeatTaskConfig config.HeartbeatTaskConfig) (task
 		return taskengine.Submission{}, err
 	}
 	repeatNum := 1
+	taskVersion, err := models.ParseTaskArgsVersion(taskArgs)
+	if err != nil {
+		return taskengine.Submission{}, err
+	}
 	return taskengine.Submission{
 		TaskArgs:     taskArgs,
 		TaskType:     taskType,
 		TaskModelIDs: taskModelIDs,
-		TaskVersion:  heartbeatTaskConfig.TaskVersion,
+		TaskVersion:  taskVersion,
 		MinVram:      heartbeatTaskConfig.MinVram,
 		TaskFee:      taskFee,
 		TaskSize:     1,
@@ -285,59 +289,36 @@ func replaceHeartbeatRandInMessageContent(content *any, value string) bool {
 	}
 }
 
+const (
+	heartbeatSDImageSize    = 512
+	defaultSDXLTurboPrompt  = "Self-portrait oil painting,a beautiful cyborg with golden hair,8k"
+	defaultSDPrompt         = "best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, faded ash gray messy bun hair+, border light, depth of field, looking at viewer, closeup"
+	defaultSDNegativePrompt = "paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, age spot, glans"
+)
+
 func buildSDHeartbeatTaskArgs(heartbeatTaskConfig config.HeartbeatTaskConfig, prompt config.HeartbeatPromptConfig, useDefault bool) (string, error) {
-	model := heartbeatTaskConfig.Model
-	seed := mathrand.Intn(100000000)
-	baseModel := map[string]interface{}{
-		"name":    model,
-		"variant": "fp16",
+	promptText, negativePrompt := defaultSDPrompt, defaultSDNegativePrompt
+	if heartbeatTaskConfig.Model == "crynux-network/sdxl-turbo" {
+		promptText, negativePrompt = defaultSDXLTurboPrompt, ""
+	}
+	if !useDefault {
+		promptText = prompt.Text
+		negativePrompt = prompt.NegativePrompt
 	}
 
-	var taskArgs map[string]interface{}
-	if model == "crynux-network/sdxl-turbo" {
-		promptText := "Self-portrait oil painting,a beautiful cyborg with golden hair,8k"
-		negativePrompt := ""
-		if !useDefault {
-			promptText = prompt.Text
-			negativePrompt = prompt.NegativePrompt
-		}
-		taskArgs = map[string]interface{}{
-			"base_model":      baseModel,
-			"prompt":          promptText,
-			"negative_prompt": negativePrompt,
-			"scheduler": map[string]interface{}{
-				"method": "EulerAncestralDiscreteScheduler",
-				"args": map[string]interface{}{
-					"timestep_spacing": "trailing",
-				},
-			},
-			"task_config": map[string]interface{}{
-				"num_images":     1,
-				"seed":           seed,
-				"steps":          heartbeatTaskConfig.Steps,
-				"cfg":            0,
-				"safety_checker": false,
-			},
-		}
-	} else {
-		promptText := "best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, faded ash gray messy bun hair+, border light, depth of field, looking at viewer, closeup"
-		negativePrompt := "paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, age spot, glans"
-		if !useDefault {
-			promptText = prompt.Text
-			negativePrompt = prompt.NegativePrompt
-		}
-		taskArgs = map[string]interface{}{
-			"base_model":      baseModel,
-			"prompt":          promptText,
-			"negative_prompt": negativePrompt,
-			"task_config": map[string]interface{}{
-				"num_images":     1,
-				"seed":           seed,
-				"steps":          heartbeatTaskConfig.Steps,
-				"cfg":            0,
-				"safety_checker": false,
-			},
-		}
+	taskArgs := map[string]interface{}{
+		"version":         heartbeatTaskConfig.TaskVersion,
+		"base_model":      map[string]interface{}{"name": heartbeatTaskConfig.Model},
+		"prompt":          promptText,
+		"negative_prompt": negativePrompt,
+		"task_config": map[string]interface{}{
+			"image_width":           heartbeatSDImageSize,
+			"image_height":          heartbeatSDImageSize,
+			"num_images_per_prompt": 1,
+			"seed":                  mathrand.Intn(100000000),
+			"steps":                 heartbeatTaskConfig.Steps,
+			"guidance_scale":        0,
+		},
 	}
 
 	taskArgsBytes, err := json.Marshal(taskArgs)
@@ -362,6 +343,7 @@ func buildLLMHeartbeatTaskArgs(
 	}
 
 	taskArgs := map[string]interface{}{
+		"version":  heartbeatTaskConfig.TaskVersion,
 		"model":    heartbeatTaskConfig.Model,
 		"messages": adaptedMessages,
 		"generation_config": map[string]interface{}{
