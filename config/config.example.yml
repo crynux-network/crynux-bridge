@@ -15,9 +15,6 @@ log:
   max_file_size: 100
   max_days: 30
   max_file_num: 5
-  features:
-    llm_api_request_log_enabled: false
-    llm_api_request_log_toolcall_enabled: false
 admin:
   auth_token: ""
   task_trace_max_tasks: 100
@@ -39,10 +36,8 @@ task:
   default_sd_task_fee_cnx: "1.0"
   default_sd_xl_task_fee_cnx: "2.0"
   default_llm_task_fee_cnx: "5.0"
-  default_llm_max_completion_tokens: 3000
   default_sd_finetune_task_fee_cnx: "15.0"
   repeat_num: 1
-  task_status_poll_interval: 1s
   sd_finetune_timeout: 120
   default_task_version: "3.7.0"
   engine:
@@ -72,8 +67,6 @@ task:
     # Relative paths resolve against the config.yml directory.
     # Image blocks in that file may use image_path (e.g. "vl_sample.png").
     tasks_file: "heartbeat_tasks.json"
-openrouter:
-  models_file: "models.json"
 task_schema:
   stable_diffusion_inference: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/refs/tags/v3.7.0/schema/image-task.json"
   gpt_inference: "https://raw.githubusercontent.com/crynux-network/gpt-task/refs/tags/v3.7.0/schema/gpt-inference-task.json"

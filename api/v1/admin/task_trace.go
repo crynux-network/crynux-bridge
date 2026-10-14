@@ -27,13 +27,7 @@ type GetTaskTraceResponse struct {
 
 func ListTaskTraces(c *gin.Context, in *ListTaskTracesRequest) (*ListTaskTracesResponse, error) {
 	return &ListTaskTracesResponse{
-		Data: tasktrace.ListTraces(in.Limit, false),
-	}, nil
-}
-
-func ListOpenAILLMTaskTraces(c *gin.Context, in *ListTaskTracesRequest) (*ListTaskTracesResponse, error) {
-	return &ListTaskTracesResponse{
-		Data: tasktrace.ListTraces(in.Limit, true),
+		Data: tasktrace.ListTraces(in.Limit),
 	}, nil
 }
 
@@ -41,19 +35,6 @@ func GetTaskTrace(c *gin.Context, in *GetTaskTraceRequest) (*GetTaskTraceRespons
 	trace, ok := tasktrace.GetTrace(in.TaskID)
 	if !ok {
 		return nil, response.NewValidationErrorResponse("task_id", "task trace not found")
-	}
-	return &GetTaskTraceResponse{
-		Data: &trace,
-	}, nil
-}
-
-func GetOpenAILLMTaskTrace(c *gin.Context, in *GetTaskTraceRequest) (*GetTaskTraceResponse, error) {
-	trace, ok := tasktrace.GetTrace(in.TaskID)
-	if !ok {
-		return nil, response.NewValidationErrorResponse("task_id", "task trace not found")
-	}
-	if trace.Source != tasktrace.SourceOpenAIChatCompletions && trace.Source != tasktrace.SourceOpenAICompletions {
-		return nil, response.NewValidationErrorResponse("task_id", "OpenAI LLM task trace not found")
 	}
 	return &GetTaskTraceResponse{
 		Data: &trace,

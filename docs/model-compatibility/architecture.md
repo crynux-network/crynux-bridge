@@ -2,35 +2,31 @@
 
 ## Scope
 
-The Crynux AS raw-task model compatibility flow has three processing stages:
+Bridge is a raw-task transport and lifecycle component. The model compatibility flow that crosses Bridge has three processing stages, and Bridge owns none of the prompt or response semantics:
 
-1. Crynux AS converts an OpenAI-compatible request into canonical `GPTTaskArgs`.
+1. The caller produces canonical `GPTTaskArgs`. Crynux AS produces them from its public OpenAI-compatible requests; other raw callers submit them directly.
 2. gpt-task converts `GPTTaskArgs` into model input, executes inference, and returns raw assistant text.
-3. Crynux AS converts raw assistant text into an OpenAI-compatible response.
+3. The caller interprets the raw assistant text. Crynux AS converts it into its public OpenAI-compatible response.
 
-Relay, Node, and Worker carry the contracts between these stages. They MUST NOT add a fourth prompt or output-processing stage.
+Bridge, Relay, Node, and Worker carry the contracts between these stages. They MUST NOT add a fourth prompt or output-processing stage.
 
-## Stage 1: OpenAI Request to TaskArgs
+The public OpenAI-compatible API contract, canonical `GPTTaskArgs` creation, and public response normalization are specified by `crynux-as/docs/model-compatibility/`. The execution contract from canonical `GPTTaskArgs` to raw assistant text is specified by `gpt-task/docs/model-compatibility/`.
 
-For the AS raw-task path, Crynux AS owns the public API contract. Bridge MUST accept the canonical raw-task JSON after schema validation and MUST NOT repeat the public request conversion.
+## Raw-Task Acceptance
 
-Crynux AS MUST normalize:
+Bridge accepts canonical `GPTTaskArgs` through the raw task API (`POST /v1/inference_tasks` and `POST /v1/inference_tasks/batch`) and through the heartbeat component. Bridge MUST accept the canonical raw-task JSON after schema validation and MUST NOT perform any OpenAI request conversion.
 
-- message roles and ordered message history;
-- string and multipart content;
-- image data URLs into raw-base64 image blocks;
-- tool definitions, assistant tool-call history, and tool results;
-- template arguments produced by AS-owned public request mappings;
-- supported generation parameters;
-- seed, dtype, quantization, and AS-owned execution defaults.
+Bridge MUST preserve these canonical fields unchanged:
 
-An API representation MAY require adaptation before it satisfies a model template contract. Such adaptation remains an AS API concern when it converts an OpenAI field representation without changing the conversation's meaning.
+- ordered `messages`, including string and multipart content, image blocks, assistant `tool_calls`, and tool results;
+- `tools`;
+- `tool_choice`;
+- `response_format`;
+- `template_args`;
+- `generation_config`, `seed`, `dtype`, and quantization controls;
+- `model` and `version`.
 
-OpenAI assistant tool history represents `function.arguments` as a JSON string, while the Transformers chat-template contract requires a JSON object. Crynux AS MUST parse argument strings into objects by default before task serialization. A documented model interface that requires a string MAY retain the validated OpenAI representation.
-
-This representation adapter belongs to Crynux AS for requests accepted by AS.
-
-Canonical `GPTTaskArgs` supports optional `tool_choice`, `response_format`, and `template_args`. Bridge MUST preserve these fields unchanged in the raw-task path. Bridge MUST NOT interpret them as model behavior; gpt-task owns their compatibility with the selected tokenizer, processor, or family adapter.
+Bridge MUST NOT interpret `tool_choice`, `response_format`, or `template_args` as model behavior; gpt-task owns their compatibility with the selected tokenizer, processor, or family adapter.
 
 Bridge MUST NOT parse a tokenizer chat template, select an AutoClass, construct model-specific prompt text, infer tensor-parallel eligibility, or construct a structured-output constraint.
 
@@ -44,41 +40,36 @@ Node MUST preserve task arguments while selecting GPUs, configuring the executor
 
 Worker MUST deserialize `GPTTaskArgs`, invoke the configured gpt-task entrypoint, and return its response. Worker MUST NOT normalize OpenAI requests or parse generated tool calls.
 
-Raw gpt-task response choices MUST remain unchanged while Relay, Node, and Bridge task transport stores or transfers them.
+## Raw Result Handling
 
-## Stage 2: TaskArgs to Raw Text
+Raw gpt-task response choices MUST remain unchanged while Relay, Node, and Bridge store or transfer them.
 
-gpt-task owns model execution. It MUST:
+Bridge MUST download the single JSON result of an LLM task and serve it unchanged through `GET /v1/inference_tasks/{client_task_id}/llm`. Bridge MUST NOT parse generated tool calls, strip or relocate generated thinking text, construct OpenAI `tool_calls`, or alter the finish reason.
 
-1. Validate canonical `GPTTaskArgs`.
-2. Establish deterministic execution and generation configuration.
-3. Resolve model, tokenizer or processor, AutoClass, and classic or tensor-parallel execution.
-4. Render canonical messages through the selected prompt adapter or multimodal processor.
-5. Execute generation.
-6. Decode generated tokens into raw assistant text and report usage.
+## Heartbeat Tool-History Adaptation
 
-Model-specific chat templates, prompt adapters, image processors, thinking template arguments, remote `auto_map`, tensor-parallel plans, and fallback behavior belong to this stage. Their authoritative specification is `gpt-task/docs/model-compatibility/`.
+The heartbeat component creates LLM tasks from configured prompts whose messages MAY contain assistant `tool_calls`. A configured assistant tool call stores `function.arguments` as a JSON object encoded as a string. The Transformers chat-template contract requires a JSON object by default, so Bridge owns this representation adaptation for heartbeat tasks. The adaptation is implemented by `BuildTemplateToolCallMessages` in the Bridge `llmtask` package and MUST run before the task arguments are serialized.
 
-gpt-task MUST preserve generated thinking and tool-call syntax in its raw assistant text. It MUST NOT create OpenAI `tool_calls` or remove generated reasoning.
+Bridge MUST apply these rules:
 
-## Stage 3: Raw Text to OpenAI Response
+- The adaptation MUST run whenever the message list contains an assistant message with `tool_calls`, and MUST NOT depend on whether `tools` is set. A message list without assistant tool-call history MUST be left unchanged.
+- By default, Bridge MUST parse every assistant-history `function.arguments` string as a JSON object and serialize it as an object.
+- The official DeepSeek V3-family templates, the full DeepSeek R1 template, and the DeepSeek V3.2 encoder require JSON strings. For those model interfaces Bridge MUST retain the validated argument string. DeepSeek R1 Distill checkpoints MUST use the object default because they use their base-model templates.
+- Bridge MUST validate every argument string as a JSON object, including strings retained for a model interface. Invalid JSON, JSON `null`, arrays, and scalar values MUST be rejected.
+- Runtime trial rendering MUST NOT select the representation, because a template can accept a string while silently serializing it as a JSON string instead of an argument object. The representation MUST be selected before task serialization.
+- The adaptation MUST NOT change roles, content, function names, call IDs, call order, argument keys, or argument values.
 
-Crynux AS owns response normalization for requests submitted through its raw-task path. Bridge owns response normalization only for requests accepted by Bridge's legacy OpenAI-compatible endpoints.
+Heartbeat MUST NOT add `template_args.enable_thinking=false` because tools are present. Heartbeat MUST forward configured `tool_choice` and `response_format` unchanged.
 
-Crynux AS MUST inspect the complete raw assistant text with registered output-format adapters. Adapter selection MUST depend on generated syntax, not the requested model ID. A successful adapter result MUST become an ordered OpenAI tool call.
-
-Only syntax blocks successfully converted into structured fields MAY be removed from `message.content`. Thinking text, final text, and unrecognized or malformed text MUST remain in their original order. Crynux AS MUST NOT discard text solely because it occurs before `</think>` or `</thinking>`.
-
-When one or more tool calls are parsed, Crynux AS MUST set `finish_reason="tool_calls"`. When no tool call is parsed, AS MUST preserve the gpt-task finish reason or apply the endpoint's documented default.
-
-AS streaming is response transport over the completed normalized result. Streaming and non-streaming requests MUST therefore share the same request adaptation, raw-output parsing, content preservation, tool-call order, finish reason, and usage.
+Tool-history representation for tasks created by Crynux AS is owned by Crynux AS and is specified by `crynux-as/docs/model-compatibility/`. Bridge MUST NOT apply this adaptation to raw-API submissions.
 
 ## Compatibility Boundaries
 
-Crynux AS compatibility is verified at the public API boundaries:
+Bridge compatibility is verified at these boundaries:
 
-- OpenAI request to canonical `GPTTaskArgs`;
-- raw gpt-task response to OpenAI response.
+- canonical `GPTTaskArgs` accepted by the raw task API to the serialized network task payload, with every canonical field preserved;
+- heartbeat prompt messages to canonical `GPTTaskArgs` messages after tool-history adaptation;
+- raw gpt-task result stored by Relay to the JSON returned by the raw result endpoint, unchanged.
 
 gpt-task compatibility is verified at the execution boundaries:
 

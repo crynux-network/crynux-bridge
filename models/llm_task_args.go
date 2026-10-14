@@ -1,9 +1,5 @@
 package models
 
-import (
-	"crynux_bridge/api/v1/llm/structs"
-)
-
 type LLMRole string
 
 const (
@@ -32,18 +28,22 @@ const (
 	DTypeUnknown  DType = "auto" // default value
 )
 
-type QuantizeBits int
+type FunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
 
-const (
-	QuantizeBits4 QuantizeBits = 4
-	QuantizeBits8 QuantizeBits = 8
-)
+type ToolCall struct {
+	Id       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function FunctionCall `json:"function"`
+}
 
 type Message struct {
-	Role       LLMRole            `json:"role" validate:"required"` // Required
-	Content    any                `json:"content,omitempty"`        // Optional, supports string or multimodal blocks
-	ToolCallID string             `json:"tool_call_id,omitempty"`   // Optional
-	ToolCalls  []structs.ToolCall `json:"tool_calls,omitempty"`     // Optional, uses structs.ToolCall
+	Role       LLMRole    `json:"role" validate:"required"` // Required
+	Content    any        `json:"content,omitempty"`        // Optional, supports string or multimodal blocks
+	ToolCallID string     `json:"tool_call_id,omitempty"`   // Optional
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`     // Optional
 }
 
 type MessageContentBlock struct {
@@ -72,18 +72,6 @@ type Usage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
-type StreamChoice struct {
-	Index        int           `json:"index"`
-	Delta        Message       `json:"delta"`
-	FinishReason *FinishReason `json:"finish_reason,omitempty"`
-}
-
-type GPTTaskStreamResponse struct {
-	Model   string         `json:"model" validate:"required"`
-	Choices []StreamChoice `json:"choices"`
-	Usage   Usage          `json:"usage"`
-}
-
 type GPTTaskArgs struct {
 	Version          string                   `json:"version" validate:"required"`  // Required
 	Model            string                   `json:"model" validate:"required"`    // Required
@@ -95,7 +83,6 @@ type GPTTaskArgs struct {
 	TemplateArgs     map[string]interface{}   `json:"template_args,omitempty"`      // Optional
 	Seed             int                      `json:"seed"`                         // Optional, default 0
 	DType            DType                    `json:"dtype,omitempty"`              // Optional, default "auto"
-	QuantizeBits     QuantizeBits             `json:"quantize_bits,omitempty"`      // Optional
 }
 
 type ResponseChoice struct {

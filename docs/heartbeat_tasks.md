@@ -237,7 +237,7 @@ Selected LLM prompt fields MUST map to Relay GPT inference task args:
 - `tool_choice` from the task entry `tool_choice` when set; otherwise `tool_choice` MUST be omitted
 - `response_format` from the task entry `response_format` when set; otherwise `response_format` MUST be omitted
 
-When assistant tool-call history is present, Bridge MUST apply the same tool-history `function.arguments` adaptation used by Chat Completions before serializing task args. That adaptation is defined in `docs/model-compatibility/openai-api-adaptation.md`. Heartbeat MUST NOT redefine the argument-object versus argument-string rules.
+When assistant tool-call history is present, Bridge MUST apply the heartbeat tool-history `function.arguments` adaptation before serializing task args. That adaptation is defined in `docs/model-compatibility/architecture.md` and MUST be implemented by `BuildTemplateToolCallMessages` in the Bridge `llmtask` package. Heartbeat MUST NOT redefine the argument-object versus argument-string rules.
 
 Bridge MUST forward configured `tool_choice` and `response_format` unchanged into Relay GPT task args. Bridge MUST NOT interpret these fields as model behavior.
 

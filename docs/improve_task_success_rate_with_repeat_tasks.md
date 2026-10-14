@@ -17,7 +17,7 @@ This mechanism is Bridge reliability fan-out. It MUST NOT be described or implem
 
 Each repeat primary has a distinct `TaskID`. Protocol validation members for one primary share that primary's `TaskID`. Those are separate mechanisms: repeat expansion creates independent primaries under one `ClientTaskID`; VSS expansion, when required, creates validation members under one primary `TaskID`.
 
-Raw task and OpenAI-compatible submissions MUST use this mechanism with the configured `task.repeat_num`. Heartbeat submissions MUST explicitly set `repeat_num` to `1` on the TaskEngine submission and therefore MUST create one primary task. SDFT round creation MUST use `repeat_num` equal to `1`.
+Raw task submissions MUST use this mechanism with the configured `task.repeat_num`. Heartbeat submissions MUST explicitly set `repeat_num` to `1` on the TaskEngine submission and therefore MUST create one primary task. SDFT round creation MUST use `repeat_num` equal to `1`.
 
 ## Functional Requirements
 
@@ -40,15 +40,15 @@ Raw task and OpenAI-compatible submissions MUST use this mechanism with the conf
 ### Execution and Completion
 
 - Bridge workers MUST process primary tasks concurrently.
-- The synchronous API path MUST poll logical task status through the same TaskEngine status method used by the raw task API.
-- TaskEngine MUST NOT provide a completion waiter or task-completion notification for synchronous APIs.
-- Once the first successful result is available, the API response MUST be built from that task result and returned immediately.
+- Raw status and result APIs MUST observe logical task status through the same TaskEngine status and result methods.
+- TaskEngine MUST NOT provide a completion waiter or task-completion notification for HTTP handlers.
+- Once the first successful result is available, the raw result API MUST return that task result.
 - The completion of other concurrent attempts MUST continue in background and MUST NOT block the API response after the first success is available.
 - Client-task failure status MUST be decided from all inference tasks under the same `ClientTaskID`, not from a single primary or validation group alone. One unsuccessful primary or validation group MUST NOT mark the client task failed while another attempt under the same client task is still unfinished.
 
 ## Implementation Summary
 
-TaskEngine's main loop advances every primary task through creation, status synchronization, validation, and result download. The first downloaded result updates the logical task to success. A synchronous API handler observes that state by polling TaskEngine's logical status method and then reads the result through TaskEngine's logical result method. Request-level ownership is maintained by `ClientTaskID`, which groups all repeated attempts from one logical submission.
+TaskEngine's main loop advances every primary task through creation, status synchronization, validation, and result download. The first downloaded result updates the logical task to success. Raw status and result handlers observe that state through TaskEngine's logical status and result methods. Request-level ownership is maintained by `ClientTaskID`, which groups all repeated attempts from one logical submission.
 
 ## Data and State Model
 
@@ -63,10 +63,7 @@ Primary tasks and any protocol-required follow-up tasks are processed through ta
 
 ## Source Files
 
-- `api/v1/llm/chat_completions.go`: builds LLM task input and invokes processing.
-- `api/v1/llm/completions.go`: builds completion task input and invokes processing.
-- `api/v1/inference_tasks/create_task.go`: normalizes raw and OpenAI-compatible task submissions.
-- OpenAI-compatible handlers: API-layer status polling and response conversion.
+- `api/v1/inference_tasks/create_task.go`: normalizes raw task submissions.
 - `taskengine/`: logical task submission, repeat expansion, shared status and result reads, background state processing, and result download.
 - `tasks/process_tasks.go`: SDFT-only background processing.
 - `models/client.go`: request-level `ClientTask` model and status tracking.

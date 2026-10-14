@@ -1,6 +1,6 @@
 # Task Engine
 
-This document specifies the Bridge task-processing component used by the raw task API, OpenAI-compatible LLM APIs, and heartbeat tasks.
+This document specifies the Bridge task-processing component used by the raw task API and heartbeat tasks.
 
 ## Responsibilities
 
@@ -26,7 +26,7 @@ For each logical task, TaskEngine MUST:
 - determine final failure only after every possible result has failed;
 - continue unfinished processing after Bridge restarts.
 
-TaskEngine MUST also process heartbeat tasks through the same task lifecycle. API handlers MUST only authenticate requests, convert API input into a logical task submission, call TaskEngine creation and read methods, perform API-layer status polling when a synchronous response is required, and convert TaskEngine output into the API response.
+TaskEngine MUST also process heartbeat tasks through the same task lifecycle. API handlers MUST only authenticate requests, convert API input into a logical task submission, call TaskEngine creation and read methods, and convert TaskEngine output into the API response.
 
 SDFT orchestration is outside TaskEngine and is specified in [sdft_tasks.md](./sdft_tasks.md). This TaskEngine implementation MUST NOT contain SDFT checkpoint inspection, continuation, retry, completion, timeout, input-upload, or result-download behavior. The existing SDFT APIs and processing code are outside this TaskEngine replacement and MUST remain unchanged.
 
@@ -34,9 +34,11 @@ SDFT orchestration is outside TaskEngine and is specified in [sdft_tasks.md](./s
 
 Bridge MUST run one `TaskEngine` instance for one Bridge database. Multiple Bridge processes MUST NOT process tasks concurrently from the same database.
 
-`TaskEngine` MUST provide task creation, task processing, task status reading, and result reading without depending on HTTP handlers or OpenAI response types.
+`TaskEngine` MUST provide task creation, task processing, task status reading, and result reading without depending on HTTP handlers or HTTP response types.
 
 API handlers MUST own authentication, API-specific input conversion, and API-specific output conversion. They MUST NOT implement Relay polling, VSS group waiting, repeat-task waiting, result downloading, or `ClientTask` completion.
+
+TaskEngine MUST NOT maintain in-memory completion waiters or send task-completion notifications.
 
 All database operations for `ClientTask`, `InferenceTask`, task processing operations, and task result metadata MUST be implemented inside TaskEngine. API handlers MUST NOT read or write those records directly.
 
@@ -46,7 +48,7 @@ TaskEngine MUST expose methods for:
 - reading a logical task status;
 - reading a logical task result.
 
-The raw and OpenAI-compatible handlers and heartbeat component MUST call the same logical-task creation method. TaskEngine MUST use the same submission-creation path and MUST NOT branch on whether a submission came from an API or heartbeat. The raw status and result handlers MUST call TaskEngine read methods.
+The raw handlers and heartbeat component MUST call the same logical-task creation method. TaskEngine MUST use the same submission-creation path and MUST NOT branch on whether a submission came from an API or heartbeat. The raw status and result handlers MUST call TaskEngine read methods.
 
 The raw task API MUST remain asynchronous:
 
@@ -59,20 +61,11 @@ The raw task API MUST remain asynchronous:
 
 `POST /v1/inference_tasks/batch/status` MUST return ClientTask status for a list of client task IDs owned by the authenticated client. The response MUST contain one result per requested ID in request order. A missing or foreign ID MUST appear as an item-level error and MUST NOT fail the whole batch. The batch MUST contain at least one ID and at most 100 IDs after request validation. Status reads MUST remain authorized after the API key's creation quota is exhausted.
 
-The OpenAI-compatible `/completions` and `/chat/completions` endpoints MUST remain synchronous:
-
-1. The endpoint MUST create the task through the same `TaskEngine` task-creation path.
-2. The endpoint MUST poll logical task status by `ClientTaskID` through the same TaskEngine status method used by the raw task status endpoint.
-3. When the logical task succeeds, the endpoint MUST read the result through the same TaskEngine result method used by the raw task result endpoints.
-4. The endpoint MUST convert the result to its existing OpenAI-compatible response.
-
-The APIs MUST NOT add a mode field or separate synchronous and asynchronous routes.
-
-HTTP request cancellation MUST stop only that request's API-layer status polling. It MUST NOT stop persisted task processing or cancel the Relay task.
+HTTP request cancellation MUST NOT stop persisted task processing or cancel the Relay task.
 
 ## Submission and Repeat Expansion
 
-A raw, OpenAI-compatible, or heartbeat submission MUST represent one logical task. Its caller MUST pass that submission to the common TaskEngine creation method and MUST NOT create repeat tasks itself.
+A raw or heartbeat submission MUST represent one logical task. Its caller MUST pass that submission to the common TaskEngine creation method and MUST NOT create repeat tasks itself.
 
 TaskEngine's logical-task submission MAY contain an optional `repeat_num` for Bridge-internal callers. When `repeat_num` is present, TaskEngine MUST use that value. When it is absent, TaskEngine MUST use `task.repeat_num` from Bridge configuration. The selected value MUST be greater than `0`.
 
@@ -91,7 +84,7 @@ Each repeat primary MUST:
 - reference the same `ClientTaskID`;
 - enter scheduling with `next_action_at` set to the current time.
 
-Raw and OpenAI-compatible handlers MUST build TaskEngine submissions without setting `repeat_num`, so TaskEngine uses `task.repeat_num`. Heartbeat task submissions MUST explicitly set `repeat_num` to `1`. SDFT round creation MUST use `repeat_num` equal to `1`.
+Raw handlers MUST build TaskEngine submissions without setting `repeat_num`, so TaskEngine uses `task.repeat_num`. Heartbeat task submissions MUST explicitly set `repeat_num` to `1`. SDFT round creation MUST use `repeat_num` equal to `1`.
 
 Repeat expansion is Bridge reliability fan-out. It MUST NOT decide whether validation runs, how many validation members exist, or how scores are compared. VSS expansion is separate from repeat expansion. After Relay returns the sampling seed for a primary, TaskEngine MUST calculate the VRF result and create two additional VSS members when validation is required. Whether VSS runs and how many members it creates MUST follow the protocol and VRF result, not `repeat_num`.
 
@@ -99,8 +92,7 @@ The external API MUST expose only the logical task:
 
 - raw task creation MUST return one `ClientTaskID`;
 - raw status MUST return logical task state without returning internal repeat or VSS members;
-- raw result APIs MUST select the result under that `ClientTaskID`;
-- OpenAI-compatible LLM APIs MUST return the first successfully downloaded result under that `ClientTaskID`;
+- raw result APIs MUST return the first successfully downloaded result under that `ClientTaskID`;
 - repeat primary IDs and VSS membership MUST remain internal processing details.
 
 ## Persisted Scheduling State
@@ -194,7 +186,6 @@ An idle iteration MUST issue only bounded indexed queries. Its query cost MUST N
 ```mermaid
 flowchart TD
     RawAPI[Raw task API] --> TaskEngineAPI[TaskEngine methods]
-    OpenAIAPI[OpenAI-compatible LLM API] --> TaskEngineAPI
     Heartbeat[Heartbeat creation] --> TaskEngineAPI
     TaskEngineAPI --> CreateTx[Persist logical ClientTask]
     CreateTx --> DB[(Bridge database)]
@@ -368,21 +359,9 @@ After a task reaches a local terminal state or `ResultDownloaded`, the main loop
 
 Startup MUST recalculate every `Running` ClientTask that already has locally finished members.
 
-## API-Layer Synchronous Polling
-
-TaskEngine MUST NOT maintain in-memory completion waiters or send task-completion notifications.
-
-The OpenAI-compatible handler MUST implement synchronous response behavior by repeatedly calling TaskEngine's logical status method. The raw task status endpoint MUST call the same method once per HTTP request.
-
-While the logical status is running, the OpenAI-compatible handler MUST wait for the configured `task_status_poll_interval` before querying again. A successful status MUST cause the handler to call TaskEngine's logical result method. A failed status MUST cause the handler to return the corresponding OpenAI-compatible error.
-
-`task_status_poll_interval` MUST be configurable and greater than zero.
-
-The polling wait MUST observe the HTTP request context. Context cancellation MUST terminate the polling loop without changing `ClientTask`, `InferenceTask`, or Relay state.
-
 ## Heartbeat
 
-Bridge MUST run a heartbeat component independently from TaskEngine. The heartbeat component MUST own its creation goroutine, creation schedule, hourly limit, batch size, weighted selection, and per-model pending limit. For each selected entry, it MUST convert the entry into a normalized logical task submission and call the same TaskEngine creation method used by raw and OpenAI-compatible submissions.
+Bridge MUST run a heartbeat component independently from TaskEngine. The heartbeat component MUST own its creation goroutine, creation schedule, hourly limit, batch size, weighted selection, and per-model pending limit. For each selected entry, it MUST convert the entry into a normalized logical task submission and call the same TaskEngine creation method used by raw submissions.
 
 TaskEngine MUST NOT define a heartbeat task type, heartbeat creation method, heartbeat scheduling rule, or heartbeat lifecycle branch. It MUST process submissions created by the heartbeat component only as standard logical tasks.
 

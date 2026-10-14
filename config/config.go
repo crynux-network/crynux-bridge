@@ -49,9 +49,6 @@ func InitConfig(configPath string) error {
 	if appConfig.Task.RepeatNum <= 0 {
 		return errors.New("task.repeat_num must be set to a positive value")
 	}
-	if appConfig.Task.TaskStatusPollInterval <= 0 {
-		return errors.New("task.task_status_poll_interval must be set to a positive value")
-	}
 	if err := validateTaskEngineConfig(appConfig.Task.Engine); err != nil {
 		return err
 	}

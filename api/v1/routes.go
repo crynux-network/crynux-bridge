@@ -7,7 +7,6 @@ import (
 	"crynux_bridge/api/v1/count"
 	"crynux_bridge/api/v1/image"
 	"crynux_bridge/api/v1/inference_tasks"
-	"crynux_bridge/api/v1/llm"
 	"crynux_bridge/api/v1/middleware"
 	"crynux_bridge/api/v1/models"
 	"crynux_bridge/api/v1/network"
@@ -88,54 +87,6 @@ func InitRoutes(r *fizz.Fizz) {
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, tonic.Handler(count.CountTask, 200))
 
-	// for openrouter, api: /completions and /chat/completions
-	openrouterGroup := v1g.Group("openrouter", "OpenRouter", "OpenRouter related APIs")
-
-	openrouterGroup.POST("/completions", []fizz.OperationOption{
-		fizz.ID("openrouter_completions"),
-		fizz.Summary("Api for openrouter, /completions"),
-		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
-		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
-	}, tonic.Handler(llm.Completions, 200))
-
-	openrouterGroup.POST("/chat/completions", []fizz.OperationOption{
-		fizz.ID("openrouter_chat_completions"),
-		fizz.Summary("Api for openrouter, /chat/completions"),
-		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
-		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
-	}, tonic.Handler(llm.ChatCompletions, 200))
-	openrouterGroup.GET("/models", []fizz.OperationOption{
-		fizz.Summary("Get the list of the models"),
-		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
-	}, tonic.Handler(models.GetOpenrouterModels, 200))
-
-	llmGroup := v1g.Group("llm", "LLM", "LLM related APIs")
-	llmGroup.POST("/completions", []fizz.OperationOption{
-		fizz.ID("llm_completions"),
-		fizz.Summary("Api for llm, /completions"),
-		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
-		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
-	}, tonic.Handler(llm.Completions, 200))
-	llmGroup.POST("/:vram_limit/completions", []fizz.OperationOption{
-		fizz.ID("llm_completions_with_vram_limit"),
-		fizz.Summary("Api for llm with VRAM limit in URL, /:vram_limit/completions"),
-		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
-		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
-	}, tonic.Handler(llm.Completions, 200))
-
-	llmGroup.POST("/chat/completions", []fizz.OperationOption{
-		fizz.ID("llm_chat_completions"),
-		fizz.Summary("Api for openrouter, /chat/completions"),
-		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
-		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
-	}, tonic.Handler(llm.ChatCompletions, 200))
-	llmGroup.POST("/:vram_limit/chat/completions", []fizz.OperationOption{
-		fizz.ID("llm_chat_completions_with_vram_limit"),
-		fizz.Summary("Api for llm with VRAM limit in URL, /:vram_limit/chat/completions"),
-		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
-		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
-	}, tonic.Handler(llm.ChatCompletions, 200))
-
 	imagesGroup := v1g.Group("images", "Images", "Images related APIs")
 	imagesGroup.POST("/models", []fizz.OperationOption{
 		fizz.ID("images_models"),
@@ -196,22 +147,6 @@ func InitRoutes(r *fizz.Fizz) {
 		fizz.Response("401", "unauthorized", response.ErrorResponse{}, nil, nil),
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, middleware.AdminAuthMiddleware(), tonic.Handler(admin.GetTaskTrace, 200))
-
-	adminLLMGroup := adminGroup.Group("llm", "Admin LLM traces", "Admin LLM trace APIs")
-	adminLLMTasksGroup := adminLLMGroup.Group("tasks", "Admin OpenAI LLM task traces", "Admin OpenAI LLM task trace APIs")
-	adminLLMTasksGroup.GET("", []fizz.OperationOption{
-		fizz.ID("admin_llm_task_traces"),
-		fizz.Summary("List recent OpenAI-compatible LLM task traces"),
-		fizz.Response("401", "unauthorized", response.ErrorResponse{}, nil, nil),
-		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
-	}, middleware.AdminAuthMiddleware(), tonic.Handler(admin.ListOpenAILLMTaskTraces, 200))
-	adminLLMTasksGroup.GET("/:task_id/trace", []fizz.OperationOption{
-		fizz.ID("admin_llm_task_trace"),
-		fizz.Summary("Get an OpenAI-compatible LLM task trace"),
-		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
-		fizz.Response("401", "unauthorized", response.ErrorResponse{}, nil, nil),
-		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
-	}, middleware.AdminAuthMiddleware(), tonic.Handler(admin.GetOpenAILLMTaskTrace, 200))
 }
 
 func setTaskResultResponseContent(r *fizz.Fizz) {

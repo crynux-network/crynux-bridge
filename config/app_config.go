@@ -29,10 +29,6 @@ type AppConfig struct {
 		MaxFileSize int    `mapstructure:"max_file_size"`
 		MaxDays     int    `mapstructure:"max_days"`
 		MaxFileNum  int    `mapstructure:"max_file_num"`
-		Features    struct {
-			LLMAPIRequestLogEnabled         bool `mapstructure:"llm_api_request_log_enabled"`
-			LLMAPIRequestLogToolCallEnabled bool `mapstructure:"llm_api_request_log_toolcall_enabled"`
-		} `mapstructure:"features"`
 	} `mapstructure:"log"`
 
 	Admin struct {
@@ -65,17 +61,15 @@ type AppConfig struct {
 	} `mapstructure:"relay"`
 
 	Task struct {
-		DefaultSDTaskFeeCNX           string               `mapstructure:"default_sd_task_fee_cnx"`
-		DefaultSDXLTaskFeeCNX         string               `mapstructure:"default_sd_xl_task_fee_cnx"`
-		DefaultLLMTaskFeeCNX          string               `mapstructure:"default_llm_task_fee_cnx"`
-		DefaultLLMMaxCompletionTokens int                  `mapstructure:"default_llm_max_completion_tokens"`
-		DefaultSDFinetuneTaskFeeCNX   string               `mapstructure:"default_sd_finetune_task_fee_cnx"`
-		RepeatNum                     int                  `mapstructure:"repeat_num"`
-		SDFinetuneTimeout             uint64               `mapstructure:"sd_finetune_timeout"`
-		DefaultTaskVersion            string               `mapstructure:"default_task_version"`
-		TaskStatusPollInterval        time.Duration        `mapstructure:"task_status_poll_interval"`
-		Engine                        TaskEngineConfig     `mapstructure:"engine"`
-		HeartbeatTasks                HeartbeatTasksConfig `mapstructure:"heartbeat_tasks"`
+		DefaultSDTaskFeeCNX         string               `mapstructure:"default_sd_task_fee_cnx"`
+		DefaultSDXLTaskFeeCNX       string               `mapstructure:"default_sd_xl_task_fee_cnx"`
+		DefaultLLMTaskFeeCNX        string               `mapstructure:"default_llm_task_fee_cnx"`
+		DefaultSDFinetuneTaskFeeCNX string               `mapstructure:"default_sd_finetune_task_fee_cnx"`
+		RepeatNum                   int                  `mapstructure:"repeat_num"`
+		SDFinetuneTimeout           uint64               `mapstructure:"sd_finetune_timeout"`
+		DefaultTaskVersion     string               `mapstructure:"default_task_version"`
+		Engine                 TaskEngineConfig     `mapstructure:"engine"`
+		HeartbeatTasks         HeartbeatTasksConfig `mapstructure:"heartbeat_tasks"`
 	} `mapstructure:"task"`
 
 	TaskSchema struct {
@@ -83,10 +77,6 @@ type AppConfig struct {
 		GPTInference                string `mapstructure:"gpt_inference"`
 		StableDiffusionFinetuneLora string `mapstructure:"stable_diffusion_finetune_lora"`
 	} `mapstructure:"task_schema"`
-
-	OpenRouter struct {
-		ModelsFile string `mapstructure:"models_file"`
-	}
 
 	Test struct {
 		RootAddress    string `mapstructure:"root_address"`

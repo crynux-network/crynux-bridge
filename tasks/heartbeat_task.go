@@ -3,7 +3,6 @@ package tasks
 import (
 	"context"
 	"crypto/rand"
-	"crynux_bridge/api/v1/llm/structs"
 	"crynux_bridge/config"
 	"crynux_bridge/llmtask"
 	"crynux_bridge/models"
@@ -405,12 +404,12 @@ func convertHeartbeatMessages(messages []config.HeartbeatMessageConfig) ([]model
 			ToolCallID: message.ToolCallID,
 		}
 		if len(message.ToolCalls) > 0 {
-			toolCalls := make([]structs.ToolCall, 0, len(message.ToolCalls))
+			toolCalls := make([]models.ToolCall, 0, len(message.ToolCalls))
 			for _, toolCall := range message.ToolCalls {
-				toolCalls = append(toolCalls, structs.ToolCall{
+				toolCalls = append(toolCalls, models.ToolCall{
 					Id:   toolCall.ID,
 					Type: toolCall.Type,
-					Function: structs.FunctionCall{
+					Function: models.FunctionCall{
 						Name:      toolCall.Function.Name,
 						Arguments: toolCall.Function.Arguments,
 					},

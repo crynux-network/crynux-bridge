@@ -11,11 +11,9 @@ import (
 )
 
 const (
-	SourceOpenAIChatCompletions = "openai_chat_completions"
-	SourceOpenAICompletions     = "openai_completions"
-	SourceDirectInferenceTask   = "direct_inference_task"
-	SourceImageGeneration       = "image_generation"
-	SourceImageFinetune         = "image_finetune"
+	SourceDirectInferenceTask = "direct_inference_task"
+	SourceImageGeneration     = "image_generation"
+	SourceImageFinetune       = "image_finetune"
 )
 
 type StartTraceInput struct {
@@ -143,8 +141,8 @@ func RecordEvent(task *models.InferenceTask, name string, details map[string]any
 	defaultStore.recordEvent(task, name, details)
 }
 
-func ListTraces(limit int, openAIOnly bool) []Trace {
-	return defaultStore.listTraces(limit, openAIOnly)
+func ListTraces(limit int) []Trace {
+	return defaultStore.listTraces(limit)
 }
 
 func GetTrace(taskID string) (Trace, bool) {
@@ -306,7 +304,7 @@ func (s *store) recordEvent(task *models.InferenceTask, name string, details map
 	})
 }
 
-func (s *store) listTraces(limit int, openAIOnly bool) []Trace {
+func (s *store) listTraces(limit int) []Trace {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -317,9 +315,6 @@ func (s *store) listTraces(limit int, openAIOnly bool) []Trace {
 	for i := len(s.order) - 1; i >= 0 && len(result) < limit; i-- {
 		record := s.traces[s.order[i]]
 		if record == nil {
-			continue
-		}
-		if openAIOnly && !isOpenAISource(record.trace.Source) {
 			continue
 		}
 		result = append(result, record.snapshot())
@@ -628,8 +623,4 @@ func buildMissingData(trace Trace) []MissingData {
 		}
 	}
 	return missing
-}
-
-func isOpenAISource(source string) bool {
-	return source == SourceOpenAIChatCompletions || source == SourceOpenAICompletions
 }

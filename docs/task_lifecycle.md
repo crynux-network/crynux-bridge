@@ -1,6 +1,6 @@
 # Task Lifecycle
 
-This document specifies how Bridge creates, reconciles, and completes inference tasks through Relay.
+This document specifies how Bridge creates, reconciles, and completes tasks through Relay.
 
 ## Task Creation and Timeout Inputs
 
@@ -12,9 +12,9 @@ For raw task creation, Bridge MUST commit the conditional API-key usage incremen
 
 The raw task endpoint MUST authenticate the application API key and MUST require `task_fee` as a base-10 integer string. The value MUST be in the unsigned 256-bit integer range. The submitted value is the final fee in Wei for each repeated primary task. Bridge MUST store it in `inference_tasks.task_fee` as `VARCHAR(78)` and forward it unchanged. Bridge MUST NOT multiply it by task size and MUST NOT read a default fee when the field is absent.
 
-The Chat Completions, Completions, and heartbeat paths MUST read configured CNX fees as ordinary decimal strings with at most 9 fractional digits. Bridge MUST calculate Wei with exact integer arithmetic and MUST reject results outside the unsigned 256-bit integer range. Every `InferenceTask.TaskFee` MUST contain a base-10 Wei string, and Bridge MUST forward that stored value to Relay without another unit conversion. Validation and repeat tasks MUST copy the Wei value unchanged.
+The heartbeat path MUST read configured CNX fees as ordinary decimal strings with at most 9 fractional digits. Bridge MUST calculate Wei with exact integer arithmetic and MUST reject results outside the unsigned 256-bit integer range. Every `InferenceTask.TaskFee` MUST contain a base-10 Wei string, and Bridge MUST forward that stored value to Relay without another unit conversion. Validation and repeat tasks MUST copy the Wei value unchanged.
 
-Normal SD and LLM tasks MUST NOT carry a creator-supplied execution timeout. The direct inference-task API MUST reject `timeout` for these task types. The OpenAI-compatible LLM APIs MUST NOT expose or forward a timeout. Relay MUST calculate the execution timeout for a normal task after node assignment.
+Normal SD and LLM tasks MUST NOT carry a creator-supplied execution timeout. The direct inference-task API MUST reject `timeout` for these task types. Relay MUST calculate the execution timeout for a normal task after node assignment.
 
 SDFT processing is outside the TaskEngine lifecycle specified by this document. Its existing flow and required component boundary are specified in [sdft_tasks.md](./sdft_tasks.md).
 
@@ -34,7 +34,7 @@ A committed raw task creation MUST remain queryable independently of the HTTP re
 
 ## HTTP Request Lifetime
 
-Synchronous OpenAI-compatible LLM handlers MUST use the incoming HTTP context while polling logical task completion. Bridge MUST NOT add a fixed three-minute wait deadline.
+The raw create, status, and result endpoints MUST use the incoming HTTP context for that request only. Bridge MUST NOT add a fixed three-minute wait deadline for raw task handlers.
 
 If the HTTP context is canceled or reaches its caller-provided deadline, the handler MUST return a request error. This event MUST NOT change persisted task state, stop TaskEngine processing, or submit cancellation to Relay.
 
@@ -81,7 +81,7 @@ LLM generation is deterministic only within the same GPU variant. A numerical di
 
 Before Bridge creates the two additional members of any validation group, it MUST also obtain the primary member's execution model file entries from Relay task status. The additional members MUST copy the primary TaskArgs unchanged and MUST carry those exact entries as required model files in their create requests. Bridge MUST NOT submit group validation when the members' recorded execution model file entries differ.
 
-A task that reaches a terminal status before its VRF data is persisted never gets a validation group. Any internal group-state reader that waits for persisted VRF data MUST stop waiting when the task status is terminal and MUST treat the task as a single-member group. OpenAI-compatible handlers MUST read only logical task status and results through TaskEngine and MUST NOT wait for validation-group state.
+A task that reaches a terminal status before its VRF data is persisted never gets a validation group. Any internal group-state reader that waits for persisted VRF data MUST stop waiting when the task status is terminal and MUST treat the task as a single-member group. Raw status and result handlers MUST read only logical task status and results through TaskEngine and MUST NOT wait for validation-group state.
 
 A task is ready for validation only in `ScoreReady` or `ErrorReported`. Group waiting MUST use explicit ready and terminal status checks and MUST NOT depend on numeric status ordering.
 

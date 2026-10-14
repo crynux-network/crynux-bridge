@@ -19,8 +19,8 @@ func TestStoreKeepsMostRecentTraces(t *testing.T) {
 		}
 		task.TaskIDCommitment = string(rune('a' + i))
 		StartTrace(StartTraceInput{
-			Source:      SourceOpenAICompletions,
-			Endpoint:    "/v1/llm/completions",
+			Source:      SourceDirectInferenceTask,
+			Endpoint:    "/v1/inference_tasks",
 			ClientID:    "client",
 			TaskType:    &taskType,
 			RequestTime: time.Unix(int64(i), 0),
@@ -28,7 +28,7 @@ func TestStoreKeepsMostRecentTraces(t *testing.T) {
 		}, 2)
 	}
 
-	if traces := ListTraces(10, false); len(traces) != 2 {
+	if traces := ListTraces(10); len(traces) != 2 {
 		t.Fatalf("expected 2 retained traces, got %d", len(traces))
 	}
 	if _, ok := GetTrace("a"); ok {
@@ -49,8 +49,8 @@ func TestStoreIndexesRelatedTasksAndRecordsEvents(t *testing.T) {
 		TaskIDCommitment: "0xprimary",
 	}
 	primary := StartTrace(StartTraceInput{
-		Source:      SourceOpenAIChatCompletions,
-		Endpoint:    "/v1/llm/chat/completions",
+		Source:      SourceDirectInferenceTask,
+		Endpoint:    "/v1/inference_tasks",
 		ClientID:    "client",
 		TaskType:    &taskType,
 		Request:     map[string]any{"model": "test"},
@@ -101,8 +101,8 @@ func TestTraceStartsFromClientTaskBeforePrimaryExpansion(t *testing.T) {
 	taskType := models.TaskTypeLLM
 	requestTime := time.Unix(100, 0)
 	traceKey := StartTrace(StartTraceInput{
-		Source:       SourceOpenAICompletions,
-		Endpoint:     "/v1/llm/completions",
+		Source:       SourceDirectInferenceTask,
+		Endpoint:     "/v1/inference_tasks",
 		ClientID:     "client",
 		ClientTaskID: 42,
 		TaskType:     &taskType,

@@ -112,15 +112,14 @@ func TestIsNil(t *testing.T) {
 }
 
 func TestJsonNullHandling(t *testing.T) {
-	// Test JSON with null values
 	jsonStr := `{
 		"base_model": null,
 		"lora": {
 			"model": null
 		},
-		"controlnet": null,
+		"components": null,
 		"task_config": {
-			"num_images": null
+			"num_images_per_prompt": null
 		}
 	}`
 
@@ -130,13 +129,12 @@ func TestJsonNullHandling(t *testing.T) {
 		t.Fatalf("Failed to unmarshal JSON: %v", err)
 	}
 
-	// Test that null values are properly detected
 	if !models.IsNil(taskArgsMap["base_model"]) {
 		t.Error("base_model should be nil")
 	}
 
-	if !models.IsNil(taskArgsMap["controlnet"]) {
-		t.Error("controlnet should be nil")
+	if !models.IsNil(taskArgsMap["components"]) {
+		t.Error("components should be nil")
 	}
 
 	lora, ok := taskArgsMap["lora"].(map[string]interface{})
@@ -153,8 +151,8 @@ func TestJsonNullHandling(t *testing.T) {
 		t.Fatal("task_config should be a map")
 	}
 
-	if !models.IsNil(taskConfig["num_images"]) {
-		t.Error("task_config.num_images should be nil")
+	if !models.IsNil(taskConfig["num_images_per_prompt"]) {
+		t.Error("task_config.num_images_per_prompt should be nil")
 	}
 }
 

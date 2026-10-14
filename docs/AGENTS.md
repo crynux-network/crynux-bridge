@@ -6,9 +6,9 @@
 - `improve_task_success_rate_with_repeat_tasks.md`: Bridge config-controlled repeat fan-out for logical-task reliability. This is not protocol task validation.
 - `task_lifecycle.md`: HTTP request lifetime, Relay-owned deadlines, per-inference-task reconciliation, terminal synchronization, and validation-group stopping rules.
 - `task_processing_concurrency.md`: Single-loop lifecycle-write ownership, bounded batch request concurrency, persisted scheduling, restart recovery, and capacity verification.
-- `task_engine.md`: Authoritative Bridge TaskEngine design covering the database-driven main loop, bounded I/O workers, task creation and reads, VSS groups, repeat expansion, recovery, and integration boundaries for raw, OpenAI-compatible, and heartbeat callers. Repeat expansion and VSS expansion are separate paths.
+- `task_engine.md`: Authoritative Bridge TaskEngine design covering the database-driven main loop, bounded I/O workers, task creation and reads, VSS groups, repeat expansion, recovery, and integration boundaries for raw and heartbeat callers. Repeat expansion and VSS expansion are separate paths.
 - `sdft_tasks.md`: Existing SDFT multi-round behavior, its boundary from the TaskEngine replacement, and the separate component contract that keeps SDFT branches out of TaskEngine.
-- `model-compatibility/`: End-to-end OpenAI-compatible LLM request adaptation, transparent task transport, gpt-task execution boundary, and response normalization.
+- `model-compatibility/`: Bridge raw-task transport boundaries, canonical `GPTTaskArgs` and raw result preservation, heartbeat tool-history adaptation, and the boundaries with Crynux AS and gpt-task.
 
 ## Repeat Fan-out and Protocol Validation
 
@@ -20,11 +20,11 @@ Details are specified in `improve_task_success_rate_with_repeat_tasks.md` and `t
 
 ## Model Compatibility Authority
 
-Crynux AS public OpenAI-compatible request adaptation, canonical `GPTTaskArgs` creation, and public response normalization MUST use `crynux-as/docs/model-compatibility/` in the standalone AS repository as their authority. Bridge legacy OpenAI endpoints and Bridge raw-task transport boundaries MUST use `docs/model-compatibility/` in this repository.
+Crynux AS public OpenAI-compatible request adaptation, canonical `GPTTaskArgs` creation, and public response normalization MUST use `crynux-as/docs/model-compatibility/` in the standalone AS repository as their authority. Bridge raw-task transport boundaries and heartbeat tool-history adaptation MUST use `docs/model-compatibility/` in this repository.
 
-Prompt rendering, chat templates, processor behavior, rendering of Bridge-adapted tool history into model input, thinking template controls, AutoClass, remote `auto_map`, execution backends, tensor-parallel fallback, generation, and raw decoding MUST use `gpt-task/docs/model-compatibility/` in the standalone gpt-task repository as their authority.
+Prompt rendering, chat templates, processor behavior, rendering of Bridge-adapted heartbeat tool history into model input, thinking template controls, AutoClass, remote `auto_map`, execution backends, tensor-parallel fallback, generation, and raw decoding MUST use `gpt-task/docs/model-compatibility/` in the standalone gpt-task repository as their authority.
 
-Bridge documentation MUST own public API normalization, task creation, transport boundaries, response normalization, and lifecycle protocols. It MUST NOT redefine gpt-task execution facts. Model pages are verified coverage samples and MUST NOT be implemented as Bridge runtime model-ID allowlists.
+Bridge documentation MUST own raw task API behavior, task creation, transport boundaries, raw result delivery, and lifecycle protocols. It MUST NOT redefine gpt-task execution facts. Model pages are verified coverage samples and MUST NOT be implemented as Bridge runtime model-ID allowlists.
 
 ## Doc Update Requirements
 

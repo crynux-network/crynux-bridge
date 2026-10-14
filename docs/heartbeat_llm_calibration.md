@@ -22,7 +22,7 @@ Heartbeat MUST control the workload fields that Bridge stores at task creation a
 
 Heartbeat MUST NOT set `model_switched`. Relay records that flag at dispatch.
 
-LLM heartbeat `dtype` MUST remain `bfloat16` as required by [heartbeat_tasks.md](./heartbeat_tasks.md). Heartbeat MUST NOT set `quantize_bits`.
+LLM heartbeat `dtype` MUST remain `bfloat16` as required by [heartbeat_tasks.md](./heartbeat_tasks.md).
 
 ## Independent Workload Axes
 

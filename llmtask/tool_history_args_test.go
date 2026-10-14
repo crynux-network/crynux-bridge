@@ -1,7 +1,6 @@
 package llmtask
 
 import (
-	"crynux_bridge/api/v1/llm/structs"
 	"crynux_bridge/models"
 	"encoding/json"
 	"testing"
@@ -74,10 +73,10 @@ func TestBuildTemplateToolCallMessagesLeavesMessagesWithoutHistoryUnchanged(t *t
 func TestBuildTemplateToolCallMessagesPreservesNestedValuesAndCallOrder(t *testing.T) {
 	messages := testMessages()
 	messages[1].ToolCalls[0].Function.Arguments = `{"filters":{"tags":["news","ai"]},"limit":2}`
-	messages[1].ToolCalls = append(messages[1].ToolCalls, structs.ToolCall{
+	messages[1].ToolCalls = append(messages[1].ToolCalls, models.ToolCall{
 		Id:   "call_2",
 		Type: "function",
-		Function: structs.FunctionCall{
+		Function: models.FunctionCall{
 			Name:      "summarize",
 			Arguments: `{"format":"short"}`,
 		},
@@ -124,11 +123,11 @@ func testMessages() []models.Message {
 		{
 			Role:    models.LLMRoleAssistant,
 			Content: "",
-			ToolCalls: []structs.ToolCall{
+			ToolCalls: []models.ToolCall{
 				{
 					Id:   "call_1",
 					Type: "function",
-					Function: structs.FunctionCall{
+					Function: models.FunctionCall{
 						Name:      "web_extract",
 						Arguments: `{"url":"https://example.com"}`,
 					},
