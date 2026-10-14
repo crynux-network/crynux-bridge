@@ -1,8 +1,8 @@
 ---
-environment: "production"
+environment: "release"
 db:
   driver: "mysql"
-  connection: "crynux_bridge:crynuxbridgepass@(mysql:3306)/crynux_bridge?parseTime=true"
+  connection: "crynux_bridge:crynuxbridgepass@(mysql_bridge:3306)/crynux_bridge?parseTime=true"
   log:
     level: "info"
     output: "/app/data/logs/crynux_bridge_db.log"
@@ -29,7 +29,7 @@ data_dir:
 blockchain:
   account:
     address: ""
-    private_key_file: "/app/privkey.txt"
+    private_key_file: "/app/config/privkey.txt"
 relay:
   # Use the local relay service started by docker-compose for e2e runs.
   base_url: "http://crynux_relay:8080"
@@ -41,9 +41,29 @@ task:
   repeat_num: 1
   sd_finetune_timeout: 120
   default_task_version: "3.7.0"
+  engine:
+    scan_interval: 1s
+    status_poll_interval: 1s
+    execution_poll_advance: 5s
+    max_execution_poll_interval: 15s
+    execution_overrun_poll_interval: 5s
+    retry_interval: 3s
+    operation_timeout: 30s
+    expansion_batch_size: 100
+    operation_result_batch_size: 200
+    due_task_batch_size: 500
+    create_batch_size: 100
+    status_batch_size: 200
+    validation_batch_size: 100
+    cancellation_batch_size: 100
+    create_workers: 2
+    status_workers: 4
+    validation_workers: 2
+    cancellation_workers: 2
+    result_workers: 4
   heartbeat_tasks:
-    batch_size: 0
-    max_tasks_per_hour: 0
+    batch_size: 1
+    max_tasks_per_hour: 20
     tasks_file: "heartbeat_tasks.json"
 task_schema:
   stable_diffusion_inference: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/image-task.json"

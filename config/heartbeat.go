@@ -23,6 +23,12 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 			if task.Steps != 0 {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: steps is not supported for llm tasks", i)
 			}
+			if strings.TrimSpace(task.Dtype) != "" {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: dtype is not supported for llm tasks; LLM heartbeat dtype is always bfloat16", i)
+			}
+			if err := validateHeartbeatQuantizationConfig(task.QuantizationConfig); err != nil {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: %w", i, err)
+			}
 			if err := validateHeartbeatToolChoice(task.ToolChoice, task.Tools); err != nil {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: %w", i, err)
 			}
@@ -44,6 +50,9 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 			}
 			if len(task.ResponseFormat) > 0 {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: response_format is not supported for sd tasks", i)
+			}
+			if err := validateHeartbeatQuantizationConfig(task.QuantizationConfig); err != nil {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: %w", i, err)
 			}
 		default:
 			return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: unsupported heartbeat task type %q", i, task.Type)
@@ -376,4 +385,15 @@ func validateHeartbeatResponseFormat(responseFormat map[string]interface{}) erro
 	default:
 		return fmt.Errorf("response_format.type must be json_object or json_schema")
 	}
+}
+
+func validateHeartbeatQuantizationConfig(quantizationConfig map[string]interface{}) error {
+	if len(quantizationConfig) == 0 {
+		return nil
+	}
+	quantMethod, ok := quantizationConfig["quant_method"].(string)
+	if !ok || strings.TrimSpace(quantMethod) == "" {
+		return fmt.Errorf("quantization_config.quant_method must be a non-empty string")
+	}
+	return nil
 }

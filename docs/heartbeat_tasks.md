@@ -53,6 +53,8 @@ Each heartbeat task entry under `task.heartbeat_tasks.tasks` MUST define:
 - `max_pending_tasks` when `ratio > 0`
 - `max_new_tokens` when `type` is `llm`
 - `steps` when `type` is `sd`
+- optional `dtype` when `type` is `sd`
+- optional `quantization_config` when `type` is `sd` or `llm`
 - optional `tools` when `type` is `llm`
 - optional `tool_choice` when `type` is `llm`
 - optional `response_format` when `type` is `llm`
@@ -68,11 +70,15 @@ When `type` is `sd`, `max_new_tokens` MUST NOT be set. Config load MUST reject S
 
 When `type` is `llm`, `steps` MUST NOT be set. Config load MUST reject LLM entries that set `steps`.
 
+When `type` is `llm`, `dtype` MUST NOT be set. Config load MUST reject LLM entries that set `dtype`. LLM heartbeat TaskArgs MUST always use `dtype: bfloat16`.
+
 When `type` is `sd`, `tools` MUST NOT be set. Config load MUST reject SD entries that set `tools`.
 
 When `type` is `sd`, `tool_choice` MUST NOT be set. Config load MUST reject SD entries that set `tool_choice`.
 
 When `type` is `sd`, `response_format` MUST NOT be set. Config load MUST reject SD entries that set `response_format`.
+
+When `quantization_config` is present and non-empty, `quantization_config.quant_method` MUST be a non-empty string. Config load MUST reject entries that violate this rule.
 
 When any prompt under an LLM entry contains assistant `tool_calls`, that entry's `tools` MUST be a non-empty array. Config load MUST reject entries that violate this rule.
 
@@ -222,6 +228,8 @@ Selected SD prompt fields MUST map to Relay SD inference task args:
 - `task_config.steps` from the selected task entry `steps`
 - `task_config.image_width` and `task_config.image_height` `512`
 - `task_config.num_images_per_prompt` `1`
+- `dtype` from the task entry `dtype` when set; when `dtype` is omitted and `quantization_config` is non-empty, Bridge MUST set `dtype` to `bfloat16`; when both are omitted, Bridge MUST omit `dtype`
+- `quantization_config` from the task entry `quantization_config` when non-empty; otherwise Bridge MUST omit `quantization_config`
 
 SD heartbeat entries used for Relay execution-time fitting MUST follow [heartbeat_sd_calibration.md](./heartbeat_sd_calibration.md).
 
@@ -236,6 +244,7 @@ Selected LLM prompt fields MUST map to Relay GPT inference task args:
 - `tools` from the task entry `tools` when the array is non-empty; otherwise `tools` MUST be omitted
 - `tool_choice` from the task entry `tool_choice` when set; otherwise `tool_choice` MUST be omitted
 - `response_format` from the task entry `response_format` when set; otherwise `response_format` MUST be omitted
+- `quantization_config` from the task entry `quantization_config` when non-empty; otherwise Bridge MUST omit `quantization_config`
 
 When assistant tool-call history is present, Bridge MUST apply the heartbeat tool-history `function.arguments` adaptation before serializing task args. That adaptation is defined in `docs/model-compatibility/architecture.md` and MUST be implemented by `BuildTemplateToolCallMessages` in the Bridge `llmtask` package. Heartbeat MUST NOT redefine the argument-object versus argument-string rules.
 

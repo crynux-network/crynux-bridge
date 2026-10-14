@@ -319,6 +319,16 @@ func buildSDHeartbeatTaskArgs(heartbeatTaskConfig config.HeartbeatTaskConfig, pr
 			"guidance_scale":        0,
 		},
 	}
+	dtype := strings.TrimSpace(heartbeatTaskConfig.Dtype)
+	if dtype == "" && len(heartbeatTaskConfig.QuantizationConfig) > 0 {
+		dtype = "bfloat16"
+	}
+	if dtype != "" {
+		taskArgs["dtype"] = dtype
+	}
+	if len(heartbeatTaskConfig.QuantizationConfig) > 0 {
+		taskArgs["quantization_config"] = heartbeatTaskConfig.QuantizationConfig
+	}
 
 	taskArgsBytes, err := json.Marshal(taskArgs)
 	if err != nil {
@@ -353,6 +363,9 @@ func buildLLMHeartbeatTaskArgs(
 		},
 		"seed":  mathrand.Intn(100000000),
 		"dtype": "bfloat16",
+	}
+	if len(heartbeatTaskConfig.QuantizationConfig) > 0 {
+		taskArgs["quantization_config"] = heartbeatTaskConfig.QuantizationConfig
 	}
 	if len(heartbeatTaskConfig.Tools) > 0 {
 		taskArgs["tools"] = heartbeatTaskConfig.Tools

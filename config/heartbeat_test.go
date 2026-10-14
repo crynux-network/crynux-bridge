@@ -627,6 +627,81 @@ func TestValidateHeartbeatTasksConfigRejectsLLMPromptWithoutRandPlaceholder(t *t
 	}
 }
 
+func TestValidateHeartbeatTasksConfigAcceptsQuantizationConfig(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "sd",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen-Image-2.1",
+			MaxPendingTasks: 5,
+			Steps:           8,
+			Dtype:           "bfloat16",
+			QuantizationConfig: map[string]interface{}{
+				"quant_method": "bitsandbytes",
+			},
+			Prompts: []HeartbeatPromptConfig{
+				{Text: "a cup"},
+			},
+		},
+		{
+			Type:            "llm",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen3.5-27B",
+			MaxPendingTasks: 5,
+			MaxNewTokens:    64,
+			QuantizationConfig: map[string]interface{}{
+				"quant_method": "bitsandbytes",
+			},
+			Prompts: []HeartbeatPromptConfig{
+				{Text: "ticket {{hb_rand}} needs triage"},
+			},
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRejectsQuantizationWithoutMethod(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "sd",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen-Image-2.1",
+			MaxPendingTasks: 5,
+			Steps:           8,
+			QuantizationConfig: map[string]interface{}{
+				"quant_kwargs": map[string]interface{}{"load_in_4bit": true},
+			},
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatal("expected quantization_config.quant_method error")
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRejectsLLMDtype(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen3.5-27B",
+			MaxPendingTasks: 5,
+			MaxNewTokens:    64,
+			Dtype:           "bfloat16",
+			Prompts: []HeartbeatPromptConfig{
+				{Text: "ticket {{hb_rand}} needs triage"},
+			},
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatal("expected dtype not supported for llm error")
+	}
+}
+
 func TestLoadHeartbeatTasksFileAbsoluteTasksFile(t *testing.T) {
 	dir := t.TempDir()
 	absTasks := writeHeartbeatTasksFixture(t, dir, `{

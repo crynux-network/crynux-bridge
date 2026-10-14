@@ -146,17 +146,19 @@ type HeartbeatPromptConfig struct {
 }
 
 type HeartbeatTaskConfig struct {
-	TaskVersion     string                   `mapstructure:"task_version" json:"task_version"`
-	Type            string                   `mapstructure:"type" json:"type"`
-	Ratio           float64                  `mapstructure:"ratio" json:"ratio"`
-	Model           string                   `mapstructure:"model" json:"model"`
-	MinVram         uint64                   `mapstructure:"min_vram" json:"min_vram"`
-	FeeCNX          string                   `mapstructure:"fee_cnx" json:"fee_cnx"`
-	MaxPendingTasks uint64                   `mapstructure:"max_pending_tasks" json:"max_pending_tasks"`
-	MaxNewTokens    uint64                   `mapstructure:"max_new_tokens" json:"max_new_tokens,omitempty"`
-	Steps           uint64                   `mapstructure:"steps" json:"steps,omitempty"`
-	Tools           []map[string]interface{} `mapstructure:"tools" json:"tools,omitempty"`
-	ToolChoice      any                      `mapstructure:"tool_choice" json:"tool_choice,omitempty"`
-	ResponseFormat  map[string]interface{}   `mapstructure:"response_format" json:"response_format,omitempty"`
-	Prompts         []HeartbeatPromptConfig  `mapstructure:"prompts" json:"prompts,omitempty"`
+	TaskVersion         string                   `mapstructure:"task_version" json:"task_version"`
+	Type                string                   `mapstructure:"type" json:"type"`
+	Ratio               float64                  `mapstructure:"ratio" json:"ratio"`
+	Model               string                   `mapstructure:"model" json:"model"`
+	MinVram             uint64                   `mapstructure:"min_vram" json:"min_vram"`
+	FeeCNX              string                   `mapstructure:"fee_cnx" json:"fee_cnx"`
+	MaxPendingTasks     uint64                   `mapstructure:"max_pending_tasks" json:"max_pending_tasks"`
+	MaxNewTokens        uint64                   `mapstructure:"max_new_tokens" json:"max_new_tokens,omitempty"`
+	Steps               uint64                   `mapstructure:"steps" json:"steps,omitempty"`
+	Dtype               string                   `mapstructure:"dtype" json:"dtype,omitempty"`
+	QuantizationConfig  map[string]interface{}   `mapstructure:"quantization_config" json:"quantization_config,omitempty"`
+	Tools               []map[string]interface{} `mapstructure:"tools" json:"tools,omitempty"`
+	ToolChoice          any                      `mapstructure:"tool_choice" json:"tool_choice,omitempty"`
+	ResponseFormat      map[string]interface{}   `mapstructure:"response_format" json:"response_format,omitempty"`
+	Prompts             []HeartbeatPromptConfig  `mapstructure:"prompts" json:"prompts,omitempty"`
 }

@@ -323,6 +323,89 @@ func TestBuildSDHeartbeatTaskArgsConfiguredPrompt(t *testing.T) {
 	}
 }
 
+func TestBuildSDHeartbeatTaskArgsQuantizationConfig(t *testing.T) {
+	quantization := map[string]interface{}{
+		"quant_method":            "bitsandbytes",
+		"components_to_quantize":  []interface{}{"transformer", "text_encoder"},
+		"quant_kwargs": map[string]interface{}{
+			"load_in_4bit":              true,
+			"bnb_4bit_quant_type":       "nf4",
+			"bnb_4bit_compute_dtype":    "bfloat16",
+			"bnb_4bit_use_double_quant": false,
+		},
+	}
+	taskArgs, err := buildSDHeartbeatTaskArgs(
+		config.HeartbeatTaskConfig{
+			Type:               "sd",
+			Model:              "Qwen/Qwen-Image-2.1",
+			Steps:              8,
+			TaskVersion:        "3.7.0",
+			QuantizationConfig: quantization,
+		},
+		config.HeartbeatPromptConfig{Text: "a cup on a table"},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(taskArgs), &parsed); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if parsed["dtype"] != "bfloat16" {
+		t.Fatalf("unexpected dtype %#v", parsed["dtype"])
+	}
+	gotQuant, ok := parsed["quantization_config"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("missing quantization_config %#v", parsed["quantization_config"])
+	}
+	if gotQuant["quant_method"] != "bitsandbytes" {
+		t.Fatalf("unexpected quant_method %#v", gotQuant["quant_method"])
+	}
+}
+
+func TestBuildLLMHeartbeatTaskArgsQuantizationConfig(t *testing.T) {
+	quantization := map[string]interface{}{
+		"quant_method": "bitsandbytes",
+		"quant_kwargs": map[string]interface{}{
+			"load_in_4bit":              true,
+			"bnb_4bit_quant_type":       "nf4",
+			"bnb_4bit_compute_dtype":    "bfloat16",
+			"bnb_4bit_use_double_quant": false,
+		},
+	}
+	taskArgs, err := buildLLMHeartbeatTaskArgs(
+		config.HeartbeatTaskConfig{
+			Type:               "llm",
+			Model:              "Qwen/Qwen3.5-27B",
+			MaxNewTokens:       64,
+			TaskVersion:        "3.7.0",
+			QuantizationConfig: quantization,
+		},
+		config.HeartbeatPromptConfig{Text: "ticket {{hb_rand}} needs triage"},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(taskArgs), &parsed); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if parsed["dtype"] != "bfloat16" {
+		t.Fatalf("unexpected dtype %#v", parsed["dtype"])
+	}
+	gotQuant, ok := parsed["quantization_config"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("missing quantization_config %#v", parsed["quantization_config"])
+	}
+	if gotQuant["quant_method"] != "bitsandbytes" {
+		t.Fatalf("unexpected quant_method %#v", gotQuant["quant_method"])
+	}
+}
+
 func TestBuildHeartbeatTaskArgsWithPrompts(t *testing.T) {
 	taskArgs, taskType, err := buildHeartbeatTaskArgs(config.HeartbeatTaskConfig{
 		Type:         "llm",
