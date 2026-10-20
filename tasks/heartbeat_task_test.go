@@ -444,6 +444,14 @@ func TestBuildHeartbeatTaskArgsWithPrompts(t *testing.T) {
 	}
 }
 
+func nullQuantSlotKey(taskType string, model string) string {
+	hash, err := models.QuantizationConfigHashHex(nil)
+	if err != nil {
+		panic(err)
+	}
+	return heartbeatSlotKey(taskType, model, hash)
+}
+
 func TestSelectHeartbeatTaskConfigExcludesOverPendingLimit(t *testing.T) {
 	configs := []config.HeartbeatTaskConfig{
 		{
@@ -460,8 +468,8 @@ func TestSelectHeartbeatTaskConfigExcludesOverPendingLimit(t *testing.T) {
 		},
 	}
 	pendingCounts := map[string]uint64{
-		"llm|Qwen/Qwen2.5-7B":  3,
-		"llm|Qwen/Qwen2.5-14B": 1,
+		nullQuantSlotKey("llm", "Qwen/Qwen2.5-7B"):  3,
+		nullQuantSlotKey("llm", "Qwen/Qwen2.5-14B"): 1,
 	}
 	batchIncrements := map[string]uint64{}
 
@@ -493,7 +501,7 @@ func TestSelectHeartbeatTaskConfigSharedModelUsesOwnLimit(t *testing.T) {
 		},
 	}
 	pendingCounts := map[string]uint64{
-		"llm|Qwen/Qwen2.5-7B": 2,
+		nullQuantSlotKey("llm", "Qwen/Qwen2.5-7B"): 2,
 	}
 	batchIncrements := map[string]uint64{}
 
@@ -524,8 +532,8 @@ func TestSelectHeartbeatTaskConfigNoEligible(t *testing.T) {
 		},
 	}
 	pendingCounts := map[string]uint64{
-		"llm|Qwen/Qwen2.5-7B":          2,
-		"sd|crynux-network/sdxl-turbo": 2,
+		nullQuantSlotKey("llm", "Qwen/Qwen2.5-7B"):          2,
+		nullQuantSlotKey("sd", "crynux-network/sdxl-turbo"): 2,
 	}
 	_, err := selectHeartbeatTaskConfig(configs, pendingCounts, map[string]uint64{})
 	if err == nil {
@@ -543,7 +551,7 @@ func TestSelectHeartbeatTaskConfigBatchIncrementsBlockFurtherSamples(t *testing.
 		},
 	}
 	pendingCounts := map[string]uint64{
-		"llm|Qwen/Qwen2.5-7B": 1,
+		nullQuantSlotKey("llm", "Qwen/Qwen2.5-7B"): 1,
 	}
 	batchIncrements := map[string]uint64{}
 
@@ -554,11 +562,107 @@ func TestSelectHeartbeatTaskConfigBatchIncrementsBlockFurtherSamples(t *testing.
 	if selected.Model != "Qwen/Qwen2.5-7B" {
 		t.Fatalf("unexpected model %q", selected.Model)
 	}
-	batchIncrements[heartbeatTypeModelKey(selected.Type, selected.Model)]++
+	quantKey, err := heartbeatQuantizationKey(selected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	batchIncrements[heartbeatSlotKey(selected.Type, selected.Model, quantKey)]++
 
 	_, err = selectHeartbeatTaskConfig(configs, pendingCounts, batchIncrements)
 	if err == nil {
 		t.Fatalf("expected no eligible heartbeat task config after batch increment")
+	}
+}
+
+func TestSelectHeartbeatTaskConfigSeparateQuantPools(t *testing.T) {
+	fourBit := map[string]interface{}{
+		"quant_method":           "bitsandbytes",
+		"components_to_quantize": []interface{}{"transformer"},
+		"quant_kwargs":           map[string]interface{}{"load_in_4bit": true},
+	}
+	eightBit := map[string]interface{}{
+		"quant_method":           "bitsandbytes",
+		"components_to_quantize": []interface{}{"transformer"},
+		"quant_kwargs":           map[string]interface{}{"load_in_8bit": true},
+	}
+	configs := []config.HeartbeatTaskConfig{
+		{
+			Type:               "sd",
+			Model:              "qwen/qwen-image-2.1",
+			Ratio:              1.0,
+			MaxPendingTasks:    1,
+			QuantizationConfig: fourBit,
+		},
+		{
+			Type:               "sd",
+			Model:              "qwen/qwen-image-2.1",
+			Ratio:              1.0,
+			MaxPendingTasks:    1,
+			QuantizationConfig: eightBit,
+		},
+	}
+	fourBitKey, err := heartbeatQuantizationKey(configs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	eightBitKey, err := heartbeatQuantizationKey(configs[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	pendingCounts := map[string]uint64{
+		heartbeatSlotKey("sd", "qwen/qwen-image-2.1", fourBitKey): 2,
+		heartbeatSlotKey("sd", "qwen/qwen-image-2.1", eightBitKey): 0,
+	}
+
+	for i := 0; i < 20; i++ {
+		selected, err := selectHeartbeatTaskConfig(configs, pendingCounts, map[string]uint64{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		got, err := heartbeatQuantizationKey(selected)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != eightBitKey {
+			t.Fatalf("expected only 8bit pool to remain eligible")
+		}
+	}
+}
+
+func TestSelectHeartbeatTaskConfigSameQuantDifferentStepsSharePool(t *testing.T) {
+	quant := map[string]interface{}{
+		"quant_method":           "bitsandbytes",
+		"components_to_quantize": []interface{}{"transformer"},
+		"quant_kwargs":           map[string]interface{}{"load_in_4bit": true},
+	}
+	configs := []config.HeartbeatTaskConfig{
+		{
+			Type:               "sd",
+			Model:              "qwen/qwen-image-2.1",
+			Ratio:              1.0,
+			MaxPendingTasks:    1,
+			Steps:              8,
+			QuantizationConfig: quant,
+		},
+		{
+			Type:               "sd",
+			Model:              "qwen/qwen-image-2.1",
+			Ratio:              1.0,
+			MaxPendingTasks:    1,
+			Steps:              20,
+			QuantizationConfig: quant,
+		},
+	}
+	quantKey, err := heartbeatQuantizationKey(configs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	pendingCounts := map[string]uint64{
+		heartbeatSlotKey("sd", "qwen/qwen-image-2.1", quantKey): 2,
+	}
+	_, err = selectHeartbeatTaskConfig(configs, pendingCounts, map[string]uint64{})
+	if err == nil {
+		t.Fatalf("expected shared quantization pool to exclude both step variants")
 	}
 }
 

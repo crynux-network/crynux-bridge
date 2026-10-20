@@ -110,11 +110,11 @@ Terminal statuses MUST be: `EndAborted`, `EndGroupRefund`, `EndInvalidated`, `En
 
 `max_pending_tasks` MUST limit how many unfinished heartbeat tasks of that entry remain in Bridge and Relay. A committed `ClientTask` MUST count before repeat expansion. Expansion MUST atomically replace that logical submission count with its created `InferenceTask` count so the same heartbeat task is not counted twice.
 
-In-flight counts MUST be keyed by `task_type` and the entry `model`. An unexpanded `ClientTask` MUST persist indexed submission task type and model-id fields. The stored submission model id and expanded `task_model_ids` value MUST match the base model id produced by `GetTaskConfigModelIDs` for that entry. Entries that share the same `type` and `model` MUST share one in-flight count pool.
+In-flight counts MUST be keyed by `task_type`, the entry `model`, and the entry's quantization identity. The quantization identity MUST be the lowercase hexadecimal SHA-256 of the canonical JSON of the complete `quantization_config`. When `quantization_config` is absent or empty, Bridge MUST hash the canonical JSON `null`. An unexpanded `ClientTask` MUST persist indexed submission task type, model-id, and quantization-identity fields. The stored submission model id and expanded `task_model_ids` value MUST match the base model id produced by `GetTaskConfigModelIDs` for that entry. Entries that share the same `type`, `model`, and quantization identity MUST share one in-flight count pool. Entries that differ only in quantization identity MUST use separate in-flight count pools.
 
 An entry MUST be excluded from sampling when its in-flight count is greater than its `max_pending_tasks`. An entry whose in-flight count equals `max_pending_tasks` MUST remain eligible.
 
-Within a single batch, Bridge MUST accumulate in-memory increments per `type` and `model` so later samples in the same batch observe tasks already chosen earlier in that batch.
+Within a single batch, Bridge MUST accumulate in-memory increments per `type`, `model`, and quantization identity so later samples in the same batch observe tasks already chosen earlier in that batch.
 
 When no eligible entry remains, task creation for that loop iteration MUST stop without error.
 

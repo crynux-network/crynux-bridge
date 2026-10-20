@@ -8,17 +8,18 @@ import (
 )
 
 type Submission struct {
-	TaskArgs        string               `json:"task_args"`
-	TaskType        models.ChainTaskType `json:"task_type"`
-	TaskModelIDs    []string             `json:"task_model_ids"`
-	TaskVersion     string               `json:"task_version"`
-	TaskFee         string               `json:"task_fee"`
-	MinVram         uint64               `json:"min_vram"`
-	RequiredGPU     string               `json:"required_gpu"`
-	RequiredGPUVram uint64               `json:"required_gpu_vram"`
-	TaskSize        uint64               `json:"task_size"`
-	Timeout         uint64               `json:"timeout"`
-	RepeatNum       *int                 `json:"repeat_num,omitempty"`
+	TaskArgs         string               `json:"task_args"`
+	TaskType         models.ChainTaskType `json:"task_type"`
+	TaskModelIDs     []string             `json:"task_model_ids"`
+	TaskVersion      string               `json:"task_version"`
+	TaskFee          string               `json:"task_fee"`
+	MinVram          uint64               `json:"min_vram"`
+	RequiredGPU      string               `json:"required_gpu"`
+	RequiredGPUVram  uint64               `json:"required_gpu_vram"`
+	TaskSize         uint64               `json:"task_size"`
+	Timeout          uint64               `json:"timeout"`
+	QuantizationKey  string               `json:"quantization_key,omitempty"`
+	RepeatNum        *int                 `json:"repeat_num,omitempty"`
 }
 
 type Config struct {

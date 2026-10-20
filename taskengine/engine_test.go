@@ -233,34 +233,49 @@ func TestCountPendingIncludesUnexpandedSubmissionWithoutDoubleCounting(t *testin
 	engine, db := newTestEngine(t)
 	repeat := 1
 	submission := testSubmission()
+	submission.QuantizationKey = "quant-a"
 	submission.RepeatNum = &repeat
 	clientTask, err := engine.CreateTask(context.Background(), "heartbeat-task", nil, submission)
 	if err != nil {
 		t.Fatal(err)
 	}
-	count, err := engine.CountPending(context.Background(), "heartbeat-task", models.TaskTypeLLM, "base:test")
+	count, err := engine.CountPending(context.Background(), "heartbeat-task", models.TaskTypeLLM, "base:test", "quant-a")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {
 		t.Fatalf("unexpanded count = %d, want 1", count)
 	}
+	otherCount, err := engine.CountPending(context.Background(), "heartbeat-task", models.TaskTypeLLM, "base:test", "quant-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if otherCount != 0 {
+		t.Fatalf("other quant count = %d, want 0", otherCount)
+	}
 	if err := engine.expandClientTask(context.Background(), *clientTask); err != nil {
 		t.Fatal(err)
 	}
-	count, err = engine.CountPending(context.Background(), "heartbeat-task", models.TaskTypeLLM, "base:test")
+	count, err = engine.CountPending(context.Background(), "heartbeat-task", models.TaskTypeLLM, "base:test", "quant-a")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {
 		t.Fatalf("expanded count = %d, want 1", count)
 	}
+	var inferenceTask models.InferenceTask
+	if err := db.Where("client_task_id = ?", clientTask.ID).First(&inferenceTask).Error; err != nil {
+		t.Fatal(err)
+	}
+	if inferenceTask.QuantizationKey != "quant-a" {
+		t.Fatalf("inference quantization key = %q, want quant-a", inferenceTask.QuantizationKey)
+	}
 	if err := db.Model(&models.InferenceTask{}).
 		Where("client_task_id = ?", clientTask.ID).
 		Update("status", models.InferenceTaskEndAborted).Error; err != nil {
 		t.Fatal(err)
 	}
-	count, err = engine.CountPending(context.Background(), "heartbeat-task", models.TaskTypeLLM, "base:test")
+	count, err = engine.CountPending(context.Background(), "heartbeat-task", models.TaskTypeLLM, "base:test", "quant-a")
 	if err != nil {
 		t.Fatal(err)
 	}

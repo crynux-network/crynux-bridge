@@ -136,19 +136,20 @@ func (arr *StringArray) UnmarshalJSON(b []byte) error {
 
 type InferenceTask struct {
 	RootModel
-	ClientID        uint          `json:"client_id"`
+	ClientID        uint          `json:"client_id" gorm:"index:idx_inference_task_pending_quant,priority:1"`
 	Client          Client        `json:"-"`
 	ClientTaskID    uint          `json:"client_task_id" gorm:"index:idx_inference_task_client_status,priority:1"`
 	ClientTask      ClientTask    `json:"-"`
 	TaskArgs        string        `json:"task_args"`
-	TaskType        ChainTaskType `json:"task_type"`
-	TaskModelIDs    StringArray   `json:"task_model_ids"`
-	TaskVersion     string        `json:"task_version"`
-	TaskFee         string        `json:"task_fee" gorm:"type:varchar(78)"`
-	MinVram         uint64        `json:"min_vram"`
-	RequiredGPU     string        `json:"required_gpu"`
-	RequiredGPUVram uint64        `json:"required_gpu_vram"`
+	TaskType        ChainTaskType `json:"task_type" gorm:"index:idx_inference_task_pending_quant,priority:2"`
+	TaskModelIDs       StringArray      `json:"task_model_ids"`
+	TaskVersion        string           `json:"task_version"`
+	TaskFee            string           `json:"task_fee" gorm:"type:varchar(78)"`
+	MinVram            uint64           `json:"min_vram"`
+	RequiredGPU        string           `json:"required_gpu"`
+	RequiredGPUVram    uint64           `json:"required_gpu_vram"`
 	RequiredModelFiles ModelFileEntries `json:"-" gorm:"type:longtext"`
+	QuantizationKey    string           `json:"-" gorm:"type:varchar(64);not null;default:'';index:idx_inference_task_pending_quant,priority:3"`
 	TaskSize           uint64           `json:"task_size"`
 	Timeout            uint64           `json:"timeout"`
 

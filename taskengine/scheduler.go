@@ -141,6 +141,7 @@ func (e *Engine) expandClientTask(ctx context.Context, clientTask models.ClientT
 				MinVram:          submission.MinVram,
 				RequiredGPU:      submission.RequiredGPU,
 				RequiredGPUVram:  submission.RequiredGPUVram,
+				QuantizationKey:  submission.QuantizationKey,
 				TaskSize:         submission.TaskSize,
 				Timeout:          submission.Timeout,
 				TaskID:           taskID,

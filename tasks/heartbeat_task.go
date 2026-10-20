@@ -36,20 +36,33 @@ func generateHeartbeatTask(heartbeatTaskConfig config.HeartbeatTaskConfig) (task
 	if err != nil {
 		return taskengine.Submission{}, err
 	}
+	quantizationKey, err := heartbeatQuantizationKey(heartbeatTaskConfig)
+	if err != nil {
+		return taskengine.Submission{}, err
+	}
 	return taskengine.Submission{
-		TaskArgs:     taskArgs,
-		TaskType:     taskType,
-		TaskModelIDs: taskModelIDs,
-		TaskVersion:  taskVersion,
-		MinVram:      heartbeatTaskConfig.MinVram,
-		TaskFee:      taskFee,
-		TaskSize:     1,
-		RepeatNum:    &repeatNum,
+		TaskArgs:        taskArgs,
+		TaskType:        taskType,
+		TaskModelIDs:    taskModelIDs,
+		TaskVersion:     taskVersion,
+		MinVram:         heartbeatTaskConfig.MinVram,
+		TaskFee:         taskFee,
+		TaskSize:        1,
+		QuantizationKey: quantizationKey,
+		RepeatNum:       &repeatNum,
 	}, nil
 }
 
-func heartbeatTypeModelKey(taskType string, model string) string {
-	return strings.ToLower(taskType) + "|" + model
+func heartbeatQuantizationKey(heartbeatTaskConfig config.HeartbeatTaskConfig) (string, error) {
+	var quantConfig any
+	if len(heartbeatTaskConfig.QuantizationConfig) > 0 {
+		quantConfig = heartbeatTaskConfig.QuantizationConfig
+	}
+	return models.QuantizationConfigHashHex(quantConfig)
+}
+
+func heartbeatSlotKey(taskType string, model string, quantizationKey string) string {
+	return strings.ToLower(taskType) + "|" + model + "|" + quantizationKey
 }
 
 func heartbeatTaskTypeAndModelID(heartbeatTaskConfig config.HeartbeatTaskConfig) (models.ChainTaskType, string, error) {
@@ -86,7 +99,11 @@ func selectHeartbeatTaskConfig(
 		if heartbeatTaskConfig.Ratio <= 0 {
 			continue
 		}
-		key := heartbeatTypeModelKey(heartbeatTaskConfig.Type, heartbeatTaskConfig.Model)
+		quantizationKey, err := heartbeatQuantizationKey(heartbeatTaskConfig)
+		if err != nil {
+			return config.HeartbeatTaskConfig{}, err
+		}
+		key := heartbeatSlotKey(heartbeatTaskConfig.Type, heartbeatTaskConfig.Model, quantizationKey)
 		count := pendingCounts[key] + batchIncrements[key]
 		if count > heartbeatTaskConfig.MaxPendingTasks {
 			continue
@@ -482,12 +499,13 @@ func getPendingHeartbeatTasksCount(
 	clientID string,
 	taskType models.ChainTaskType,
 	modelID string,
+	quantizationKey string,
 ) (uint64, error) {
 	engine, err := taskengine.Default()
 	if err != nil {
 		return 0, err
 	}
-	return engine.CountPending(ctx, clientID, taskType, modelID)
+	return engine.CountPending(ctx, clientID, taskType, modelID, quantizationKey)
 }
 
 func getPendingHeartbeatTasksCounts(
@@ -500,7 +518,11 @@ func getPendingHeartbeatTasksCounts(
 		if heartbeatTaskConfig.Ratio <= 0 {
 			continue
 		}
-		key := heartbeatTypeModelKey(heartbeatTaskConfig.Type, heartbeatTaskConfig.Model)
+		quantizationKey, err := heartbeatQuantizationKey(heartbeatTaskConfig)
+		if err != nil {
+			return nil, err
+		}
+		key := heartbeatSlotKey(heartbeatTaskConfig.Type, heartbeatTaskConfig.Model, quantizationKey)
 		if _, ok := counts[key]; ok {
 			continue
 		}
@@ -508,7 +530,7 @@ func getPendingHeartbeatTasksCounts(
 		if err != nil {
 			return nil, err
 		}
-		count, err := getPendingHeartbeatTasksCount(ctx, clientID, taskType, modelID)
+		count, err := getPendingHeartbeatTasksCount(ctx, clientID, taskType, modelID, quantizationKey)
 		if err != nil {
 			return nil, err
 		}
@@ -585,7 +607,7 @@ func heartbeatCreateTasks(ctx context.Context) error {
 					break
 				}
 				submissions = append(submissions, submission)
-				key := heartbeatTypeModelKey(heartbeatTaskConfig.Type, heartbeatTaskConfig.Model)
+				key := heartbeatSlotKey(heartbeatTaskConfig.Type, heartbeatTaskConfig.Model, submission.QuantizationKey)
 				batchIncrements[key]++
 			}
 			if generationFailed {

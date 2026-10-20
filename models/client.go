@@ -30,10 +30,11 @@ type ClientTask struct {
 	Status             ClientTaskStatus `json:"status"`
 	FailedCount        int              `json:"failed_count"`
 	Submission         string           `json:"-" gorm:"type:longtext"`
-	SubmissionTaskType ChainTaskType    `json:"-" gorm:"index:idx_client_task_pending_submission,priority:3"`
-	SubmissionModelID  string           `json:"-" gorm:"type:varchar(255);index:idx_client_task_pending_submission,priority:4"`
-	EffectiveRepeatNum int              `json:"-" gorm:"not null;default:1"`
-	RepeatExpanded     bool             `json:"-" gorm:"index:idx_client_task_expansion,priority:1;index:idx_client_task_pending_submission,priority:2"`
+	SubmissionTaskType         ChainTaskType `json:"-" gorm:"index:idx_client_task_pending_submission,priority:3"`
+	SubmissionModelID          string        `json:"-" gorm:"type:varchar(255);index:idx_client_task_pending_submission,priority:4"`
+	SubmissionQuantizationKey  string        `json:"-" gorm:"type:varchar(64);not null;default:'';index:idx_client_task_pending_submission,priority:5"`
+	EffectiveRepeatNum         int           `json:"-" gorm:"not null;default:1"`
+	RepeatExpanded             bool          `json:"-" gorm:"index:idx_client_task_expansion,priority:1;index:idx_client_task_pending_submission,priority:2"`
 	NextActionAt       time.Time        `json:"-" gorm:"index:idx_client_task_expansion,priority:2"`
 	ExpansionError     string           `json:"-" gorm:"type:text"`
 	Client             Client           `json:"-"`

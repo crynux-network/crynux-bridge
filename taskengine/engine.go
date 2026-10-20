@@ -115,12 +115,13 @@ func (e *Engine) CreateTask(
 			return err
 		}
 		clientTask = models.ClientTask{
-			ClientID:           client.ID,
-			Submission:         string(encoded),
-			SubmissionTaskType: submission.TaskType,
-			EffectiveRepeatNum: repeatNum,
-			RepeatExpanded:     false,
-			NextActionAt:       time.Now(),
+			ClientID:                  client.ID,
+			Submission:                string(encoded),
+			SubmissionTaskType:        submission.TaskType,
+			SubmissionQuantizationKey: submission.QuantizationKey,
+			EffectiveRepeatNum:        repeatNum,
+			RepeatExpanded:            false,
+			NextActionAt:              time.Now(),
 		}
 		if len(submission.TaskModelIDs) > 0 {
 			clientTask.SubmissionModelID = submission.TaskModelIDs[0]
@@ -199,6 +200,7 @@ func (e *Engine) CountPending(
 	clientID string,
 	taskType models.ChainTaskType,
 	modelID string,
+	quantizationKey string,
 ) (uint64, error) {
 	var inferenceCount int64
 	err := e.db.WithContext(ctx).
@@ -207,6 +209,7 @@ func (e *Engine) CountPending(
 		Where("clients.client_id = ?", clientID).
 		Where("inference_tasks.task_type = ?", taskType).
 		Where("inference_tasks.task_model_ids = ?", modelID).
+		Where("inference_tasks.quantization_key = ?", quantizationKey).
 		Where("inference_tasks.status NOT IN ?", []models.TaskStatus{
 			models.InferenceTaskEndAborted,
 			models.InferenceTaskEndGroupRefund,
@@ -228,8 +231,8 @@ func (e *Engine) CountPending(
 	var unexpandedCount int64
 	if err := e.db.WithContext(ctx).
 		Model(&models.ClientTask{}).
-		Where("client_id = ? AND repeat_expanded = ? AND submission_task_type = ? AND submission_model_id = ?",
-			client.ID, false, taskType, modelID).
+		Where("client_id = ? AND repeat_expanded = ? AND submission_task_type = ? AND submission_model_id = ? AND submission_quantization_key = ?",
+			client.ID, false, taskType, modelID, quantizationKey).
 		Count(&unexpandedCount).Error; err != nil {
 		return 0, err
 	}
