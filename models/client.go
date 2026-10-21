@@ -29,6 +29,9 @@ type ClientTask struct {
 	ClientID           uint             `json:"client_id" gorm:"index:idx_client_task_pending_submission,priority:1"`
 	Status             ClientTaskStatus `json:"status"`
 	FailedCount        int              `json:"failed_count"`
+	Phase              string           `json:"phase" gorm:"-"`
+	EstimatedCompletionAt *time.Time    `json:"estimated_completion_at,omitempty" gorm:"-"`
+	ErrorMessage       string           `json:"error_message,omitempty" gorm:"-"`
 	Submission         string           `json:"-" gorm:"type:longtext"`
 	SubmissionTaskType         ChainTaskType `json:"-" gorm:"index:idx_client_task_pending_submission,priority:3"`
 	SubmissionModelID          string        `json:"-" gorm:"type:varchar(255);index:idx_client_task_pending_submission,priority:4"`
@@ -43,6 +46,9 @@ type ClientTask struct {
 
 func (task *ClientTask) BeforeCreate(*gorm.DB) error {
 	task.Status = ClientTaskStatusRunning
+	if task.Phase == "" {
+		task.Phase = "queued"
+	}
 	if task.NextActionAt.IsZero() {
 		task.NextActionAt = time.Now()
 	}

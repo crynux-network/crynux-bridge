@@ -131,6 +131,7 @@ func (e *Engine) CreateTask(
 	if err != nil {
 		return nil, err
 	}
+	clientTask.Phase = ClientTaskPhaseQueued
 	return &clientTask, nil
 }
 
@@ -147,6 +148,11 @@ func (e *Engine) Status(ctx context.Context, clientID string, clientTaskID uint)
 	if err != nil {
 		return nil, err
 	}
+	tasks, err := e.loadClientTaskMembers(ctx, []uint{clientTask.ID})
+	if err != nil {
+		return nil, err
+	}
+	ApplyClientTaskPhase(&clientTask, tasks[clientTask.ID])
 	return &clientTask, nil
 }
 
@@ -163,7 +169,36 @@ func (e *Engine) StatusBatch(ctx context.Context, clientID string, clientTaskIDs
 	if err != nil {
 		return nil, err
 	}
+	ids := make([]uint, len(clientTasks))
+	for i := range clientTasks {
+		ids[i] = clientTasks[i].ID
+	}
+	tasksByClientTask, err := e.loadClientTaskMembers(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range clientTasks {
+		ApplyClientTaskPhase(&clientTasks[i], tasksByClientTask[clientTasks[i].ID])
+	}
 	return clientTasks, nil
+}
+
+func (e *Engine) loadClientTaskMembers(ctx context.Context, clientTaskIDs []uint) (map[uint][]models.InferenceTask, error) {
+	out := make(map[uint][]models.InferenceTask, len(clientTaskIDs))
+	if len(clientTaskIDs) == 0 {
+		return out, nil
+	}
+	var tasks []models.InferenceTask
+	err := e.db.WithContext(ctx).
+		Where("client_task_id IN ? AND task_type IN ?", clientTaskIDs, []models.ChainTaskType{models.TaskTypeSD, models.TaskTypeLLM}).
+		Find(&tasks).Error
+	if err != nil {
+		return nil, err
+	}
+	for i := range tasks {
+		out[tasks[i].ClientTaskID] = append(out[tasks[i].ClientTaskID], tasks[i])
+	}
+	return out, nil
 }
 
 func (e *Engine) Result(ctx context.Context, clientID string, clientTaskID uint) (*Result, error) {

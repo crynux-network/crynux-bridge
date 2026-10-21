@@ -61,6 +61,8 @@ The raw task API MUST remain asynchronous:
 
 `POST /v1/inference_tasks/batch/status` MUST return ClientTask status for a list of client task IDs owned by the authenticated client. The response MUST contain one result per requested ID in request order. A missing or foreign ID MUST appear as an item-level error and MUST NOT fail the whole batch. The batch MUST contain at least one ID and at most 100 IDs after request validation. Status reads MUST remain authorized after the API key's creation quota is exhausted.
 
+Raw create and status responses MUST include a computed logical `phase` field on the `ClientTask` object. `phase` MUST be one of `queued`, `running`, `validating`, `uploading`, `finalizing`, `success`, or `failed`. When `status` is `running`, `phase` MUST be one of `queued`, `running`, `validating`, `uploading`, or `finalizing`. When `status` is `success`, `phase` MUST be `success`. When `status` is `failed`, `phase` MUST be `failed`. Create responses MUST set `phase` to `queued`. Status reads MUST derive `phase` from the current SD and LLM `InferenceTask` members under the client task without returning those members. TaskEngine MUST select the furthest unfinished member by phase order `uploading` > `validating` > `running` > `queued`, with `EndSuccess` mapped to `finalizing`, and MUST treat single-task validation and the entire VSS path as `validating`. When the selected member is in `running` and has a stored estimated completion time, the response MUST include `estimated_completion_at`. When `phase` is `failed`, the response MUST include `error_message` with a stable abort or failure reason string.
+
 HTTP request cancellation MUST NOT stop persisted task processing or cancel the Relay task.
 
 ## Submission and Repeat Expansion

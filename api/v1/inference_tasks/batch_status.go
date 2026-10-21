@@ -70,6 +70,9 @@ func BatchGetTaskStatus(c *gin.Context, in *BatchGetTaskStatusInput) (*BatchGetT
 				}
 				return nil, response.NewExceptionResponse(loadErr)
 			}
+			if populateErr := populateClientTaskPhase(ctx, db, clientTask); populateErr != nil {
+				return nil, response.NewExceptionResponse(populateErr)
+			}
 			copied := *clientTask
 			resultsByID[clientTaskID] = BatchGetTaskStatusItemResult{
 				ClientTaskID: clientTaskID,

@@ -32,6 +32,9 @@ func loadRawClientTask(
 		if clientTaskErr != nil {
 			return nil, rawClientTaskLoadError(clientTaskErr)
 		}
+		if populateErr := populateClientTaskPhase(ctx, db, clientTask); populateErr != nil {
+			return nil, rawClientTaskLoadError(populateErr)
+		}
 		return clientTask, nil
 	}
 	clientTask, err := engine.Status(ctx, apiKey.ClientID, clientTaskID)
@@ -39,6 +42,21 @@ func loadRawClientTask(
 		return nil, rawClientTaskLoadError(err)
 	}
 	return clientTask, nil
+}
+
+func populateClientTaskPhase(ctx context.Context, db *gorm.DB, clientTask *models.ClientTask) error {
+	tasks, err := models.GetTasksByClientTaskID(ctx, db, clientTask.ID)
+	if err != nil {
+		return err
+	}
+	filtered := make([]models.InferenceTask, 0, len(tasks))
+	for i := range tasks {
+		if tasks[i].TaskType == models.TaskTypeSD || tasks[i].TaskType == models.TaskTypeLLM {
+			filtered = append(filtered, tasks[i])
+		}
+	}
+	taskengine.ApplyClientTaskPhase(clientTask, filtered)
+	return nil
 }
 
 func rawClientTaskLoadError(err error) error {

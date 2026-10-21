@@ -69,6 +69,8 @@ TaskEngine status and result reads for ordinary SD and LLM client tasks MUST sel
 
 Within each selection step, Bridge MUST order members by `UpdatedAt ASC, ID ASC`. The selection MUST NOT write task or client-task state.
 
+Raw status responses MUST also compute a logical `phase` from those members. When any member has reached `ResultDownloaded`, `phase` MUST be `success`. Otherwise TaskEngine MUST choose the furthest unfinished member using phase order `finalizing` > `uploading` > `validating` > `running` > `queued`, where `Started` and `ParamsUploaded` map to `running`, `ScoreReady` and `ErrorReported` map to `validating`, `Validated` maps to `uploading`, and `EndSuccess` maps to `finalizing`. Single-task validation and the entire VSS path MUST map to `validating` with no VSS sub-phase field. When no members exist yet, `phase` MUST be `queued`. When every member is finished and none reached `ResultDownloaded`, `phase` MUST be `failed` and `error_message` MUST carry the stable reason from the earliest failed member.
+
 Raw status and result endpoints MUST authenticate API key format, expiration, and the required admin-or-chat role without applying creation `UseLimit`, then read through TaskEngine. An exhausted key MUST still read and download tasks owned by its client. An invalid or expired key, a key with the wrong role, and access to another client's task MUST be rejected.
 
 ## Validation Tasks
