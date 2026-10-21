@@ -2,11 +2,11 @@ package tasks
 
 import (
 	"context"
-	"crypto/rand"
 	"crynux_bridge/config"
 	"crynux_bridge/llmtask"
 	"crynux_bridge/models"
 	"crynux_bridge/taskengine"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -547,6 +547,35 @@ func getPendingHeartbeatTasksCounts(
 	return counts, nil
 }
 
+func sumHeartbeatPendingCounts(counts map[string]uint64) uint64 {
+	var total uint64
+	for _, count := range counts {
+		total += count
+	}
+	return total
+}
+
+// heartbeatBatchSizeForTotalPending returns the batch size after applying
+// max_total_pending_tasks. When the total in-flight count is already at or
+// above the limit, ok is false and no tasks must be created.
+func heartbeatBatchSizeForTotalPending(
+	batchSize int,
+	totalPending uint64,
+	maxTotalPending uint64,
+) (adjustedBatchSize int, ok bool) {
+	if maxTotalPending == 0 {
+		return batchSize, true
+	}
+	if totalPending >= maxTotalPending {
+		return 0, false
+	}
+	remaining := maxTotalPending - totalPending
+	if uint64(batchSize) > remaining {
+		return int(remaining), true
+	}
+	return batchSize, true
+}
+
 func heartbeatCreateTasks(ctx context.Context) error {
 	appConfig := config.GetConfig()
 
@@ -596,10 +625,23 @@ func heartbeatCreateTasks(ctx context.Context) error {
 			}
 			log.Infof("HeartbeatTask: in-flight heartbeat tasks counts: %v", pendingCounts)
 
+			maxTotalPending := appConfig.Task.HeartbeatTasks.MaxTotalPendingTasks
+			totalPending := sumHeartbeatPendingCounts(pendingCounts)
+			var totalPendingOK bool
+			batchSize, totalPendingOK = heartbeatBatchSizeForTotalPending(batchSize, totalPending, maxTotalPending)
+			if !totalPendingOK {
+				log.Infof("HeartbeatTask: max total pending tasks reached: %d", maxTotalPending)
+				time.Sleep(2 * time.Second)
+				continue
+			}
+
 			submissions := make([]taskengine.Submission, 0, batchSize)
 			batchIncrements := make(map[string]uint64)
 			generationFailed := false
 			for i := 0; i < batchSize; i++ {
+				if maxTotalPending > 0 && totalPending+sumHeartbeatPendingCounts(batchIncrements) >= maxTotalPending {
+					break
+				}
 				heartbeatTaskConfig, err := selectHeartbeatTaskConfig(
 					appConfig.Task.HeartbeatTasks.Tasks,
 					pendingCounts,

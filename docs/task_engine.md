@@ -363,7 +363,7 @@ Startup MUST recalculate every `Running` ClientTask that already has locally fin
 
 ## Heartbeat
 
-Bridge MUST run a heartbeat component independently from TaskEngine. The heartbeat component MUST own its creation goroutine, creation schedule, hourly limit, batch size, weighted selection, and per-model-and-quantization pending limit. For each selected entry, it MUST convert the entry into a normalized logical task submission and call the same TaskEngine creation method used by raw submissions.
+Bridge MUST run a heartbeat component independently from TaskEngine. The heartbeat component MUST own its creation goroutine, creation schedule, hourly limit, total in-flight limit, batch size, weighted selection, and per-model-and-quantization pending limit. For each selected entry, it MUST convert the entry into a normalized logical task submission and call the same TaskEngine creation method used by raw submissions.
 
 TaskEngine MUST NOT define a heartbeat task type, heartbeat creation method, heartbeat scheduling rule, or heartbeat lifecycle branch. It MUST process submissions created by the heartbeat component only as standard logical tasks.
 

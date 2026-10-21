@@ -70,9 +70,9 @@ type AppConfig struct {
 		DefaultSDFinetuneTaskFeeCNX string               `mapstructure:"default_sd_finetune_task_fee_cnx"`
 		RepeatNum                   int                  `mapstructure:"repeat_num"`
 		SDFinetuneTimeout           uint64               `mapstructure:"sd_finetune_timeout"`
-		DefaultTaskVersion     string               `mapstructure:"default_task_version"`
-		Engine                 TaskEngineConfig     `mapstructure:"engine"`
-		HeartbeatTasks         HeartbeatTasksConfig `mapstructure:"heartbeat_tasks"`
+		DefaultTaskVersion          string               `mapstructure:"default_task_version"`
+		Engine                      TaskEngineConfig     `mapstructure:"engine"`
+		HeartbeatTasks              HeartbeatTasksConfig `mapstructure:"heartbeat_tasks"`
 	} `mapstructure:"task"`
 
 	TaskSchema struct {
@@ -110,10 +110,11 @@ type TaskEngineConfig struct {
 }
 
 type HeartbeatTasksConfig struct {
-	BatchSize       uint64                `mapstructure:"batch_size"`
-	MaxTasksPerHour uint64                `mapstructure:"max_tasks_per_hour"`
-	TasksFile       string                `mapstructure:"tasks_file"`
-	Tasks           []HeartbeatTaskConfig `mapstructure:"tasks" json:"tasks"`
+	BatchSize            uint64                `mapstructure:"batch_size"`
+	MaxTasksPerHour      uint64                `mapstructure:"max_tasks_per_hour"`
+	MaxTotalPendingTasks uint64                `mapstructure:"max_total_pending_tasks"`
+	TasksFile            string                `mapstructure:"tasks_file"`
+	Tasks                []HeartbeatTaskConfig `mapstructure:"tasks" json:"tasks"`
 }
 
 type HeartbeatContentBlock struct {
@@ -149,15 +150,15 @@ type HeartbeatPromptConfig struct {
 }
 
 type HeartbeatTaskConfig struct {
-	TaskVersion         string                   `mapstructure:"task_version" json:"task_version"`
-	Type                string                   `mapstructure:"type" json:"type"`
-	Ratio               float64                  `mapstructure:"ratio" json:"ratio"`
-	Model               string                   `mapstructure:"model" json:"model"`
-	MinVram             uint64                   `mapstructure:"min_vram" json:"min_vram"`
-	FeeCNX              string                   `mapstructure:"fee_cnx" json:"fee_cnx"`
-	MaxPendingTasks     uint64                   `mapstructure:"max_pending_tasks" json:"max_pending_tasks"`
-	MaxNewTokens        uint64                   `mapstructure:"max_new_tokens" json:"max_new_tokens,omitempty"`
-	Steps               uint64                   `mapstructure:"steps" json:"steps,omitempty"`
+	TaskVersion        string                  `mapstructure:"task_version" json:"task_version"`
+	Type               string                  `mapstructure:"type" json:"type"`
+	Ratio              float64                 `mapstructure:"ratio" json:"ratio"`
+	Model              string                  `mapstructure:"model" json:"model"`
+	MinVram            uint64                  `mapstructure:"min_vram" json:"min_vram"`
+	FeeCNX             string                  `mapstructure:"fee_cnx" json:"fee_cnx"`
+	MaxPendingTasks    uint64                  `mapstructure:"max_pending_tasks" json:"max_pending_tasks"`
+	MaxNewTokens       uint64                  `mapstructure:"max_new_tokens" json:"max_new_tokens,omitempty"`
+	Steps              uint64                  `mapstructure:"steps" json:"steps,omitempty"`
 	Dtype              string                  `mapstructure:"dtype" json:"dtype,omitempty"`
 	QuantizationConfig json.RawMessage         `mapstructure:"quantization_config" json:"quantization_config,omitempty"`
 	Tools              json.RawMessage         `mapstructure:"tools" json:"tools,omitempty"`

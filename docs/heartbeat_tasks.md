@@ -11,9 +11,12 @@ When `task.heartbeat_tasks.batch_size` is `0`, Bridge MUST NOT create heartbeat 
 When `task.heartbeat_tasks.batch_size` is greater than `0`, each loop iteration MUST:
 
 1. Enforce `max_tasks_per_hour` when it is greater than `0`.
-2. Select eligible heartbeat task entries by weighted sampling on `ratio`, excluding entries whose in-flight count exceeds `max_pending_tasks`.
-3. Convert up to `batch_size` selected entries into normalized logical task submissions and call `TaskEngine.CreateTask` for each submission with `repeat_num` equal to `1`.
-4. When no eligible entry exists, sleep and continue the loop without creating tasks.
+2. Load per-slot in-flight counts and enforce `max_total_pending_tasks` when it is greater than `0`.
+3. Select eligible heartbeat task entries by weighted sampling on `ratio`, excluding entries whose in-flight count exceeds `max_pending_tasks`.
+4. Convert up to `batch_size` selected entries into normalized logical task submissions and call `TaskEngine.CreateTask` for each submission with `repeat_num` equal to `1`.
+5. When no eligible entry exists, sleep and continue the loop without creating tasks.
+
+When `max_total_pending_tasks` is greater than `0`, Bridge MUST sum all per-slot in-flight counts for client `heartbeat-task`. When that sum is greater than or equal to `max_total_pending_tasks`, Bridge MUST create no heartbeat tasks in that loop iteration. When the sum is below the limit, Bridge MUST shrink that iteration's create count so the sum of already in-flight tasks and newly created tasks does not exceed `max_total_pending_tasks`. When `max_total_pending_tasks` is `0`, Bridge MUST NOT apply a cross-slot in-flight limit.
 
 The heartbeat creation loop MUST NOT create or process `ClientTask` or `InferenceTask` records directly. After it calls `TaskEngine.CreateTask`, the submitted task MUST use the standard `ClientTask` persistence, repeat expansion, `InferenceTask` creation, and Relay processing flow.
 
@@ -30,6 +33,7 @@ Heartbeat tasks MUST NOT set an execution timeout. Relay MUST calculate the exec
 
 - `batch_size`
 - `max_tasks_per_hour`
+- `max_total_pending_tasks`
 - `tasks_file`
 
 When `tasks_file` is omitted or empty, Bridge MUST use `heartbeat_tasks.json`.

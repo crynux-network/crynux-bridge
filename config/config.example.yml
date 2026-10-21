@@ -63,6 +63,7 @@ task:
   heartbeat_tasks:
     batch_size: 0
     max_tasks_per_hour: 0
+    max_total_pending_tasks: 0
     # Task definitions load from a JSON file next to this config.
     # Relative paths resolve against the config.yml directory.
     # Image blocks in that file may use image_path (e.g. "vl_sample.png").

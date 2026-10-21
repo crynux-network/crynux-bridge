@@ -474,6 +474,50 @@ func nullQuantSlotKey(taskType string, model string) string {
 	return heartbeatSlotKey(taskType, model, hash)
 }
 
+func TestSumHeartbeatPendingCounts(t *testing.T) {
+	if got := sumHeartbeatPendingCounts(nil); got != 0 {
+		t.Fatalf("sum of nil map = %d, want 0", got)
+	}
+	if got := sumHeartbeatPendingCounts(map[string]uint64{}); got != 0 {
+		t.Fatalf("sum of empty map = %d, want 0", got)
+	}
+	got := sumHeartbeatPendingCounts(map[string]uint64{
+		"a": 1,
+		"b": 2,
+		"c": 4,
+	})
+	if got != 7 {
+		t.Fatalf("sumHeartbeatPendingCounts = %d, want 7", got)
+	}
+}
+
+func TestHeartbeatBatchSizeForTotalPending(t *testing.T) {
+	batchSize, ok := heartbeatBatchSizeForTotalPending(5, 3, 0)
+	if !ok || batchSize != 5 {
+		t.Fatalf("disabled limit: batchSize=%d ok=%v, want 5 true", batchSize, ok)
+	}
+
+	batchSize, ok = heartbeatBatchSizeForTotalPending(5, 3, 3)
+	if ok || batchSize != 0 {
+		t.Fatalf("at limit: batchSize=%d ok=%v, want 0 false", batchSize, ok)
+	}
+
+	batchSize, ok = heartbeatBatchSizeForTotalPending(5, 4, 3)
+	if ok || batchSize != 0 {
+		t.Fatalf("over limit: batchSize=%d ok=%v, want 0 false", batchSize, ok)
+	}
+
+	batchSize, ok = heartbeatBatchSizeForTotalPending(5, 1, 4)
+	if !ok || batchSize != 3 {
+		t.Fatalf("shrink to remaining: batchSize=%d ok=%v, want 3 true", batchSize, ok)
+	}
+
+	batchSize, ok = heartbeatBatchSizeForTotalPending(2, 1, 4)
+	if !ok || batchSize != 2 {
+		t.Fatalf("batch under remaining: batchSize=%d ok=%v, want 2 true", batchSize, ok)
+	}
+}
+
 func TestSelectHeartbeatTaskConfigExcludesOverPendingLimit(t *testing.T) {
 	configs := []config.HeartbeatTaskConfig{
 		{
@@ -632,7 +676,7 @@ func TestSelectHeartbeatTaskConfigSeparateQuantPools(t *testing.T) {
 		t.Fatal(err)
 	}
 	pendingCounts := map[string]uint64{
-		heartbeatSlotKey("sd", "qwen/qwen-image-2.1", fourBitKey): 2,
+		heartbeatSlotKey("sd", "qwen/qwen-image-2.1", fourBitKey):  2,
 		heartbeatSlotKey("sd", "qwen/qwen-image-2.1", eightBitKey): 0,
 	}
 
