@@ -129,10 +129,15 @@ func (e *Engine) applyOperationResult(ctx context.Context, task models.Inference
 				}
 			}
 		case models.TaskOperationCancel:
-			if err := tx.Model(&current).Updates(map[string]any{
+			cancelUpdates := map[string]any{
 				"sibling_cancellation_required": false,
 				"next_action_at":                time.Now(),
-			}).Error; err != nil {
+			}
+			if current.Status == models.InferenceTaskEndAborted {
+				cancelUpdates["status"] = models.InferenceTaskEndAborted
+				cancelUpdates["abort_reason"] = models.TaskAbortCreatorCancelled
+			}
+			if err := tx.Model(&current).Updates(cancelUpdates).Error; err != nil {
 				return err
 			}
 		case models.TaskOperationResult:
@@ -193,8 +198,47 @@ func (e *Engine) applyRelayStatus(ctx context.Context, tx *gorm.DB, task *models
 		}
 		return tx.Model(task).Updates(updates).Error
 	}
-	localStatus := relayStatusToLocal(status.Status)
+
 	now := time.Now()
+	if task.Status == models.InferenceTaskEndAborted && task.SiblingCancellationRequired && !isChainTaskTerminal(status.Status) {
+		return tx.Model(task).Updates(map[string]any{
+			"relay_checked":     true,
+			"relay_found":       true,
+			"operation_unknown": false,
+			"next_action_at":    now,
+		}).Error
+	}
+
+	if status.Status == models.ChainTaskQueued {
+		timedOut, err := e.heartbeatQueuedTimedOut(ctx, tx, task, now)
+		if err != nil {
+			return err
+		}
+		if timedOut {
+			updates := map[string]any{
+				"status":            models.InferenceTaskEndAborted,
+				"abort_reason":      models.TaskAbortCreatorCancelled,
+				"relay_checked":     true,
+				"relay_found":       true,
+				"operation_unknown": false,
+				"next_action_at":    now,
+			}
+			if task.TaskIDCommitment != "" {
+				updates["sibling_cancellation_required"] = true
+			}
+			if err := tx.Model(task).Updates(updates).Error; err != nil {
+				return err
+			}
+			task.Status = models.InferenceTaskEndAborted
+			task.AbortReason = models.TaskAbortCreatorCancelled
+			if task.TaskIDCommitment != "" {
+				task.SiblingCancellationRequired = true
+			}
+			return nil
+		}
+	}
+
+	localStatus := relayStatusToLocal(status.Status)
 	nextAction := now.Add(e.config.StatusPollInterval)
 	if (localStatus == models.InferenceTaskStarted || localStatus == models.InferenceTaskParamsUploaded) &&
 		status.EstimatedExecutionCompletionAt != nil {
@@ -235,6 +279,56 @@ func (e *Engine) applyRelayStatus(ctx context.Context, tx *gorm.DB, task *models
 		return e.persistVRFAndMembers(ctx, tx, task, status)
 	}
 	return nil
+}
+
+func isChainTaskTerminal(status models.ChainTaskStatus) bool {
+	switch status {
+	case models.ChainTaskEndAborted,
+		models.ChainTaskEndInvalidated,
+		models.ChainTaskEndGroupRefund,
+		models.ChainTaskEndSuccess,
+		models.ChainTaskEndGroupSuccess:
+		return true
+	default:
+		return false
+	}
+}
+
+func (e *Engine) heartbeatQueuedTimedOut(ctx context.Context, tx *gorm.DB, task *models.InferenceTask, now time.Time) (bool, error) {
+	if e.config.HeartbeatMaxQueuedDuration <= 0 {
+		return false, nil
+	}
+	if now.Sub(task.CreatedAt) < e.config.HeartbeatMaxQueuedDuration {
+		return false, nil
+	}
+	clientDBID, ok, err := e.resolveHeartbeatClientDBID(ctx, tx)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	return task.ClientID == clientDBID, nil
+}
+
+func (e *Engine) resolveHeartbeatClientDBID(ctx context.Context, db *gorm.DB) (uint, bool, error) {
+	e.heartbeatClientMu.Lock()
+	defer e.heartbeatClientMu.Unlock()
+	if e.heartbeatClientResolved {
+		return e.heartbeatClientDBID, e.heartbeatClientDBID != 0, nil
+	}
+	var client models.Client
+	err := db.WithContext(ctx).Where("client_id = ?", HeartbeatClientID).First(&client).Error
+	e.heartbeatClientResolved = true
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, false, nil
+	}
+	if err != nil {
+		e.heartbeatClientResolved = false
+		return 0, false, err
+	}
+	e.heartbeatClientDBID = client.ID
+	return client.ID, true, nil
 }
 
 func (e *Engine) persistVRFAndMembers(

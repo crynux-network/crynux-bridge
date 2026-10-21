@@ -113,6 +113,7 @@ type HeartbeatTasksConfig struct {
 	BatchSize            uint64                `mapstructure:"batch_size"`
 	MaxTasksPerHour      uint64                `mapstructure:"max_tasks_per_hour"`
 	MaxTotalPendingTasks uint64                `mapstructure:"max_total_pending_tasks"`
+	MaxQueuedDuration    time.Duration         `mapstructure:"max_queued_duration"`
 	TasksFile            string                `mapstructure:"tasks_file"`
 	Tasks                []HeartbeatTaskConfig `mapstructure:"tasks" json:"tasks"`
 }

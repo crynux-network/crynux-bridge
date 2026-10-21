@@ -45,6 +45,7 @@ type Config struct {
 	ResultWorkers                int
 	ResultDirectory              string
 	PrivateKey                   string
+	HeartbeatMaxQueuedDuration   time.Duration
 }
 
 func (c Config) validate() error {
@@ -69,6 +70,9 @@ func (c Config) validate() error {
 	}
 	if c.ExecutionPollAdvance < 0 {
 		return errors.New("execution poll advance must not be negative")
+	}
+	if c.HeartbeatMaxQueuedDuration < 0 {
+		return errors.New("heartbeat max queued duration must not be negative")
 	}
 	positiveIntegers := []struct {
 		name  string

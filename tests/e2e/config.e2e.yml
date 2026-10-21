@@ -65,6 +65,7 @@ task:
     batch_size: 1
     max_tasks_per_hour: 20
     max_total_pending_tasks: 0
+    max_queued_duration: 3m
     tasks_file: "heartbeat_tasks.json"
 task_schema:
   stable_diffusion_inference: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/image-task.json"

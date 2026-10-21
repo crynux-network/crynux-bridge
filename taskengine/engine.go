@@ -14,6 +14,8 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+const HeartbeatClientID = "heartbeat-task"
+
 type Engine struct {
 	db                   *gorm.DB
 	config               Config
@@ -23,6 +25,10 @@ type Engine struct {
 	cancellationCapacity chan struct{}
 	resultCapacity       chan struct{}
 	startOnce            sync.Once
+
+	heartbeatClientMu       sync.Mutex
+	heartbeatClientResolved bool
+	heartbeatClientDBID     uint
 }
 
 var (

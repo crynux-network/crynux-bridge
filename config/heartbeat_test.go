@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func mustHeartbeatJSONRaw(t *testing.T, v any) json.RawMessage {
@@ -196,6 +197,22 @@ func TestValidateHeartbeatTasksConfig(t *testing.T) {
 			},
 		},
 	}
+	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRejectsNegativeMaxQueuedDuration(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.MaxQueuedDuration = -time.Second
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatalf("expected negative max_queued_duration error")
+	}
+}
+
+func TestValidateHeartbeatTasksConfigAllowsZeroMaxQueuedDuration(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.MaxQueuedDuration = 0
 	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -311,6 +311,8 @@ One validation batch MAY contain independent single-task and three-member VSS va
 
 One cancellation batch MAY partially succeed. Sibling cancellation remains best effort; a `not_cancellable`, `not_found`, or permanent rejection outcome MUST finish that cancellation operation and MUST NOT delay client-task completion.
 
+When TaskEngine aborts a heartbeat task for the queued wait limit in [heartbeat_tasks.md](./heartbeat_tasks.md), it MUST set local `EndAborted` with `TaskAbortCreatorCancelled` before or when scheduling Relay cancellation. Status synchronization MUST NOT overwrite that local `EndAborted` with a non-terminal Relay status while `sibling_cancellation_required` remains set. Completing the cancellation operation MUST clear `sibling_cancellation_required` and MUST keep the local task `EndAborted` with `TaskAbortCreatorCancelled` for every cancel outcome, including `not_cancellable`, `not_found`, and permanent rejection.
+
 ## Task Progression
 
 For each due task, the main loop MUST use the following rules:

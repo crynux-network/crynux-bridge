@@ -35,6 +35,9 @@ func heartbeatJSONArrayLen(raw json.RawMessage) (int, error) {
 const HeartbeatRandPlaceholder = "{{hb_rand}}"
 
 func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
+	if appConfig.Task.HeartbeatTasks.MaxQueuedDuration < 0 {
+		return fmt.Errorf("task.heartbeat_tasks.max_queued_duration must not be negative")
+	}
 	for i, task := range appConfig.Task.HeartbeatTasks.Tasks {
 		if task.Ratio > 0 && task.MaxPendingTasks == 0 {
 			return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: max_pending_tasks must be > 0 when ratio > 0", i)

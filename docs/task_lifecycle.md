@@ -93,6 +93,8 @@ If any validation-group member reaches `EndAborted` with `TaskAbortCreatorValida
 
 When the main loop synchronizes a validation-group member to `EndAborted`, it MUST schedule one best-effort cancellation operation for each other group member that has a `TaskIDCommitment`, using `TaskAbortCreatorCancelled`. TaskEngine MUST submit those operations through the Relay cancellation batch endpoint. Bridge MUST treat cancel success, already-cancelled, not-cancellable, not-found, and permanent rejection as completed best-effort outcomes and MUST continue client-task updates. Bridge MUST NOT schedule sibling cancellation when the current task is `EndInvalidated`. Bridge MUST NOT schedule sibling cancellation only because another group member failed while the current task is still non-terminal.
 
+For client `heartbeat-task`, when `task.heartbeat_tasks.max_queued_duration` is greater than `0` and Relay still reports `TaskQueued` after that duration from `InferenceTask.CreatedAt`, TaskEngine MUST set the local task to `EndAborted` with `TaskAbortCreatorCancelled` and MUST submit a best-effort Relay creator cancel. The local terminal state MUST NOT depend on Relay cancel success. The full rule is specified in [heartbeat_tasks.md](./heartbeat_tasks.md).
+
 ## Abort Reasons and Legacy Status
 
 Bridge abort-reason values MUST match Relay values from `TaskAbortReasonNone` through `TaskAbortNodeSlashed`. In particular, `TaskAbortCreatorValidationTimeout` MUST be `8` and `TaskAbortResultUploadTimeout` MUST be `9`.

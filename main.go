@@ -66,6 +66,7 @@ func main() {
 		ResultWorkers:                conf.Task.Engine.ResultWorkers,
 		ResultDirectory:              conf.DataDir.InferenceTasks,
 		PrivateKey:                   conf.Blockchain.Account.PrivateKey,
+		HeartbeatMaxQueuedDuration:   conf.Task.HeartbeatTasks.MaxQueuedDuration,
 	})
 	if err != nil {
 		log.Fatalln(err)

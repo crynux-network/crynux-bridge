@@ -27,6 +27,23 @@ Each created heartbeat task MUST use:
 
 Heartbeat tasks MUST NOT set an execution timeout. Relay MUST calculate the execution timeout after assigning a node.
 
+## Queued Wait Limit
+
+`task.heartbeat_tasks.max_queued_duration` MUST be a non-negative duration. When the value is `0`, Bridge MUST NOT apply a heartbeat-only queued wait limit.
+
+When `max_queued_duration` is greater than `0`, TaskEngine MUST enforce the limit only for client `heartbeat-task`. During Relay status synchronization, when Relay reports `TaskQueued` and `now - InferenceTask.CreatedAt` is greater than or equal to `max_queued_duration`, TaskEngine MUST in the same transaction:
+
+1. Set the local inference task to `EndAborted` with `TaskAbortCreatorCancelled`.
+2. When the task has a `TaskIDCommitment`, set `sibling_cancellation_required` so the existing Relay batch cancellation path submits `TaskAbortCreatorCancelled`.
+
+The local `EndAborted` transition MUST complete whether or not Relay cancellation succeeds. Cancel outcomes `cancelled`, `already_cancelled`, `not_cancellable`, `not_found`, and permanent rejection MUST clear `sibling_cancellation_required` and MUST leave the local task `EndAborted` with `TaskAbortCreatorCancelled`. A temporary cancellation transport failure MUST keep `sibling_cancellation_required` and retry cancellation without restoring a non-terminal local status.
+
+While a heartbeat task is locally `EndAborted` with `sibling_cancellation_required` still set, a later status sync that still reports a non-terminal Relay status MUST NOT overwrite the local `EndAborted` status or clear `sibling_cancellation_required`.
+
+After the local task reaches `EndAborted`, it MUST NOT count toward heartbeat in-flight totals used by `max_pending_tasks` and `max_total_pending_tasks`.
+
+This limit MUST NOT apply to raw or API client tasks. Bridge MUST NOT force-abort a heartbeat task under this rule when Relay reports a status other than `TaskQueued`.
+
 ## Task File Loading
 
 `task.heartbeat_tasks` in `config.yml` MUST contain only control fields and a tasks file pointer:
@@ -34,6 +51,7 @@ Heartbeat tasks MUST NOT set an execution timeout. Relay MUST calculate the exec
 - `batch_size`
 - `max_tasks_per_hour`
 - `max_total_pending_tasks`
+- `max_queued_duration`
 - `tasks_file`
 
 When `tasks_file` is omitted or empty, Bridge MUST use `heartbeat_tasks.json`.
