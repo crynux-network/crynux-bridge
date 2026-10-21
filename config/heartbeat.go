@@ -1,11 +1,36 @@
 package config
 
 import (
+	"bytes"
 	"crynux_bridge/utils"
 	"encoding/json"
 	"fmt"
 	"strings"
 )
+
+// HeartbeatRawJSONPresent reports whether raw holds a non-empty, non-null JSON value.
+func HeartbeatRawJSONPresent(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return false
+	}
+	return true
+}
+
+func heartbeatRawJSONPresent(raw json.RawMessage) bool {
+	return HeartbeatRawJSONPresent(raw)
+}
+
+func heartbeatJSONArrayLen(raw json.RawMessage) (int, error) {
+	if !heartbeatRawJSONPresent(raw) {
+		return 0, nil
+	}
+	var arr []json.RawMessage
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return 0, fmt.Errorf("must be a JSON array")
+	}
+	return len(arr), nil
+}
 
 const HeartbeatRandPlaceholder = "{{hb_rand}}"
 
@@ -42,13 +67,17 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 			if task.MaxNewTokens != 0 {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: max_new_tokens is not supported for sd tasks", i)
 			}
-			if len(task.Tools) > 0 {
+			toolsLen, err := heartbeatJSONArrayLen(task.Tools)
+			if err != nil {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: tools %w", i, err)
+			}
+			if toolsLen > 0 {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: tools is not supported for sd tasks", i)
 			}
-			if task.ToolChoice != nil {
+			if heartbeatRawJSONPresent(task.ToolChoice) {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: tool_choice is not supported for sd tasks", i)
 			}
-			if len(task.ResponseFormat) > 0 {
+			if heartbeatRawJSONPresent(task.ResponseFormat) {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: response_format is not supported for sd tasks", i)
 			}
 			if err := validateHeartbeatQuantizationConfig(task.QuantizationConfig); err != nil {
@@ -74,7 +103,11 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 				promptHasToolCalls = true
 			}
 		}
-		if promptHasToolCalls && len(task.Tools) == 0 {
+		toolsLen, err := heartbeatJSONArrayLen(task.Tools)
+		if err != nil {
+			return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: tools %w", i, err)
+		}
+		if promptHasToolCalls && toolsLen == 0 {
 			return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: tools must be non-empty when prompts include assistant tool_calls", i)
 		}
 	}
@@ -301,29 +334,37 @@ func heartbeatMessagesHaveAssistantToolCalls(messages []HeartbeatMessageConfig) 
 	return false
 }
 
-func validateHeartbeatToolChoice(toolChoice any, tools []map[string]interface{}) error {
-	if toolChoice == nil {
+func validateHeartbeatToolChoice(toolChoice json.RawMessage, tools json.RawMessage) error {
+	if !heartbeatRawJSONPresent(toolChoice) {
 		return nil
 	}
-	switch value := toolChoice.(type) {
+	toolsLen, err := heartbeatJSONArrayLen(tools)
+	if err != nil {
+		return fmt.Errorf("tools %w", err)
+	}
+	var value any
+	if err := json.Unmarshal(toolChoice, &value); err != nil {
+		return fmt.Errorf("tool_choice must be a string or object")
+	}
+	switch typed := value.(type) {
 	case string:
-		switch value {
+		switch typed {
 		case "none":
 			return nil
 		case "auto", "required":
-			if len(tools) == 0 {
-				return fmt.Errorf("tools must be non-empty when tool_choice is %q", value)
+			if toolsLen == 0 {
+				return fmt.Errorf("tools must be non-empty when tool_choice is %q", typed)
 			}
 			return nil
 		default:
 			return fmt.Errorf("tool_choice string must be none, auto, or required")
 		}
 	case map[string]interface{}:
-		typeValue, ok := value["type"].(string)
+		typeValue, ok := typed["type"].(string)
 		if !ok || typeValue != "function" {
 			return fmt.Errorf("tool_choice object type must be function")
 		}
-		functionValue, ok := value["function"].(map[string]interface{})
+		functionValue, ok := typed["function"].(map[string]interface{})
 		if !ok {
 			return fmt.Errorf("tool_choice.function must be an object")
 		}
@@ -331,7 +372,7 @@ func validateHeartbeatToolChoice(toolChoice any, tools []map[string]interface{})
 		if !ok || strings.TrimSpace(name) == "" {
 			return fmt.Errorf("tool_choice.function.name must be a non-empty string")
 		}
-		if len(tools) == 0 {
+		if toolsLen == 0 {
 			return fmt.Errorf("tools must be non-empty when tool_choice is a named function")
 		}
 		if !heartbeatToolsContainFunctionName(tools, name) {
@@ -343,8 +384,12 @@ func validateHeartbeatToolChoice(toolChoice any, tools []map[string]interface{})
 	}
 }
 
-func heartbeatToolsContainFunctionName(tools []map[string]interface{}, name string) bool {
-	for _, tool := range tools {
+func heartbeatToolsContainFunctionName(tools json.RawMessage, name string) bool {
+	var decoded []map[string]interface{}
+	if err := json.Unmarshal(tools, &decoded); err != nil {
+		return false
+	}
+	for _, tool := range decoded {
 		functionValue, ok := tool["function"].(map[string]interface{})
 		if !ok {
 			continue
@@ -357,11 +402,15 @@ func heartbeatToolsContainFunctionName(tools []map[string]interface{}, name stri
 	return false
 }
 
-func validateHeartbeatResponseFormat(responseFormat map[string]interface{}) error {
-	if len(responseFormat) == 0 {
+func validateHeartbeatResponseFormat(responseFormat json.RawMessage) error {
+	if !heartbeatRawJSONPresent(responseFormat) {
 		return nil
 	}
-	typeValue, ok := responseFormat["type"].(string)
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(responseFormat, &decoded); err != nil {
+		return fmt.Errorf("response_format must be an object")
+	}
+	typeValue, ok := decoded["type"].(string)
 	if !ok {
 		return fmt.Errorf("response_format.type must be a string")
 	}
@@ -369,7 +418,7 @@ func validateHeartbeatResponseFormat(responseFormat map[string]interface{}) erro
 	case "json_object":
 		return nil
 	case "json_schema":
-		schemaValue, ok := responseFormat["json_schema"].(map[string]interface{})
+		schemaValue, ok := decoded["json_schema"].(map[string]interface{})
 		if !ok {
 			return fmt.Errorf("response_format.json_schema must be an object")
 		}
@@ -387,11 +436,18 @@ func validateHeartbeatResponseFormat(responseFormat map[string]interface{}) erro
 	}
 }
 
-func validateHeartbeatQuantizationConfig(quantizationConfig map[string]interface{}) error {
-	if len(quantizationConfig) == 0 {
+func validateHeartbeatQuantizationConfig(quantizationConfig json.RawMessage) error {
+	if !heartbeatRawJSONPresent(quantizationConfig) {
 		return nil
 	}
-	quantMethod, ok := quantizationConfig["quant_method"].(string)
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(quantizationConfig, &decoded); err != nil {
+		return fmt.Errorf("quantization_config must be an object")
+	}
+	if len(decoded) == 0 {
+		return nil
+	}
+	quantMethod, ok := decoded["quant_method"].(string)
 	if !ok || strings.TrimSpace(quantMethod) == "" {
 		return fmt.Errorf("quantization_config.quant_method must be a non-empty string")
 	}

@@ -2,10 +2,20 @@ package config
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func mustHeartbeatJSONRaw(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal heartbeat json: %v", err)
+	}
+	return raw
+}
 
 func TestValidateHeartbeatPromptTextOK(t *testing.T) {
 	prompt := HeartbeatPromptConfig{Text: "hello"}
@@ -117,14 +127,14 @@ func TestValidateHeartbeatTasksConfigRequiresToolsForToolCalls(t *testing.T) {
 		t.Fatalf("expected tools required error")
 	}
 
-	appConfig.Task.HeartbeatTasks.Tasks[0].Tools = []map[string]interface{}{
+	appConfig.Task.HeartbeatTasks.Tasks[0].Tools = mustHeartbeatJSONRaw(t, []map[string]interface{}{
 		{
 			"type": "function",
 			"function": map[string]interface{}{
 				"name": "search_docs",
 			},
 		},
-	}
+	})
 	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -285,21 +295,21 @@ func TestValidateHeartbeatTasksConfigRejectsStepsForLLM(t *testing.T) {
 	}
 }
 
-func searchDocsTool() []map[string]interface{} {
-	return []map[string]interface{}{
+func searchDocsTool() json.RawMessage {
+	return json.RawMessage(`[
 		{
 			"type": "function",
-			"function": map[string]interface{}{
+			"function": {
 				"name": "search_docs",
-				"parameters": map[string]interface{}{
+				"parameters": {
 					"type": "object",
-					"properties": map[string]interface{}{
-						"query": map[string]interface{}{"type": "string"},
-					},
-				},
-			},
-		},
-	}
+					"properties": {
+						"query": {"type": "string"}
+					}
+				}
+			}
+		}
+	]`)
 }
 
 func TestValidateHeartbeatTasksConfigAcceptsToolChoiceAndResponseFormat(t *testing.T) {
@@ -311,11 +321,11 @@ func TestValidateHeartbeatTasksConfigAcceptsToolChoiceAndResponseFormat(t *testi
 			Model:           "Qwen/Qwen3-8B",
 			MaxPendingTasks: 5,
 			MaxNewTokens:    128,
-			Tools:           searchDocsTool(),
-			ToolChoice:      "auto",
-			ResponseFormat: map[string]interface{}{
+			Tools:      searchDocsTool(),
+			ToolChoice: json.RawMessage(`"auto"`),
+			ResponseFormat: mustHeartbeatJSONRaw(t, map[string]interface{}{
 				"type": "json_object",
-			},
+			}),
 		},
 		{
 			Type:            "llm",
@@ -324,13 +334,13 @@ func TestValidateHeartbeatTasksConfigAcceptsToolChoiceAndResponseFormat(t *testi
 			MaxPendingTasks: 5,
 			MaxNewTokens:    128,
 			Tools:           searchDocsTool(),
-			ToolChoice: map[string]interface{}{
+			ToolChoice: mustHeartbeatJSONRaw(t, map[string]interface{}{
 				"type": "function",
 				"function": map[string]interface{}{
 					"name": "search_docs",
 				},
-			},
-			ResponseFormat: map[string]interface{}{
+			}),
+			ResponseFormat: mustHeartbeatJSONRaw(t, map[string]interface{}{
 				"type": "json_schema",
 				"json_schema": map[string]interface{}{
 					"name": "answer",
@@ -338,7 +348,7 @@ func TestValidateHeartbeatTasksConfigAcceptsToolChoiceAndResponseFormat(t *testi
 						"type": "object",
 					},
 				},
-			},
+			}),
 		},
 		{
 			Type:            "llm",
@@ -346,7 +356,7 @@ func TestValidateHeartbeatTasksConfigAcceptsToolChoiceAndResponseFormat(t *testi
 			Model:           "Qwen/Qwen3-8B",
 			MaxPendingTasks: 5,
 			MaxNewTokens:    128,
-			ToolChoice:      "none",
+			ToolChoice:      json.RawMessage(`"none"`),
 		},
 	}
 	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
@@ -362,8 +372,8 @@ func TestValidateHeartbeatTasksConfigRejectsToolChoiceForSD(t *testing.T) {
 			Ratio:           1.0,
 			Model:           "crynux-network/sdxl-turbo",
 			MaxPendingTasks: 5,
-			Steps:           1,
-			ToolChoice:      "auto",
+			Steps:      1,
+			ToolChoice: json.RawMessage(`"auto"`),
 		},
 	}
 	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
@@ -379,10 +389,10 @@ func TestValidateHeartbeatTasksConfigRejectsResponseFormatForSD(t *testing.T) {
 			Ratio:           1.0,
 			Model:           "crynux-network/sdxl-turbo",
 			MaxPendingTasks: 5,
-			Steps:           1,
-			ResponseFormat: map[string]interface{}{
+			Steps: 1,
+			ResponseFormat: mustHeartbeatJSONRaw(t, map[string]interface{}{
 				"type": "json_object",
-			},
+			}),
 		},
 	}
 	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
@@ -398,8 +408,8 @@ func TestValidateHeartbeatTasksConfigRejectsToolChoiceWithoutTools(t *testing.T)
 			Ratio:           1.0,
 			Model:           "Qwen/Qwen3-8B",
 			MaxPendingTasks: 5,
-			MaxNewTokens:    128,
-			ToolChoice:      "required",
+			MaxNewTokens: 128,
+			ToolChoice:   json.RawMessage(`"required"`),
 		},
 	}
 	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
@@ -416,13 +426,13 @@ func TestValidateHeartbeatTasksConfigRejectsUnknownNamedToolChoice(t *testing.T)
 			Model:           "Qwen/Qwen3-8B",
 			MaxPendingTasks: 5,
 			MaxNewTokens:    128,
-			Tools:           searchDocsTool(),
-			ToolChoice: map[string]interface{}{
+			Tools: searchDocsTool(),
+			ToolChoice: mustHeartbeatJSONRaw(t, map[string]interface{}{
 				"type": "function",
 				"function": map[string]interface{}{
 					"name": "missing_tool",
 				},
-			},
+			}),
 		},
 	}
 	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
@@ -438,13 +448,13 @@ func TestValidateHeartbeatTasksConfigRejectsInvalidResponseFormat(t *testing.T) 
 			Ratio:           1.0,
 			Model:           "Qwen/Qwen3-8B",
 			MaxPendingTasks: 5,
-			MaxNewTokens:    128,
-			ResponseFormat: map[string]interface{}{
+			MaxNewTokens: 128,
+			ResponseFormat: mustHeartbeatJSONRaw(t, map[string]interface{}{
 				"type": "json_schema",
 				"json_schema": map[string]interface{}{
 					"name": "answer",
 				},
-			},
+			}),
 		},
 	}
 	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
@@ -637,9 +647,9 @@ func TestValidateHeartbeatTasksConfigAcceptsQuantizationConfig(t *testing.T) {
 			MaxPendingTasks: 5,
 			Steps:           8,
 			Dtype:           "bfloat16",
-			QuantizationConfig: map[string]interface{}{
+			QuantizationConfig: mustHeartbeatJSONRaw(t, map[string]interface{}{
 				"quant_method": "bitsandbytes",
-			},
+			}),
 			Prompts: []HeartbeatPromptConfig{
 				{Text: "a cup"},
 			},
@@ -650,9 +660,9 @@ func TestValidateHeartbeatTasksConfigAcceptsQuantizationConfig(t *testing.T) {
 			Model:           "Qwen/Qwen3.5-27B",
 			MaxPendingTasks: 5,
 			MaxNewTokens:    64,
-			QuantizationConfig: map[string]interface{}{
+			QuantizationConfig: mustHeartbeatJSONRaw(t, map[string]interface{}{
 				"quant_method": "bitsandbytes",
-			},
+			}),
 			Prompts: []HeartbeatPromptConfig{
 				{Text: "ticket {{hb_rand}} needs triage"},
 			},
@@ -672,9 +682,9 @@ func TestValidateHeartbeatTasksConfigRejectsQuantizationWithoutMethod(t *testing
 			Model:           "Qwen/Qwen-Image-2.1",
 			MaxPendingTasks: 5,
 			Steps:           8,
-			QuantizationConfig: map[string]interface{}{
+			QuantizationConfig: mustHeartbeatJSONRaw(t, map[string]interface{}{
 				"quant_kwargs": map[string]interface{}{"load_in_4bit": true},
-			},
+			}),
 		},
 	}
 	if err := validateHeartbeatTasksConfig(appConfig); err == nil {

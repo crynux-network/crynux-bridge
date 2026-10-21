@@ -4,10 +4,21 @@ import (
 	"crynux_bridge/config"
 	"crynux_bridge/models"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 )
+
+func mustHeartbeatJSONRaw(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal heartbeat json: %v", err)
+	}
+	return raw
+}
 
 func TestSelectHeartbeatPromptEmptyUsesDefault(t *testing.T) {
 	_, useDefault, err := selectHeartbeatPrompt(nil)
@@ -61,6 +72,10 @@ func TestBuildLLMHeartbeatTaskArgsDefault(t *testing.T) {
 	if generationConfig["max_new_tokens"] != float64(64) {
 		t.Fatalf("unexpected max_new_tokens: %#v", generationConfig["max_new_tokens"])
 	}
+	templateArgs, ok := parsed["template_args"].(map[string]interface{})
+	if !ok || templateArgs["enable_thinking"] != false {
+		t.Fatalf("unexpected template_args %#v", parsed["template_args"])
+	}
 }
 
 func TestBuildLLMHeartbeatTaskArgsText(t *testing.T) {
@@ -89,6 +104,9 @@ func TestBuildLLMHeartbeatTaskArgsText(t *testing.T) {
 	}
 	if parsed.GenerationConfig == nil || parsed.GenerationConfig.MaxNewTokens != 128 {
 		t.Fatalf("unexpected max_new_tokens %#v", parsed.GenerationConfig)
+	}
+	if parsed.TemplateArgs == nil || parsed.TemplateArgs["enable_thinking"] != false {
+		t.Fatalf("unexpected template_args %#v", parsed.TemplateArgs)
 	}
 }
 
@@ -135,7 +153,7 @@ func TestBuildLLMHeartbeatTaskArgsToolsAndMessages(t *testing.T) {
 		config.HeartbeatTaskConfig{
 			Model:        "Qwen/Qwen3-8B",
 			MaxNewTokens: 128,
-			Tools: []map[string]interface{}{
+			Tools: mustHeartbeatJSONRaw(t, []map[string]interface{}{
 				{
 					"type": "function",
 					"function": map[string]interface{}{
@@ -148,7 +166,7 @@ func TestBuildLLMHeartbeatTaskArgsToolsAndMessages(t *testing.T) {
 						},
 					},
 				},
-			},
+			}),
 		},
 		config.HeartbeatPromptConfig{
 			Messages: []config.HeartbeatMessageConfig{
@@ -204,18 +222,18 @@ func TestBuildLLMHeartbeatTaskArgsToolChoiceAndResponseFormat(t *testing.T) {
 		config.HeartbeatTaskConfig{
 			Model:        "Qwen/Qwen3-8B",
 			MaxNewTokens: 128,
-			Tools: []map[string]interface{}{
+			Tools: mustHeartbeatJSONRaw(t, []map[string]interface{}{
 				{
 					"type": "function",
 					"function": map[string]interface{}{
 						"name": "search_docs",
 					},
 				},
-			},
-			ToolChoice: "required",
-			ResponseFormat: map[string]interface{}{
+			}),
+			ToolChoice: json.RawMessage(`"required"`),
+			ResponseFormat: mustHeartbeatJSONRaw(t, map[string]interface{}{
 				"type": "json_object",
-			},
+			}),
 		},
 		config.HeartbeatPromptConfig{},
 		true,
@@ -324,16 +342,16 @@ func TestBuildSDHeartbeatTaskArgsConfiguredPrompt(t *testing.T) {
 }
 
 func TestBuildSDHeartbeatTaskArgsQuantizationConfig(t *testing.T) {
-	quantization := map[string]interface{}{
-		"quant_method":            "bitsandbytes",
-		"components_to_quantize":  []interface{}{"transformer", "text_encoder"},
+	quantization := mustHeartbeatJSONRaw(t, map[string]interface{}{
+		"quant_method":           "bitsandbytes",
+		"components_to_quantize": []interface{}{"transformer", "text_encoder"},
 		"quant_kwargs": map[string]interface{}{
 			"load_in_4bit":              true,
 			"bnb_4bit_quant_type":       "nf4",
 			"bnb_4bit_compute_dtype":    "bfloat16",
 			"bnb_4bit_use_double_quant": false,
 		},
-	}
+	})
 	taskArgs, err := buildSDHeartbeatTaskArgs(
 		config.HeartbeatTaskConfig{
 			Type:               "sd",
@@ -366,7 +384,7 @@ func TestBuildSDHeartbeatTaskArgsQuantizationConfig(t *testing.T) {
 }
 
 func TestBuildLLMHeartbeatTaskArgsQuantizationConfig(t *testing.T) {
-	quantization := map[string]interface{}{
+	quantization := mustHeartbeatJSONRaw(t, map[string]interface{}{
 		"quant_method": "bitsandbytes",
 		"quant_kwargs": map[string]interface{}{
 			"load_in_4bit":              true,
@@ -374,7 +392,7 @@ func TestBuildLLMHeartbeatTaskArgsQuantizationConfig(t *testing.T) {
 			"bnb_4bit_compute_dtype":    "bfloat16",
 			"bnb_4bit_use_double_quant": false,
 		},
-	}
+	})
 	taskArgs, err := buildLLMHeartbeatTaskArgs(
 		config.HeartbeatTaskConfig{
 			Type:               "llm",
@@ -441,6 +459,10 @@ func TestBuildHeartbeatTaskArgsWithPrompts(t *testing.T) {
 	generationConfig := parsed["generation_config"].(map[string]interface{})
 	if generationConfig["max_new_tokens"] != float64(64) {
 		t.Fatalf("unexpected max_new_tokens: %#v", generationConfig["max_new_tokens"])
+	}
+	templateArgs, ok := parsed["template_args"].(map[string]interface{})
+	if !ok || templateArgs["enable_thinking"] != false {
+		t.Fatalf("unexpected template_args %#v", parsed["template_args"])
 	}
 }
 
@@ -575,16 +597,16 @@ func TestSelectHeartbeatTaskConfigBatchIncrementsBlockFurtherSamples(t *testing.
 }
 
 func TestSelectHeartbeatTaskConfigSeparateQuantPools(t *testing.T) {
-	fourBit := map[string]interface{}{
+	fourBit := mustHeartbeatJSONRaw(t, map[string]interface{}{
 		"quant_method":           "bitsandbytes",
 		"components_to_quantize": []interface{}{"transformer"},
 		"quant_kwargs":           map[string]interface{}{"load_in_4bit": true},
-	}
-	eightBit := map[string]interface{}{
+	})
+	eightBit := mustHeartbeatJSONRaw(t, map[string]interface{}{
 		"quant_method":           "bitsandbytes",
 		"components_to_quantize": []interface{}{"transformer"},
 		"quant_kwargs":           map[string]interface{}{"load_in_8bit": true},
-	}
+	})
 	configs := []config.HeartbeatTaskConfig{
 		{
 			Type:               "sd",
@@ -630,11 +652,11 @@ func TestSelectHeartbeatTaskConfigSeparateQuantPools(t *testing.T) {
 }
 
 func TestSelectHeartbeatTaskConfigSameQuantDifferentStepsSharePool(t *testing.T) {
-	quant := map[string]interface{}{
+	quant := mustHeartbeatJSONRaw(t, map[string]interface{}{
 		"quant_method":           "bitsandbytes",
 		"components_to_quantize": []interface{}{"transformer"},
 		"quant_kwargs":           map[string]interface{}{"load_in_4bit": true},
-	}
+	})
 	configs := []config.HeartbeatTaskConfig{
 		{
 			Type:               "sd",
@@ -798,5 +820,140 @@ func TestHeartbeatTaskTypeAndModelID(t *testing.T) {
 	}
 	if sdType != models.TaskTypeSD || sdModelID != "base:crynux-network/sdxl-turbo" {
 		t.Fatalf("unexpected sd identity: type=%v modelID=%q", sdType, sdModelID)
+	}
+}
+
+func TestBuildSDHeartbeatTaskArgsPreservesQuantizationNumberLiterals(t *testing.T) {
+	quantization := json.RawMessage(`{
+		"quant_method": "bitsandbytes",
+		"components_to_quantize": ["transformer"],
+		"quant_kwargs": {
+			"load_in_8bit": true,
+			"llm_int8_threshold": 6.0,
+			"other_metric": 3.0
+		}
+	}`)
+	taskArgs, err := buildSDHeartbeatTaskArgs(
+		config.HeartbeatTaskConfig{
+			Type:               "sd",
+			Model:              "Qwen/Qwen-Image-2.1",
+			Steps:              8,
+			TaskVersion:        "3.7.0",
+			QuantizationConfig: quantization,
+		},
+		config.HeartbeatPromptConfig{Text: "a cup on a table"},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(taskArgs, `"llm_int8_threshold":6.0`) {
+		t.Fatalf("expected llm_int8_threshold literal 6.0 in task args, got %s", taskArgs)
+	}
+	if !strings.Contains(taskArgs, `"other_metric":3.0`) {
+		t.Fatalf("expected other_metric literal 3.0 in task args, got %s", taskArgs)
+	}
+	if !strings.Contains(taskArgs, `"steps":8`) {
+		t.Fatalf("expected integer steps literal in task args, got %s", taskArgs)
+	}
+	if strings.Contains(taskArgs, `"steps":8.0`) {
+		t.Fatalf("steps must remain a JSON integer, got %s", taskArgs)
+	}
+}
+
+func TestBuildLLMHeartbeatTaskArgsPreservesFreeFormNumberLiterals(t *testing.T) {
+	taskArgs, err := buildLLMHeartbeatTaskArgs(
+		config.HeartbeatTaskConfig{
+			Type:         "llm",
+			Model:        "Qwen/Qwen3-8B",
+			MaxNewTokens: 64,
+			TaskVersion:  "3.7.0",
+			QuantizationConfig: json.RawMessage(`{
+				"quant_method": "bitsandbytes",
+				"quant_kwargs": {"load_in_8bit": true, "llm_int8_threshold": 6.0}
+			}`),
+			Tools: json.RawMessage(`[
+				{
+					"type": "function",
+					"function": {
+						"name": "search_docs",
+						"parameters": {
+							"type": "object",
+							"properties": {"limit": {"default": 2.0}}
+						}
+					}
+				}
+			]`),
+			ToolChoice:     json.RawMessage(`"required"`),
+			ResponseFormat: json.RawMessage(`{"type":"json_object","score":1.0}`),
+		},
+		config.HeartbeatPromptConfig{Text: "ticket {{hb_rand}} needs triage"},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(taskArgs, `"llm_int8_threshold":6.0`) {
+		t.Fatalf("expected llm_int8_threshold literal 6.0 in task args, got %s", taskArgs)
+	}
+	if !strings.Contains(taskArgs, `"default":2.0`) {
+		t.Fatalf("expected tools number literal 2.0 in task args, got %s", taskArgs)
+	}
+	if !strings.Contains(taskArgs, `"score":1.0`) {
+		t.Fatalf("expected response_format number literal 1.0 in task args, got %s", taskArgs)
+	}
+	if !strings.Contains(taskArgs, `"max_new_tokens":64`) {
+		t.Fatalf("expected integer max_new_tokens literal in task args, got %s", taskArgs)
+	}
+}
+
+func TestLoadHeartbeatTasksFilePreservesQuantizationNumberLiterals(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "heartbeat_tasks.json")
+	body := `{
+		"tasks": [
+			{
+				"task_version": "3.7.0",
+				"type": "sd",
+				"ratio": 1.0,
+				"model": "Qwen/Qwen-Image-2.1",
+				"min_vram": 16,
+				"fee_cnx": "0.0001",
+				"max_pending_tasks": 1,
+				"steps": 8,
+				"quantization_config": {
+					"quant_method": "bitsandbytes",
+					"components_to_quantize": ["transformer"],
+					"quant_kwargs": {
+						"load_in_8bit": true,
+						"llm_int8_threshold": 6.0
+					}
+				},
+				"prompts": [{"text": "a cup"}]
+			}
+		]
+	}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	var file struct {
+		Tasks []config.HeartbeatTaskConfig `json:"tasks"`
+	}
+	if err := json.Unmarshal([]byte(body), &file); err != nil {
+		t.Fatalf("unmarshal fixture: %v", err)
+	}
+	if len(file.Tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(file.Tasks))
+	}
+	if !strings.Contains(string(file.Tasks[0].QuantizationConfig), `"llm_int8_threshold": 6.0`) &&
+		!strings.Contains(string(file.Tasks[0].QuantizationConfig), `"llm_int8_threshold":6.0`) {
+		t.Fatalf("config load lost number literal: %s", string(file.Tasks[0].QuantizationConfig))
+	}
+	taskArgs, err := buildSDHeartbeatTaskArgs(file.Tasks[0], file.Tasks[0].Prompts[0], false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(taskArgs, `"llm_int8_threshold":6.0`) {
+		t.Fatalf("expected preserved 6.0 after build, got %s", taskArgs)
 	}
 }

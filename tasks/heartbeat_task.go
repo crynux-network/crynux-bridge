@@ -54,11 +54,10 @@ func generateHeartbeatTask(heartbeatTaskConfig config.HeartbeatTaskConfig) (task
 }
 
 func heartbeatQuantizationKey(heartbeatTaskConfig config.HeartbeatTaskConfig) (string, error) {
-	var quantConfig any
-	if len(heartbeatTaskConfig.QuantizationConfig) > 0 {
-		quantConfig = heartbeatTaskConfig.QuantizationConfig
+	if !config.HeartbeatRawJSONPresent(heartbeatTaskConfig.QuantizationConfig) {
+		return models.QuantizationConfigHashHex(nil)
 	}
-	return models.QuantizationConfigHashHex(quantConfig)
+	return models.QuantizationConfigHashHex(json.RawMessage(heartbeatTaskConfig.QuantizationConfig))
 }
 
 func heartbeatSlotKey(taskType string, model string, quantizationKey string) string {
@@ -337,14 +336,14 @@ func buildSDHeartbeatTaskArgs(heartbeatTaskConfig config.HeartbeatTaskConfig, pr
 		},
 	}
 	dtype := strings.TrimSpace(heartbeatTaskConfig.Dtype)
-	if dtype == "" && len(heartbeatTaskConfig.QuantizationConfig) > 0 {
+	if dtype == "" && config.HeartbeatRawJSONPresent(heartbeatTaskConfig.QuantizationConfig) {
 		dtype = "bfloat16"
 	}
 	if dtype != "" {
 		taskArgs["dtype"] = dtype
 	}
-	if len(heartbeatTaskConfig.QuantizationConfig) > 0 {
-		taskArgs["quantization_config"] = heartbeatTaskConfig.QuantizationConfig
+	if config.HeartbeatRawJSONPresent(heartbeatTaskConfig.QuantizationConfig) {
+		taskArgs["quantization_config"] = json.RawMessage(heartbeatTaskConfig.QuantizationConfig)
 	}
 
 	taskArgsBytes, err := json.Marshal(taskArgs)
@@ -380,18 +379,27 @@ func buildLLMHeartbeatTaskArgs(
 		},
 		"seed":  mathrand.Intn(100000000),
 		"dtype": "bfloat16",
+		"template_args": map[string]interface{}{
+			"enable_thinking": false,
+		},
 	}
-	if len(heartbeatTaskConfig.QuantizationConfig) > 0 {
-		taskArgs["quantization_config"] = heartbeatTaskConfig.QuantizationConfig
+	if config.HeartbeatRawJSONPresent(heartbeatTaskConfig.QuantizationConfig) {
+		taskArgs["quantization_config"] = json.RawMessage(heartbeatTaskConfig.QuantizationConfig)
 	}
-	if len(heartbeatTaskConfig.Tools) > 0 {
-		taskArgs["tools"] = heartbeatTaskConfig.Tools
+	if config.HeartbeatRawJSONPresent(heartbeatTaskConfig.Tools) {
+		var tools []json.RawMessage
+		if err := json.Unmarshal(heartbeatTaskConfig.Tools, &tools); err != nil {
+			return "", fmt.Errorf("tools must be a JSON array: %w", err)
+		}
+		if len(tools) > 0 {
+			taskArgs["tools"] = json.RawMessage(heartbeatTaskConfig.Tools)
+		}
 	}
-	if heartbeatTaskConfig.ToolChoice != nil {
-		taskArgs["tool_choice"] = heartbeatTaskConfig.ToolChoice
+	if config.HeartbeatRawJSONPresent(heartbeatTaskConfig.ToolChoice) {
+		taskArgs["tool_choice"] = json.RawMessage(heartbeatTaskConfig.ToolChoice)
 	}
-	if len(heartbeatTaskConfig.ResponseFormat) > 0 {
-		taskArgs["response_format"] = heartbeatTaskConfig.ResponseFormat
+	if config.HeartbeatRawJSONPresent(heartbeatTaskConfig.ResponseFormat) {
+		taskArgs["response_format"] = json.RawMessage(heartbeatTaskConfig.ResponseFormat)
 	}
 
 	taskArgsBytes, err := json.Marshal(taskArgs)

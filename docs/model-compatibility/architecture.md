@@ -59,7 +59,7 @@ Bridge MUST apply these rules:
 - Runtime trial rendering MUST NOT select the representation, because a template can accept a string while silently serializing it as a JSON string instead of an argument object. The representation MUST be selected before task serialization.
 - The adaptation MUST NOT change roles, content, function names, call IDs, call order, argument keys, or argument values.
 
-Heartbeat MUST NOT add `template_args.enable_thinking=false` because tools are present. Heartbeat MUST forward configured `tool_choice` and `response_format` unchanged.
+Heartbeat MUST set `template_args.enable_thinking=false` on every LLM heartbeat TaskArgs. Heartbeat MUST forward configured `tool_choice` and `response_format` unchanged.
 
 Tool-history representation for tasks created by Crynux AS is owned by Crynux AS and is specified by `crynux-as/docs/model-compatibility/`. Bridge MUST NOT apply this adaptation to raw-API submissions.
 

@@ -80,6 +80,8 @@ When `type` is `sd`, `response_format` MUST NOT be set. Config load MUST reject 
 
 When `quantization_config` is present and non-empty, `quantization_config.quant_method` MUST be a non-empty string. Config load MUST reject entries that violate this rule.
 
+`quantization_config`, `tools`, `tool_choice`, and `response_format` MUST be copied into TaskArgs as the exact JSON text from `heartbeat_tasks.json`. Bridge MUST NOT decode those objects into generic maps and re-encode them in a way that changes number literals. When a field inside those objects must be a Python `float` on the worker (for example `quant_kwargs.llm_int8_threshold`), the heartbeat tasks file MUST write that value as a JSON number with a fractional part (for example `6.0`, not `6`).
+
 When any prompt under an LLM entry contains assistant `tool_calls`, that entry's `tools` MUST be a non-empty array. Config load MUST reject entries that violate this rule.
 
 When `tool_choice` is set on an LLM entry, it MUST be one of:
@@ -229,7 +231,7 @@ Selected SD prompt fields MUST map to Relay SD inference task args:
 - `task_config.image_width` and `task_config.image_height` `512`
 - `task_config.num_images_per_prompt` `1`
 - `dtype` from the task entry `dtype` when set; when `dtype` is omitted and `quantization_config` is non-empty, Bridge MUST set `dtype` to `bfloat16`; when both are omitted, Bridge MUST omit `dtype`
-- `quantization_config` from the task entry `quantization_config` when non-empty; otherwise Bridge MUST omit `quantization_config`
+- `quantization_config` from the task entry `quantization_config` when non-empty, preserving the JSON number literals from the tasks file; otherwise Bridge MUST omit `quantization_config`
 
 SD heartbeat entries used for Relay execution-time fitting MUST follow [heartbeat_sd_calibration.md](./heartbeat_sd_calibration.md).
 
@@ -241,10 +243,10 @@ Selected LLM prompt fields MUST map to Relay GPT inference task args:
 - `model` from task `model`
 - when the selected prompt uses `text` or `content`, `messages` as a single user message whose `content` is that string or content block list
 - when the selected prompt uses `messages`, `messages` as that configured list after tool-history adaptation
-- `tools` from the task entry `tools` when the array is non-empty; otherwise `tools` MUST be omitted
-- `tool_choice` from the task entry `tool_choice` when set; otherwise `tool_choice` MUST be omitted
-- `response_format` from the task entry `response_format` when set; otherwise `response_format` MUST be omitted
-- `quantization_config` from the task entry `quantization_config` when non-empty; otherwise Bridge MUST omit `quantization_config`
+- `tools` from the task entry `tools` when the array is non-empty, preserving the JSON number literals from the tasks file; otherwise `tools` MUST be omitted
+- `tool_choice` from the task entry `tool_choice` when set, preserving the JSON number literals from the tasks file; otherwise `tool_choice` MUST be omitted
+- `response_format` from the task entry `response_format` when set, preserving the JSON number literals from the tasks file; otherwise `response_format` MUST be omitted
+- `quantization_config` from the task entry `quantization_config` when non-empty, preserving the JSON number literals from the tasks file; otherwise Bridge MUST omit `quantization_config`
 
 When assistant tool-call history is present, Bridge MUST apply the heartbeat tool-history `function.arguments` adaptation before serializing task args. That adaptation is defined in `docs/model-compatibility/architecture.md` and MUST be implemented by `BuildTemplateToolCallMessages` in the Bridge `llmtask` package. Heartbeat MUST NOT redefine the argument-object versus argument-string rules.
 
@@ -258,5 +260,6 @@ LLM heartbeat generation config MUST use:
 - `repetition_penalty: 1.1`
 - `dtype: bfloat16`
 - a random `seed`
+- `template_args.enable_thinking: false`
 
 LLM heartbeat entries used for Relay execution-time fitting MUST follow [heartbeat_llm_calibration.md](./heartbeat_llm_calibration.md).
