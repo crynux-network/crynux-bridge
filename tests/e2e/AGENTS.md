@@ -81,7 +81,7 @@
 ## Quantized heartbeat tasks for this e2e
 
 - Heartbeat tasks MUST use the quantized models in `tests/e2e/heartbeat_tasks.e2e.json`:
-  - SD: `Qwen/Qwen-Image-2.1` with BitsAndBytes NF4 on `transformer` and `text_encoder`.
+  - SD: `Qwen/Qwen-Image-2.1` with GGUF transformer `unsloth/Qwen-Image-2.1-GGUF` (`qwen-image-2.1-Q4_K_M.gguf`) and BitsAndBytes NF4 on `text_encoder`.
   - LLM: `Qwen/Qwen3.5-27B` with BitsAndBytes NF4.
 - `task.heartbeat_tasks.batch_size` MUST be greater than `0` so Bridge creates heartbeat tasks.
 - The blockchain network for on-chain deposits and node staking in this e2e MUST be `crynux-on-base-sepolia`.

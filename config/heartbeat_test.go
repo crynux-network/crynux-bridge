@@ -709,6 +709,56 @@ func TestValidateHeartbeatTasksConfigRejectsQuantizationWithoutMethod(t *testing
 	}
 }
 
+func TestValidateHeartbeatTasksConfigAcceptsSDComponents(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "sd",
+			Ratio:           1.0,
+			Model:           "qwen/qwen-image-2.1",
+			MaxPendingTasks: 5,
+			Steps:           8,
+			Components: mustHeartbeatJSONRaw(t, map[string]interface{}{
+				"transformer": map[string]interface{}{
+					"format": "gguf",
+					"repo":   "unsloth/Qwen-Image-2.1-GGUF",
+					"format_kwargs": map[string]interface{}{
+						"filename": "qwen-image-2.1-Q4_K_M.gguf",
+					},
+				},
+			}),
+			Prompts: []HeartbeatPromptConfig{
+				{Text: "a cup"},
+			},
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateHeartbeatTasksConfigRejectsLLMComponents(t *testing.T) {
+	appConfig := &AppConfig{}
+	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{
+		{
+			Type:            "llm",
+			Ratio:           1.0,
+			Model:           "Qwen/Qwen3.5-27B",
+			MaxPendingTasks: 5,
+			MaxNewTokens:    64,
+			Components: mustHeartbeatJSONRaw(t, map[string]interface{}{
+				"transformer": map[string]interface{}{"format": "gguf", "repo": "x/y"},
+			}),
+			Prompts: []HeartbeatPromptConfig{
+				{Text: "ticket {{hb_rand}} needs triage"},
+			},
+		},
+	}
+	if err := validateHeartbeatTasksConfig(appConfig); err == nil {
+		t.Fatal("expected components unsupported for llm error")
+	}
+}
+
 func TestValidateHeartbeatTasksConfigRejectsLLMDtype(t *testing.T) {
 	appConfig := &AppConfig{}
 	appConfig.Task.HeartbeatTasks.Tasks = []HeartbeatTaskConfig{

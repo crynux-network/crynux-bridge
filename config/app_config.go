@@ -162,6 +162,7 @@ type HeartbeatTaskConfig struct {
 	Steps              uint64                  `mapstructure:"steps" json:"steps,omitempty"`
 	Dtype              string                  `mapstructure:"dtype" json:"dtype,omitempty"`
 	QuantizationConfig json.RawMessage         `mapstructure:"quantization_config" json:"quantization_config,omitempty"`
+	Components         json.RawMessage         `mapstructure:"components" json:"components,omitempty"`
 	Tools              json.RawMessage         `mapstructure:"tools" json:"tools,omitempty"`
 	ToolChoice         json.RawMessage         `mapstructure:"tool_choice" json:"tool_choice,omitempty"`
 	ResponseFormat     json.RawMessage         `mapstructure:"response_format" json:"response_format,omitempty"`

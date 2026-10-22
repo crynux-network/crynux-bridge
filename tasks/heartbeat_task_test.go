@@ -286,7 +286,7 @@ func TestBuildSDHeartbeatTaskArgsConfiguredPrompt(t *testing.T) {
 			Type:        "sd",
 			Model:       "crynux-network/sdxl-turbo",
 			Steps:       4,
-			TaskVersion: "3.7.0",
+			TaskVersion: "3.7.1",
 		},
 		config.HeartbeatPromptConfig{
 			Text:           "custom sd prompt",
@@ -312,7 +312,7 @@ func TestBuildSDHeartbeatTaskArgsConfiguredPrompt(t *testing.T) {
 	if taskConfig["steps"] != float64(4) {
 		t.Fatalf("unexpected steps %#v", taskConfig["steps"])
 	}
-	if parsed["version"] != "3.7.0" {
+	if parsed["version"] != "3.7.1" {
 		t.Fatalf("unexpected version %#v", parsed["version"])
 	}
 	baseModel := parsed["base_model"].(map[string]interface{})
@@ -357,7 +357,7 @@ func TestBuildSDHeartbeatTaskArgsQuantizationConfig(t *testing.T) {
 			Type:               "sd",
 			Model:              "Qwen/Qwen-Image-2.1",
 			Steps:              8,
-			TaskVersion:        "3.7.0",
+			TaskVersion:        "3.7.1",
 			QuantizationConfig: quantization,
 		},
 		config.HeartbeatPromptConfig{Text: "a cup on a table"},
@@ -383,6 +383,114 @@ func TestBuildSDHeartbeatTaskArgsQuantizationConfig(t *testing.T) {
 	}
 }
 
+func TestBuildSDHeartbeatTaskArgsComponents(t *testing.T) {
+	components := mustHeartbeatJSONRaw(t, map[string]interface{}{
+		"transformer": map[string]interface{}{
+			"format": "gguf",
+			"repo":   "unsloth/Qwen-Image-2.1-GGUF",
+			"format_kwargs": map[string]interface{}{
+				"filename": "qwen-image-2.1-Q4_K_M.gguf",
+			},
+		},
+	})
+	quantization := mustHeartbeatJSONRaw(t, map[string]interface{}{
+		"quant_method":           "bitsandbytes",
+		"components_to_quantize": []interface{}{"text_encoder"},
+		"quant_kwargs": map[string]interface{}{
+			"load_in_4bit":           true,
+			"bnb_4bit_quant_type":    "nf4",
+			"bnb_4bit_compute_dtype": "bfloat16",
+		},
+	})
+	taskArgs, err := buildSDHeartbeatTaskArgs(
+		config.HeartbeatTaskConfig{
+			Type:               "sd",
+			Model:              "qwen/qwen-image-2.1",
+			Steps:              8,
+			TaskVersion:        "3.7.0",
+			QuantizationConfig: quantization,
+			Components:         components,
+		},
+		config.HeartbeatPromptConfig{Text: "a cup on a table"},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(taskArgs), &parsed); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if parsed["dtype"] != "bfloat16" {
+		t.Fatalf("unexpected dtype %#v", parsed["dtype"])
+	}
+	gotComponents, ok := parsed["components"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("missing components %#v", parsed["components"])
+	}
+	transformer, ok := gotComponents["transformer"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("missing transformer %#v", gotComponents)
+	}
+	if transformer["format"] != "gguf" {
+		t.Fatalf("unexpected format %#v", transformer["format"])
+	}
+	if transformer["repo"] != "unsloth/Qwen-Image-2.1-GGUF" {
+		t.Fatalf("unexpected repo %#v", transformer["repo"])
+	}
+}
+
+func TestHeartbeatQuantizationKeyIncludesComponents(t *testing.T) {
+	quantization := mustHeartbeatJSONRaw(t, map[string]interface{}{
+		"quant_method": "bitsandbytes",
+	})
+	componentsA := mustHeartbeatJSONRaw(t, map[string]interface{}{
+		"transformer": map[string]interface{}{
+			"format": "gguf",
+			"repo":   "unsloth/Qwen-Image-2.1-GGUF",
+			"format_kwargs": map[string]interface{}{
+				"filename": "qwen-image-2.1-Q4_K_M.gguf",
+			},
+		},
+	})
+	componentsB := mustHeartbeatJSONRaw(t, map[string]interface{}{
+		"transformer": map[string]interface{}{
+			"format": "gguf",
+			"repo":   "unsloth/Qwen-Image-2.1-GGUF",
+			"format_kwargs": map[string]interface{}{
+				"filename": "qwen-image-2.1-Q5_K_M.gguf",
+			},
+		},
+	})
+	keyQuantOnly, err := heartbeatQuantizationKey(config.HeartbeatTaskConfig{
+		QuantizationConfig: quantization,
+	})
+	if err != nil {
+		t.Fatalf("quant-only key: %v", err)
+	}
+	keyA, err := heartbeatQuantizationKey(config.HeartbeatTaskConfig{
+		QuantizationConfig: quantization,
+		Components:         componentsA,
+	})
+	if err != nil {
+		t.Fatalf("components A key: %v", err)
+	}
+	keyB, err := heartbeatQuantizationKey(config.HeartbeatTaskConfig{
+		QuantizationConfig: quantization,
+		Components:         componentsB,
+	})
+	if err != nil {
+		t.Fatalf("components B key: %v", err)
+	}
+	if keyA == keyQuantOnly {
+		t.Fatalf("components must change identity from quant-only")
+	}
+	if keyA == keyB {
+		t.Fatalf("different components must use different identities")
+	}
+}
+
 func TestBuildLLMHeartbeatTaskArgsQuantizationConfig(t *testing.T) {
 	quantization := mustHeartbeatJSONRaw(t, map[string]interface{}{
 		"quant_method": "bitsandbytes",
@@ -398,7 +506,7 @@ func TestBuildLLMHeartbeatTaskArgsQuantizationConfig(t *testing.T) {
 			Type:               "llm",
 			Model:              "Qwen/Qwen3.5-27B",
 			MaxNewTokens:       64,
-			TaskVersion:        "3.7.0",
+			TaskVersion:        "3.7.1",
 			QuantizationConfig: quantization,
 		},
 		config.HeartbeatPromptConfig{Text: "ticket {{hb_rand}} needs triage"},
@@ -882,7 +990,7 @@ func TestBuildSDHeartbeatTaskArgsPreservesQuantizationNumberLiterals(t *testing.
 			Type:               "sd",
 			Model:              "Qwen/Qwen-Image-2.1",
 			Steps:              8,
-			TaskVersion:        "3.7.0",
+			TaskVersion:        "3.7.1",
 			QuantizationConfig: quantization,
 		},
 		config.HeartbeatPromptConfig{Text: "a cup on a table"},
@@ -911,7 +1019,7 @@ func TestBuildLLMHeartbeatTaskArgsPreservesFreeFormNumberLiterals(t *testing.T) 
 			Type:         "llm",
 			Model:        "Qwen/Qwen3-8B",
 			MaxNewTokens: 64,
-			TaskVersion:  "3.7.0",
+			TaskVersion:  "3.7.1",
 			QuantizationConfig: json.RawMessage(`{
 				"quant_method": "bitsandbytes",
 				"quant_kwargs": {"load_in_8bit": true, "llm_int8_threshold": 6.0}
@@ -957,7 +1065,7 @@ func TestLoadHeartbeatTasksFilePreservesQuantizationNumberLiterals(t *testing.T)
 	body := `{
 		"tasks": [
 			{
-				"task_version": "3.7.0",
+				"task_version": "3.7.1",
 				"type": "sd",
 				"ratio": 1.0,
 				"model": "Qwen/Qwen-Image-2.1",

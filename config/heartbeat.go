@@ -57,6 +57,9 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 			if err := validateHeartbeatQuantizationConfig(task.QuantizationConfig); err != nil {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: %w", i, err)
 			}
+			if heartbeatRawJSONPresent(task.Components) {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: components is not supported for llm tasks", i)
+			}
 			if err := validateHeartbeatToolChoice(task.ToolChoice, task.Tools); err != nil {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: %w", i, err)
 			}
@@ -84,6 +87,9 @@ func validateHeartbeatTasksConfig(appConfig *AppConfig) error {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: response_format is not supported for sd tasks", i)
 			}
 			if err := validateHeartbeatQuantizationConfig(task.QuantizationConfig); err != nil {
+				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: %w", i, err)
+			}
+			if err := validateHeartbeatComponents(task.Components); err != nil {
 				return fmt.Errorf("task.heartbeat_tasks.tasks[%d]: %w", i, err)
 			}
 		default:
@@ -453,6 +459,20 @@ func validateHeartbeatQuantizationConfig(quantizationConfig json.RawMessage) err
 	quantMethod, ok := decoded["quant_method"].(string)
 	if !ok || strings.TrimSpace(quantMethod) == "" {
 		return fmt.Errorf("quantization_config.quant_method must be a non-empty string")
+	}
+	return nil
+}
+
+func validateHeartbeatComponents(components json.RawMessage) error {
+	if !heartbeatRawJSONPresent(components) {
+		return nil
+	}
+	var decoded map[string]interface{}
+	if err := json.Unmarshal(components, &decoded); err != nil {
+		return fmt.Errorf("components must be an object")
+	}
+	if len(decoded) == 0 {
+		return nil
 	}
 	return nil
 }

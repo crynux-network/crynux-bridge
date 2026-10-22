@@ -77,6 +77,7 @@ Each heartbeat task entry under `task.heartbeat_tasks.tasks` MUST define:
 - `steps` when `type` is `sd`
 - optional `dtype` when `type` is `sd`
 - optional `quantization_config` when `type` is `sd` or `llm`
+- optional `components` when `type` is `sd`
 - optional `tools` when `type` is `llm`
 - optional `tool_choice` when `type` is `llm`
 - optional `response_format` when `type` is `llm`
@@ -100,9 +101,13 @@ When `type` is `sd`, `tool_choice` MUST NOT be set. Config load MUST reject SD e
 
 When `type` is `sd`, `response_format` MUST NOT be set. Config load MUST reject SD entries that set `response_format`.
 
+When `type` is `llm`, `components` MUST NOT be set. Config load MUST reject LLM entries that set `components`.
+
 When `quantization_config` is present and non-empty, `quantization_config.quant_method` MUST be a non-empty string. Config load MUST reject entries that violate this rule.
 
-`quantization_config`, `tools`, `tool_choice`, and `response_format` MUST be copied into TaskArgs as the exact JSON text from `heartbeat_tasks.json`. Bridge MUST NOT decode those objects into generic maps and re-encode them in a way that changes number literals. When a field inside those objects must be a Python `float` on the worker (for example `quant_kwargs.llm_int8_threshold`), the heartbeat tasks file MUST write that value as a JSON number with a fractional part (for example `6.0`, not `6`).
+When `components` is present and non-empty, it MUST be a JSON object. Config load MUST reject entries that violate this rule.
+
+`quantization_config`, `components`, `tools`, `tool_choice`, and `response_format` MUST be copied into TaskArgs as the exact JSON text from `heartbeat_tasks.json`. Bridge MUST NOT decode those objects into generic maps and re-encode them in a way that changes number literals. When a field inside those objects must be a Python `float` on the worker (for example `quant_kwargs.llm_int8_threshold`), the heartbeat tasks file MUST write that value as a JSON number with a fractional part (for example `6.0`, not `6`).
 
 When any prompt under an LLM entry contains assistant `tool_calls`, that entry's `tools` MUST be a non-empty array. Config load MUST reject entries that violate this rule.
 
@@ -134,7 +139,7 @@ Terminal statuses MUST be: `EndAborted`, `EndGroupRefund`, `EndInvalidated`, `En
 
 `max_pending_tasks` MUST limit how many unfinished heartbeat tasks of that entry remain in Bridge and Relay. A committed `ClientTask` MUST count before repeat expansion. Expansion MUST atomically replace that logical submission count with its created `InferenceTask` count so the same heartbeat task is not counted twice.
 
-In-flight counts MUST be keyed by `task_type`, the entry `model`, and the entry's quantization identity. The quantization identity MUST be the lowercase hexadecimal SHA-256 of the canonical JSON of the complete `quantization_config`. When `quantization_config` is absent or empty, Bridge MUST hash the canonical JSON `null`. An unexpanded `ClientTask` MUST persist indexed submission task type, model-id, and quantization-identity fields. The stored submission model id and expanded `task_model_ids` value MUST match the base model id produced by `GetTaskConfigModelIDs` for that entry. Entries that share the same `type`, `model`, and quantization identity MUST share one in-flight count pool. Entries that differ only in quantization identity MUST use separate in-flight count pools.
+In-flight counts MUST be keyed by `task_type`, the entry `model`, and the entry's quantization identity. When `components` is absent or empty, the quantization identity MUST be the lowercase hexadecimal SHA-256 of the canonical JSON of the complete `quantization_config`, and when `quantization_config` is also absent or empty Bridge MUST hash the canonical JSON `null`. When `components` is present and non-empty, the quantization identity MUST be the lowercase hexadecimal SHA-256 of the canonical JSON of the object `{"quantization_config": <decoded or null>, "components": <decoded>}`. An unexpanded `ClientTask` MUST persist indexed submission task type, model-id, and quantization-identity fields. The stored submission model id and expanded `task_model_ids` value MUST match the base model id produced by `GetTaskConfigModelIDs` for that entry. Entries that share the same `type`, `model`, and quantization identity MUST share one in-flight count pool. Entries that differ only in quantization identity MUST use separate in-flight count pools.
 
 An entry MUST be excluded from sampling when its in-flight count is greater than its `max_pending_tasks`. An entry whose in-flight count equals `max_pending_tasks` MUST remain eligible.
 
@@ -252,8 +257,9 @@ Selected SD prompt fields MUST map to Relay SD inference task args:
 - `task_config.steps` from the selected task entry `steps`
 - `task_config.image_width` and `task_config.image_height` `512`
 - `task_config.num_images_per_prompt` `1`
-- `dtype` from the task entry `dtype` when set; when `dtype` is omitted and `quantization_config` is non-empty, Bridge MUST set `dtype` to `bfloat16`; when both are omitted, Bridge MUST omit `dtype`
+- `dtype` from the task entry `dtype` when set; when `dtype` is omitted and either `quantization_config` or `components` is non-empty, Bridge MUST set `dtype` to `bfloat16`; when `dtype`, `quantization_config`, and `components` are all omitted, Bridge MUST omit `dtype`
 - `quantization_config` from the task entry `quantization_config` when non-empty, preserving the JSON number literals from the tasks file; otherwise Bridge MUST omit `quantization_config`
+- `components` from the task entry `components` when non-empty, preserving the JSON number literals from the tasks file; otherwise Bridge MUST omit `components`
 
 SD heartbeat entries used for Relay execution-time fitting MUST follow [heartbeat_sd_calibration.md](./heartbeat_sd_calibration.md).
 

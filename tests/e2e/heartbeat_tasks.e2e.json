@@ -1,23 +1,32 @@
 {
   "tasks": [
     {
-      "task_version": "3.7.0",
+      "task_version": "3.7.1",
       "type": "sd",
       "ratio": 1.0,
       "model": "Qwen/Qwen-Image-2.1",
-      "min_vram": 24,
+      "min_vram": 16,
       "fee_cnx": "2.0",
       "max_pending_tasks": 2,
       "steps": 8,
       "dtype": "bfloat16",
       "quantization_config": {
         "quant_method": "bitsandbytes",
-        "components_to_quantize": ["transformer", "text_encoder"],
+        "components_to_quantize": ["text_encoder"],
         "quant_kwargs": {
           "load_in_4bit": true,
           "bnb_4bit_quant_type": "nf4",
           "bnb_4bit_compute_dtype": "bfloat16",
           "bnb_4bit_use_double_quant": false
+        }
+      },
+      "components": {
+        "transformer": {
+          "format": "gguf",
+          "repo": "unsloth/Qwen-Image-2.1-GGUF",
+          "format_kwargs": {
+            "filename": "qwen-image-2.1-Q4_K_M.gguf"
+          }
         }
       },
       "prompts": [
@@ -27,7 +36,7 @@
       ]
     },
     {
-      "task_version": "3.7.0",
+      "task_version": "3.7.1",
       "type": "llm",
       "ratio": 1.0,
       "model": "Qwen/Qwen3.5-27B",

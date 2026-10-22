@@ -22,7 +22,7 @@ SD heartbeat MUST NOT set `max_new_tokens` or `tools`.
 
 ## Independent Workload Axis
 
-Each SD model that heartbeat emits MUST have its own grid. Entries in that grid MUST share `type` `sd`, `model`, `min_vram`, and `task_version`. `min_vram` MUST be the VRAM required to run that model. `task_version` MUST be `3.7.0`. Entries MUST differ only by `steps`.
+Each SD model that heartbeat emits MUST have its own grid. Entries in that grid MUST share `type` `sd`, `model`, `min_vram`, and `task_version`. `min_vram` MUST be the VRAM required to run that model. `task_version` MUST be `3.7.1`. Entries MUST differ only by `steps`.
 
 Each model MUST use exactly two `steps` values:
 

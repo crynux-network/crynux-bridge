@@ -54,10 +54,33 @@ func generateHeartbeatTask(heartbeatTaskConfig config.HeartbeatTaskConfig) (task
 }
 
 func heartbeatQuantizationKey(heartbeatTaskConfig config.HeartbeatTaskConfig) (string, error) {
-	if !config.HeartbeatRawJSONPresent(heartbeatTaskConfig.QuantizationConfig) {
+	hasQuant := config.HeartbeatRawJSONPresent(heartbeatTaskConfig.QuantizationConfig)
+	hasComponents := config.HeartbeatRawJSONPresent(heartbeatTaskConfig.Components)
+	if !hasQuant && !hasComponents {
 		return models.QuantizationConfigHashHex(nil)
 	}
-	return models.QuantizationConfigHashHex(json.RawMessage(heartbeatTaskConfig.QuantizationConfig))
+	if hasQuant && !hasComponents {
+		return models.QuantizationConfigHashHex(json.RawMessage(heartbeatTaskConfig.QuantizationConfig))
+	}
+	identity := map[string]any{
+		"quantization_config": nil,
+		"components":          nil,
+	}
+	if hasQuant {
+		var quant any
+		if err := json.Unmarshal(heartbeatTaskConfig.QuantizationConfig, &quant); err != nil {
+			return "", err
+		}
+		identity["quantization_config"] = quant
+	}
+	if hasComponents {
+		var components any
+		if err := json.Unmarshal(heartbeatTaskConfig.Components, &components); err != nil {
+			return "", err
+		}
+		identity["components"] = components
+	}
+	return models.QuantizationConfigHashHex(identity)
 }
 
 func heartbeatSlotKey(taskType string, model string, quantizationKey string) string {
@@ -336,7 +359,8 @@ func buildSDHeartbeatTaskArgs(heartbeatTaskConfig config.HeartbeatTaskConfig, pr
 		},
 	}
 	dtype := strings.TrimSpace(heartbeatTaskConfig.Dtype)
-	if dtype == "" && config.HeartbeatRawJSONPresent(heartbeatTaskConfig.QuantizationConfig) {
+	if dtype == "" && (config.HeartbeatRawJSONPresent(heartbeatTaskConfig.QuantizationConfig) ||
+		config.HeartbeatRawJSONPresent(heartbeatTaskConfig.Components)) {
 		dtype = "bfloat16"
 	}
 	if dtype != "" {
@@ -344,6 +368,9 @@ func buildSDHeartbeatTaskArgs(heartbeatTaskConfig config.HeartbeatTaskConfig, pr
 	}
 	if config.HeartbeatRawJSONPresent(heartbeatTaskConfig.QuantizationConfig) {
 		taskArgs["quantization_config"] = json.RawMessage(heartbeatTaskConfig.QuantizationConfig)
+	}
+	if config.HeartbeatRawJSONPresent(heartbeatTaskConfig.Components) {
+		taskArgs["components"] = json.RawMessage(heartbeatTaskConfig.Components)
 	}
 
 	taskArgsBytes, err := json.Marshal(taskArgs)
