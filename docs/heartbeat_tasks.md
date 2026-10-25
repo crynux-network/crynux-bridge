@@ -107,7 +107,7 @@ When `quantization_config` is present and non-empty, `quantization_config.quant_
 
 When `components` is present and non-empty, it MUST be a JSON object. Config load MUST reject entries that violate this rule.
 
-`quantization_config`, `components`, `tools`, `tool_choice`, and `response_format` MUST be copied into TaskArgs as the exact JSON text from `heartbeat_tasks.json`. Bridge MUST NOT decode those objects into generic maps and re-encode them in a way that changes number literals. When a field inside those objects must be a Python `float` on the worker (for example `quant_kwargs.llm_int8_threshold`), the heartbeat tasks file MUST write that value as a JSON number with a fractional part (for example `6.0`, not `6`).
+`quantization_config`, `components`, `tools`, `tool_choice`, and `response_format` MUST be copied into TaskArgs as the exact JSON text from `heartbeat_tasks.json`. Bridge MUST NOT decode those objects into generic maps and re-encode them in a way that changes number literals. When a field inside those objects must be a Python `float` on the worker (for example `quant_kwargs.llm_int8_threshold`), the heartbeat tasks file MUST write that value as a JSON number with a fractional part (for example `6.0`, not `6`). Repository name casing in `model` and `components.*.repo` is not a correctness requirement of the heartbeat config: `TaskEngine.CreateTask` MUST normalize Hugging Face model name fields before persisting the submission.
 
 When any prompt under an LLM entry contains assistant `tool_calls`, that entry's `tools` MUST be a non-empty array. Config load MUST reject entries that violate this rule.
 

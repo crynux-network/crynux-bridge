@@ -65,3 +65,41 @@ func TestPinTaskArgsRevisionsRejectsUnmatchedFile(t *testing.T) {
 		t.Fatal("expected unmatched file to fail")
 	}
 }
+
+func TestPinTaskArgsRevisionsMatchesNormalizedRepositoryCase(t *testing.T) {
+	files := ModelFileEntries{
+		{
+			SourceType:   "huggingface",
+			Repository:   "unsloth/qwen-image-2.1-gguf",
+			Revision:     "sha-gguf",
+			Format:       "gguf",
+			FormatKwargs: map[string]any{"filename": "qwen-image-2.1-Q4_K_M.gguf"},
+		},
+		{
+			SourceType: "huggingface",
+			Repository: "qwen/qwen-image-2.1",
+			Revision:   "sha-base",
+			Format:     "diffusers",
+		},
+	}
+	pinned, err := PinTaskArgsRevisions(
+		`{"version":"3.7.0","base_model":{"name":"qwen/qwen-image-2.1"},"components":{"transformer":{"format":"gguf","repo":"unsloth/Qwen-Image-2.1-GGUF","format_kwargs":{"filename":"qwen-image-2.1-Q4_K_M.gguf"}}},"prompt":"p","task_config":{}}`,
+		TaskTypeSD,
+		files,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var args map[string]any
+	if err := json.Unmarshal([]byte(pinned), &args); err != nil {
+		t.Fatal(err)
+	}
+	base := args["base_model"].(map[string]any)
+	if base["revision"] != "sha-base" {
+		t.Fatalf("base revision = %#v", base["revision"])
+	}
+	transformer := args["components"].(map[string]any)["transformer"].(map[string]any)
+	if transformer["revision"] != "sha-gguf" {
+		t.Fatalf("transformer revision = %#v", transformer["revision"])
+	}
+}

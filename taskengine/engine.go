@@ -89,6 +89,16 @@ func (e *Engine) CreateTask(
 	if repeatNum <= 0 {
 		return nil, errors.New("repeat_num must be greater than zero")
 	}
+	normalizedArgs, err := models.NormalizeTaskArgsModelNames(submission.TaskArgs, submission.TaskType)
+	if err != nil {
+		return nil, fmt.Errorf("normalize task args model names: %w", err)
+	}
+	submission.TaskArgs = normalizedArgs
+	modelIDs, err := models.GetTaskConfigModelIDs(submission.TaskArgs, submission.TaskType)
+	if err != nil {
+		return nil, fmt.Errorf("get task model ids: %w", err)
+	}
+	submission.TaskModelIDs = modelIDs
 	encoded, err := json.Marshal(submission)
 	if err != nil {
 		return nil, fmt.Errorf("encode task submission: %w", err)

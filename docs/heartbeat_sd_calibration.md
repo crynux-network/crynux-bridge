@@ -16,7 +16,7 @@ actual_execution_seconds =
 
 `SDUnits` is `num_images * image_width * image_height * steps`. Heartbeat MUST control `steps` on each SD entry. Heartbeat MUST set `task_config.num_images_per_prompt` to `1`. Heartbeat MUST set `task_config.image_width` and `task_config.image_height` to `512` so the pixel area is `512 * 512`.
 
-Scheduler, `cfg`, seed, safety checker, and model variant MUST remain the model-specific heartbeat defaults specified in [heartbeat_tasks.md](./heartbeat_tasks.md). Those fields MUST NOT be calibration-key fields and MUST NOT differ across entries of the same model.
+Scheduler, `cfg`, seed, and safety checker MUST remain the model-specific heartbeat defaults specified in [heartbeat_tasks.md](./heartbeat_tasks.md). Those fields MUST NOT be calibration-key fields and MUST NOT differ across entries of the same model.
 
 SD heartbeat MUST NOT set `max_new_tokens` or `tools`.
 
@@ -33,7 +33,7 @@ Each model MUST use exactly two `steps` values:
 
 `S_high` MUST be `4` for `crynux-network/sdxl-turbo`. `S_high` MUST be `25` for `crynux-network/stable-diffusion-v1-5`.
 
-Those two `steps` values MUST produce two different `SDUnits` values for the same model, GPU name, GPU VRAM, variant, and dtype, so they update one Relay calibration record.
+Those two `steps` values MUST produce two different `SDUnits` values for the same model, GPU name, GPU VRAM, and dtype, so they update one Relay calibration record.
 
 ## Per-model Grid
 

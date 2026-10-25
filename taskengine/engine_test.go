@@ -3,6 +3,7 @@ package taskengine
 import (
 	"context"
 	"crynux_bridge/models"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -97,6 +98,38 @@ func TestCreateTaskPersistsOnlyLogicalSubmission(t *testing.T) {
 	}
 	if apiKey.UsedCount != 1 {
 		t.Fatalf("used count = %d, want 1", apiKey.UsedCount)
+	}
+}
+
+func TestCreateTaskNormalizesModelNamesInSubmission(t *testing.T) {
+	engine, db := newTestEngine(t)
+	submission := testSubmission()
+	submission.TaskArgs = `{"model":"Qwen/Qwen3.5-9B","messages":[]}`
+	submission.TaskModelIDs = []string{"base:Qwen/Qwen3.5-9B"}
+	clientTask, err := engine.CreateTask(context.Background(), "client", nil, submission)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored models.ClientTask
+	if err := db.First(&stored, clientTask.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	var persisted Submission
+	if err := json.Unmarshal([]byte(stored.Submission), &persisted); err != nil {
+		t.Fatal(err)
+	}
+	var args map[string]any
+	if err := json.Unmarshal([]byte(persisted.TaskArgs), &args); err != nil {
+		t.Fatal(err)
+	}
+	if args["model"] != "qwen/qwen3.5-9b" {
+		t.Fatalf("task args model = %#v", args["model"])
+	}
+	if len(persisted.TaskModelIDs) != 1 || persisted.TaskModelIDs[0] != "base:qwen/qwen3.5-9b" {
+		t.Fatalf("task model ids = %#v", persisted.TaskModelIDs)
+	}
+	if stored.SubmissionModelID != "base:qwen/qwen3.5-9b" {
+		t.Fatalf("submission model id = %#v", stored.SubmissionModelID)
 	}
 }
 

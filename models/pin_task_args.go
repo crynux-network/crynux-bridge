@@ -113,5 +113,5 @@ func PinTaskArgsRevisions(taskArgs string, taskType ChainTaskType, files ModelFi
 }
 
 func sameRepositoryFormat(fileRepo, fileFormat, repo, format string) bool {
-	return fileRepo == repo && fileFormat == format
+	return NormalizeModelName(fileRepo) == NormalizeModelName(repo) && fileFormat == format
 }
