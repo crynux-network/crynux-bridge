@@ -30,6 +30,32 @@ func TestResolveTaskTimeoutNormalTasks(t *testing.T) {
 	}
 }
 
+func TestResolveQueueTimeout(t *testing.T) {
+	for _, taskType := range []models.ChainTaskType{models.TaskTypeSD, models.TaskTypeLLM} {
+		got, err := resolveQueueTimeout(taskType, nil)
+		if err != nil || got != 0 {
+			t.Fatalf("task type %d omit = (%d, %v), want (0, nil)", taskType, got, err)
+		}
+		value := uint64(120)
+		got, err = resolveQueueTimeout(taskType, &value)
+		if err != nil || got != 120 {
+			t.Fatalf("task type %d value = (%d, %v), want (120, nil)", taskType, got, err)
+		}
+		zero := uint64(0)
+		if _, err := resolveQueueTimeout(taskType, &zero); err == nil {
+			t.Fatalf("task type %d accepted zero queue_timeout", taskType)
+		}
+	}
+	value := uint64(120)
+	if _, err := resolveQueueTimeout(models.TaskTypeSDFTLora, &value); err == nil {
+		t.Fatal("SDFT accepted queue_timeout")
+	}
+	got, err := resolveQueueTimeout(models.TaskTypeSDFTLora, nil)
+	if err != nil || got != 0 {
+		t.Fatalf("SDFT omit = (%d, %v), want (0, nil)", got, err)
+	}
+}
+
 func TestResolveTaskTimeoutSDFT(t *testing.T) {
 	appConfig := &config.AppConfig{}
 	appConfig.Task.SDFinetuneTimeout = 120

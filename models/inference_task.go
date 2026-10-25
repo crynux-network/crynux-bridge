@@ -152,6 +152,7 @@ type InferenceTask struct {
 	QuantizationKey    string           `json:"-" gorm:"type:varchar(64);not null;default:'';index:idx_inference_task_pending_quant,priority:3"`
 	TaskSize           uint64           `json:"task_size"`
 	Timeout            uint64           `json:"timeout"`
+	QueueTimeout       uint64           `json:"queue_timeout"`
 
 	Status           TaskStatus `json:"status" gorm:"index:idx_inference_task_client_status,priority:2"`
 	TaskID           string     `json:"task_id" gorm:"index:idx_inference_task_group,priority:1"`

@@ -144,6 +144,7 @@ func (e *Engine) expandClientTask(ctx context.Context, clientTask models.ClientT
 				QuantizationKey:  submission.QuantizationKey,
 				TaskSize:         submission.TaskSize,
 				Timeout:          submission.Timeout,
+				QueueTimeout:     submission.QueueTimeout,
 				TaskID:           taskID,
 				Nonce:            nonce,
 				TaskIDCommitment: commitment,

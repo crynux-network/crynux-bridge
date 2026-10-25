@@ -37,6 +37,7 @@ type CreateTaskInput struct {
 	TaskArgs         string  `json:"task_args"`
 	TaskType         int     `json:"task_type"`
 	Timeout          *uint64 `json:"timeout,omitempty"`
+	QueueTimeout     *uint64 `json:"queue_timeout,omitempty"`
 	TaskFee          string  `json:"task_fee"`
 }
 
@@ -69,6 +70,11 @@ func buildCreateTaskInput(task *models.InferenceTask, taskFee string) *CreateTas
 		value := task.Timeout
 		timeout = &value
 	}
+	var queueTimeout *uint64
+	if task.TaskType != models.TaskTypeSDFTLora && task.QueueTimeout > 0 {
+		value := task.QueueTimeout
+		queueTimeout = &value
+	}
 	return &CreateTaskInput{
 		TaskIDCommitment: task.TaskIDCommitment,
 		MinVram:          task.MinVram,
@@ -79,6 +85,7 @@ func buildCreateTaskInput(task *models.InferenceTask, taskFee string) *CreateTas
 		TaskType:         int(task.TaskType),
 		TaskFee:          taskFee,
 		Timeout:          timeout,
+		QueueTimeout:     queueTimeout,
 	}
 }
 
@@ -195,6 +202,7 @@ func CreateTask(ctx context.Context, task *models.InferenceTask) error {
 	taskFee := task.TaskFee
 	params := buildCreateTaskInput(task, taskFee)
 	timeout := params.Timeout
+	queueTimeout := params.QueueTimeout
 
 	timestamp, signature, err := SignData(params, appConfig.Blockchain.Account.PrivateKey)
 	if err != nil {
@@ -230,6 +238,9 @@ func CreateTask(ctx context.Context, task *models.InferenceTask) error {
 		if timeout != nil {
 			form.Add("timeout", strconv.FormatUint(*timeout, 10))
 		}
+		if queueTimeout != nil {
+			form.Add("queue_timeout", strconv.FormatUint(*queueTimeout, 10))
+		}
 		body = strings.NewReader(form.Encode())
 		contentType = "application/x-www-form-urlencoded"
 	} else {
@@ -251,6 +262,9 @@ func CreateTask(ctx context.Context, task *models.InferenceTask) error {
 			multipartWriter.WriteField("signature", signature)
 			if timeout != nil {
 				multipartWriter.WriteField("timeout", strconv.FormatUint(*timeout, 10))
+			}
+			if queueTimeout != nil {
+				multipartWriter.WriteField("queue_timeout", strconv.FormatUint(*queueTimeout, 10))
 			}
 
 			file, err := os.Open(checkpointFilePath)

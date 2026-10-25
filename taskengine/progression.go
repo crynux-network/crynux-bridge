@@ -418,6 +418,7 @@ func newVSSMembers(task *models.InferenceTask, status relay.BatchStatusItem, vrf
 			RequiredGPUVram:  requiredGPUVram,
 			TaskSize:         task.TaskSize,
 			Timeout:          task.Timeout,
+			QueueTimeout:     task.QueueTimeout,
 			TaskID:           task.TaskID,
 			SamplingSeed:     status.SamplingSeed,
 			VRFNumber:        vrfNumber,

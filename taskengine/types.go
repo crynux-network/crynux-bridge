@@ -18,6 +18,7 @@ type Submission struct {
 	RequiredGPUVram  uint64               `json:"required_gpu_vram"`
 	TaskSize         uint64               `json:"task_size"`
 	Timeout          uint64               `json:"timeout"`
+	QueueTimeout     uint64               `json:"queue_timeout,omitempty"`
 	QuantizationKey  string               `json:"quantization_key,omitempty"`
 	RepeatNum        *int                 `json:"repeat_num,omitempty"`
 }

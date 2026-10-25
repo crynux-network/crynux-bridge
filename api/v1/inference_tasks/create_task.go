@@ -29,6 +29,7 @@ type TaskInput struct {
 	RequiredGPUVram uint64                `json:"required_gpu_vram,omitempty" description:"Task required GPU Vram" validate:"omitempty"`
 	TaskFee         *string               `json:"task_fee" description:"Final task fee in Wei as a decimal string" validate:"required"`
 	Timeout         *uint64               `json:"timeout,omitempty" description:"Task timeout" validate:"omitempty"`
+	QueueTimeout    *uint64               `json:"queue_timeout,omitempty" description:"Queue wait timeout in seconds" validate:"omitempty"`
 }
 
 type CreateTaskInput struct {
@@ -136,6 +137,22 @@ func resolveTaskTimeout(taskType models.ChainTaskType, requested *uint64, appCon
 	return 0, nil
 }
 
+func resolveQueueTimeout(taskType models.ChainTaskType, requested *uint64) (uint64, error) {
+	if taskType == models.TaskTypeSDFTLora {
+		if requested != nil {
+			return 0, response.NewValidationErrorResponse("queue_timeout", "queue_timeout is only supported for ordinary SD and LLM tasks")
+		}
+		return 0, nil
+	}
+	if requested == nil {
+		return 0, nil
+	}
+	if *requested == 0 {
+		return 0, response.NewValidationErrorResponse("queue_timeout", "queue_timeout must be greater than 0")
+	}
+	return *requested, nil
+}
+
 func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientTask, appConfig *config.AppConfig) ([]*models.InferenceTask, error) {
 	taskType := *in.TaskType
 
@@ -181,6 +198,10 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 	if err != nil {
 		return nil, err
 	}
+	queueTimeout, err := resolveQueueTimeout(taskType, in.QueueTimeout)
+	if err != nil {
+		return nil, err
+	}
 
 	taskIDBytes := make([]byte, 32)
 	rand.Read(taskIDBytes)
@@ -203,6 +224,7 @@ func buildTasks(in *TaskInput, client *models.Client, clientTask *models.ClientT
 		TaskIDCommitment: taskIDCommitment,
 		Nonce:            nonce,
 		Timeout:          timeout,
+		QueueTimeout:     queueTimeout,
 	}
 
 	return []*models.InferenceTask{task}, nil
@@ -240,6 +262,10 @@ func buildSubmission(in *TaskInput, appConfig *config.AppConfig) (taskengine.Sub
 	if err != nil {
 		return taskengine.Submission{}, err
 	}
+	queueTimeout, err := resolveQueueTimeout(taskType, in.QueueTimeout)
+	if err != nil {
+		return taskengine.Submission{}, err
+	}
 	return taskengine.Submission{
 		TaskArgs:        in.TaskArgs,
 		TaskType:        taskType,
@@ -251,6 +277,7 @@ func buildSubmission(in *TaskInput, appConfig *config.AppConfig) (taskengine.Sub
 		RequiredGPUVram: in.RequiredGPUVram,
 		TaskSize:        taskSize,
 		Timeout:         timeout,
+		QueueTimeout:    queueTimeout,
 	}, nil
 }
 

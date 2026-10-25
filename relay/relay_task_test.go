@@ -44,6 +44,45 @@ func TestBuildCreateTaskInputTimeoutByTaskType(t *testing.T) {
 	}
 }
 
+func TestBuildCreateTaskInputQueueTimeout(t *testing.T) {
+	input := buildCreateTaskInput(&models.InferenceTask{
+		TaskType:     models.TaskTypeLLM,
+		QueueTimeout: 43200,
+	}, "1")
+	if input.QueueTimeout == nil || *input.QueueTimeout != 43200 {
+		t.Fatalf("LLM queue_timeout = %v, want 43200", input.QueueTimeout)
+	}
+	payload, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(payload), `"queue_timeout":43200`) {
+		t.Fatalf("LLM JSON missing queue_timeout: %s", payload)
+	}
+
+	input = buildCreateTaskInput(&models.InferenceTask{
+		TaskType: models.TaskTypeSD,
+	}, "1")
+	if input.QueueTimeout != nil {
+		t.Fatalf("omitted queue_timeout = %v, want nil", input.QueueTimeout)
+	}
+	payload, err = json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), `"queue_timeout"`) {
+		t.Fatalf("omitted queue_timeout present in JSON: %s", payload)
+	}
+
+	input = buildCreateTaskInput(&models.InferenceTask{
+		TaskType:     models.TaskTypeSDFTLora,
+		QueueTimeout: 100,
+	}, "1")
+	if input.QueueTimeout != nil {
+		t.Fatalf("SDFT queue_timeout = %v, want nil", input.QueueTimeout)
+	}
+}
+
 func TestBuildCreateTaskInputPreservesWeiTaskFee(t *testing.T) {
 	const taskFeeWei = "123456789012345"
 	input := buildCreateTaskInput(&models.InferenceTask{}, taskFeeWei)

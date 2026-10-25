@@ -16,6 +16,8 @@ The heartbeat path MUST read configured CNX fees as ordinary decimal strings wit
 
 Normal SD and LLM tasks MUST NOT carry a creator-supplied execution timeout. The direct inference-task API MUST reject `timeout` for these task types. Relay MUST calculate the execution timeout for a normal task after node assignment.
 
+Normal SD and LLM tasks MAY include optional `queue_timeout` as an unsigned integer number of seconds. When present, the value MUST be greater than zero. Bridge MUST store it on the `ClientTask` submission and each expanded `InferenceTask`, and MUST forward it to Relay create. When omitted, Bridge MUST omit the field so Relay applies its configured default queue wait. SDFT create MUST reject `queue_timeout`.
+
 SDFT processing is outside the TaskEngine lifecycle specified by this document. Its existing flow and required component boundary are specified in [sdft_tasks.md](./sdft_tasks.md).
 
 ## Background Processing
