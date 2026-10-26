@@ -252,7 +252,7 @@ Before retrying an interrupted external write, TaskEngine MUST reconcile every a
 
 If Relay confirms the external operation already took effect, TaskEngine MUST continue from Relay's current state. If Relay confirms it did not take effect and the current state still requires that operation, TaskEngine MUST submit the operation again.
 
-An LLM result download MUST write `0.json` to a temporary file and rename it only after the complete response succeeds. An SD result download MUST write the streamed ZIP archive and extracted images under a temporary task directory, verify every expected numeric image index and reject every unexpected archive path, then rename the temporary directory to the final result path. Startup MUST ignore or delete incomplete temporary files and directories.
+An LLM result download MUST write `0.json` to a temporary file and rename it only after the complete response succeeds. An SD result download with `TaskSize = 1` MUST write the streamed `0.png` under a temporary task directory and rename that directory to the final result path after the file is present and non-empty. An SD result download with `TaskSize > 1` MUST write the streamed ZIP archive and extracted images under a temporary task directory, verify every expected numeric image index and reject every unexpected archive path, then rename the temporary directory to the final result path. Startup MUST ignore or delete incomplete temporary files and directories.
 
 ## Relay Status Synchronization
 

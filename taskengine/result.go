@@ -72,15 +72,32 @@ func (e *Engine) downloadResult(ctx context.Context, task *models.InferenceTask)
 			return fmt.Errorf("LLM result is not valid JSON")
 		}
 	} else if task.TaskType == models.TaskTypeSD {
-		archiveFile := filepath.Join(tempDirectory, "result.zip")
-		if err := relay.DownloadWholeTaskResult(ctx, task.TaskIDCommitment, archiveFile); err != nil {
-			return err
+		if task.TaskSize == 0 {
+			return fmt.Errorf("SD task size is 0")
 		}
-		if err := extractSDResultArchive(archiveFile, tempDirectory, task.TaskSize); err != nil {
-			return err
-		}
-		if err := os.Remove(archiveFile); err != nil {
-			return err
+		if task.TaskSize == 1 {
+			tempFile := filepath.Join(tempDirectory, "0.png")
+			if err := relay.DownloadWholeTaskResult(ctx, task.TaskIDCommitment, tempFile); err != nil {
+				return err
+			}
+			info, err := os.Stat(tempFile)
+			if err != nil {
+				return err
+			}
+			if !info.Mode().IsRegular() || info.Size() == 0 {
+				return fmt.Errorf("SD result 0.png is empty or not a regular file")
+			}
+		} else {
+			archiveFile := filepath.Join(tempDirectory, "result.zip")
+			if err := relay.DownloadWholeTaskResult(ctx, task.TaskIDCommitment, archiveFile); err != nil {
+				return err
+			}
+			if err := extractSDResultArchive(archiveFile, tempDirectory, task.TaskSize); err != nil {
+				return err
+			}
+			if err := os.Remove(archiveFile); err != nil {
+				return err
+			}
 		}
 	} else {
 		return fmt.Errorf("unsupported result task type %d", task.TaskType)
