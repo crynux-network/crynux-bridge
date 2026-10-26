@@ -239,18 +239,16 @@ func (e *Engine) applyRelayStatus(ctx context.Context, tx *gorm.DB, task *models
 	}
 
 	localStatus := relayStatusToLocal(status.Status)
-	nextAction := now.Add(e.config.StatusPollInterval)
-	if (localStatus == models.InferenceTaskStarted || localStatus == models.InferenceTaskParamsUploaded) &&
-		status.EstimatedExecutionCompletionAt != nil {
-		nextAction = executionStatusNextActionAt(
-			now,
-			*status.EstimatedExecutionCompletionAt,
-			e.config.ScanInterval,
-			e.config.ExecutionPollAdvance,
-			e.config.MaxExecutionPollInterval,
-			e.config.ExecutionOverrunPollInterval,
-		)
-	}
+	nextAction := statusSyncNextActionAt(
+		now,
+		localStatus,
+		status.EstimatedExecutionCompletionAt,
+		e.config.StatusPollInterval,
+		e.config.ScanInterval,
+		e.config.ExecutionPollAdvance,
+		e.config.MaxExecutionPollInterval,
+		e.config.ExecutionOverrunPollInterval,
+	)
 	updates := map[string]any{
 		"status":                         localStatus,
 		"abort_reason":                   status.AbortReason,
@@ -480,6 +478,37 @@ func relayStatusToLocal(status models.ChainTaskStatus) models.TaskStatus {
 	default:
 		return models.InferenceTaskCreated
 	}
+}
+
+func statusSyncNextActionAt(
+	now time.Time,
+	localStatus models.TaskStatus,
+	estimatedCompletion *time.Time,
+	statusPollInterval time.Duration,
+	scanInterval time.Duration,
+	executionPollAdvance time.Duration,
+	maxExecutionPollInterval time.Duration,
+	executionOverrunPollInterval time.Duration,
+) time.Time {
+	switch localStatus {
+	case models.InferenceTaskScoreReady,
+		models.InferenceTaskErrorReported,
+		models.InferenceTaskEndSuccess:
+		// Validation or result download is already required; do not wait another status poll.
+		return now
+	case models.InferenceTaskStarted, models.InferenceTaskParamsUploaded:
+		if estimatedCompletion != nil {
+			return executionStatusNextActionAt(
+				now,
+				*estimatedCompletion,
+				scanInterval,
+				executionPollAdvance,
+				maxExecutionPollInterval,
+				executionOverrunPollInterval,
+			)
+		}
+	}
+	return now.Add(statusPollInterval)
 }
 
 func executionStatusNextActionAt(

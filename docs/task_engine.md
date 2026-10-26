@@ -281,6 +281,8 @@ Relay MUST calculate the estimated execution completion time from the task start
 
 TaskEngine MUST use shorter status intervals while waiting for node assignment, required VSS-member creation, VSS readiness, validation, or result availability.
 
+When a status synchronization result sets the local task to `ScoreReady`, `ErrorReported`, or `EndSuccess` (including Relay `EndGroupSuccess`, which maps to local `EndSuccess`), TaskEngine MUST set `next_action_at` to the current time. The same main-loop iteration MUST be allowed to decide validation or result download without waiting an additional `status_poll_interval`. Other non-execution statuses MUST continue to use `status_poll_interval`.
+
 After Relay has assigned the exact execution GPU and TaskEngine has created every required VSS member, TaskEngine MUST set:
 
 ```text
