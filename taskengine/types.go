@@ -107,10 +107,14 @@ func (c Config) validate() error {
 }
 
 var (
-	ErrTaskNotFound = errors.New("client task not found")
-	ErrTaskRunning  = errors.New("client task is still running")
-	ErrTaskFailed   = errors.New("client task failed")
+	ErrTaskNotFound         = errors.New("client task not found")
+	ErrTaskRunning          = errors.New("client task is still running")
+	ErrTaskFailed           = errors.New("client task failed")
+	ErrAbortNotCancellable  = errors.New("not_cancellable")
+	ErrAbortTemporary       = errors.New("temporary_error")
 )
+
+const ClientTaskAbortErrorMessage = "cancelled by client"
 
 type Result struct {
 	TaskID           uint

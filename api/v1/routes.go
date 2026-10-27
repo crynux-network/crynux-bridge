@@ -41,6 +41,20 @@ func InitRoutes(r *fizz.Fizz) {
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, tonic.Handler(inference_tasks.BatchGetTaskStatus, 200))
 
+	tasksGroup.POST("/batch/abort", []fizz.OperationOption{
+		fizz.Summary("Abort client tasks in a batch with API key authentication"),
+		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
+		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
+	}, tonic.Handler(inference_tasks.BatchAbortTask, 200))
+
+	tasksGroup.POST("/:client_task_id/abort", []fizz.OperationOption{
+		fizz.Summary("Abort a client task with API key authentication"),
+		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
+		fizz.Response("409", "not cancellable", response.ErrorResponse{}, nil, nil),
+		fizz.Response("503", "temporary error", response.ErrorResponse{}, nil, nil),
+		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
+	}, tonic.Handler(inference_tasks.AbortTask, 200))
+
 	tasksGroup.GET("/:client_task_id", []fizz.OperationOption{
 		fizz.Summary("Get task details by client task id with API key authentication"),
 		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),

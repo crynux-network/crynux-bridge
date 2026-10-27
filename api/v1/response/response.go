@@ -85,6 +85,13 @@ func TonicErrorResponse(ctx *gin.Context, err error) (int, interface{}) {
 		return 400, validationErrorResponse
 	}
 
+	if err, ok := err.(interface {
+		ErrorResponseMessage
+		StatusCode() int
+	}); ok {
+		return err.StatusCode(), err
+	}
+
 	if err, ok := err.(ErrorResponseMessage); ok {
 		return 400, err
 	}
@@ -94,6 +101,24 @@ func TonicErrorResponse(ctx *gin.Context, err error) (int, interface{}) {
 	}
 
 	return 500, NewExceptionResponse(err)
+}
+
+type StatusErrorResponse struct {
+	ErrorResponse
+	HTTPStatus int `json:"-"`
+}
+
+func NewStatusErrorResponse(status int, errType string) *StatusErrorResponse {
+	r := &StatusErrorResponse{HTTPStatus: status}
+	r.SetErrorType(errType)
+	return r
+}
+
+func (r *StatusErrorResponse) StatusCode() int {
+	if r.HTTPStatus == 0 {
+		return 400
+	}
+	return r.HTTPStatus
 }
 
 func TonicRenderResponse(ctx *gin.Context, statusCode int, payload interface{}) {

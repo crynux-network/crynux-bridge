@@ -91,7 +91,7 @@ func (e *Engine) iterate(ctx context.Context) error {
 func (e *Engine) expandDueClientTasks(ctx context.Context) error {
 	var clientTasks []models.ClientTask
 	if err := e.db.WithContext(ctx).
-		Where("repeat_expanded = ? AND next_action_at <= ?", false, time.Now()).
+		Where("status = ? AND repeat_expanded = ? AND next_action_at <= ?", models.ClientTaskStatusRunning, false, time.Now()).
 		Order("next_action_at ASC, id ASC").
 		Limit(e.config.ExpansionBatchSize).
 		Find(&clientTasks).Error; err != nil {

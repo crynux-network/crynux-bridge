@@ -36,11 +36,32 @@ A committed raw task creation MUST remain queryable independently of the HTTP re
 
 ## HTTP Request Lifetime
 
-The raw create, status, and result endpoints MUST use the incoming HTTP context for that request only. Bridge MUST NOT add a fixed three-minute wait deadline for raw task handlers.
+The raw create, status, result, and abort endpoints MUST use the incoming HTTP context for that request only. Bridge MUST NOT add a fixed three-minute wait deadline for raw task handlers.
 
 If the HTTP context is canceled or reaches its caller-provided deadline, the handler MUST return a request error. This event MUST NOT change persisted task state, stop TaskEngine processing, or submit cancellation to Relay.
 
 The raw status endpoint MUST call TaskEngine's logical status read method and return immediately. It MUST NOT call a blocking task wait function.
+
+## ClientTask Creator Abort
+
+`POST /v1/inference_tasks/:client_task_id/abort` and `POST /v1/inference_tasks/batch/abort` MUST abort a logical `ClientTask` owned by the authenticated API key client. Abort authorization MUST match status reads: API key format, expiration, and the required admin-or-chat role without applying creation `UseLimit`. A missing or foreign client task ID MUST be rejected as not found without revealing ownership by another client. The batch abort endpoint MUST accept between 1 and 100 client task IDs, MUST return one result per requested ID in request order, and MUST treat each ID independently.
+
+Abort success means the logical task can no longer produce a downloaded result and the `ClientTask` is marked `failed` with a persisted creator-cancel mark. Abort success MUST NOT be inferred only from the caller's belief that a result is unlikely.
+
+TaskEngine MUST implement abort as follows:
+
+1. When the `ClientTask` is already `failed` with the creator-cancel mark, abort MUST succeed idempotently and return the current logical task view.
+2. When the `ClientTask` is `success`, or any SD/LLM member under it has reached `ResultDownloaded`, abort MUST fail as `not_cancellable` and MUST NOT cancel any member.
+3. When the `ClientTask` is still unexpanded, TaskEngine MUST mark it `failed` with the creator-cancel mark in one database transaction and MUST NOT expand it later. Repeat expansion MUST select only `running` client tasks.
+4. When the `ClientTask` is expanded, TaskEngine MUST load every SD and LLM `InferenceTask` under that `ClientTaskID`, including every repeat primary and every created VSS member. Cancel identity on Relay is each member's `TaskIDCommitment`. Abort MUST NOT rely on VSS sibling cancellation to cover other members or other repeat primaries.
+5. TaskEngine MUST group those members by `TaskID`. A group is whole-group cancellable only when every non-terminal member is still locally eligible for creator cancel (Pending without a commitment, or Pending/Created pending a Relay queued check) and no member is in a local post-queue non-terminal state such as Started, parameters uploaded, score ready, error reported, validated, or local `EndSuccess`. Members already finished without `ResultDownloaded` do not block the group.
+6. If any `TaskID` group is not whole-group cancellable, abort MUST fail as `not_cancellable` and MUST NOT send any Relay cancel and MUST NOT locally terminate any Pending member for that ClientTask.
+7. When every group passes the local check, TaskEngine MUST preflight Relay batch status for every still-unfinished member that has a commitment. Every such commitment MUST still be `TaskQueued`, or already `TaskEndAborted` with `TaskAbortCreatorCancelled`. Any other Relay status MUST fail the abort as `not_cancellable` with no cancel requests sent.
+8. After preflight succeeds, TaskEngine MUST locally set every Pending member without a commitment to `EndAborted` with `TaskAbortCreatorCancelled`, and MUST submit Relay batch creator cancel for every remaining unfinished commitment, using as few Relay batch abort requests as the Relay batch limit allows. Cancel reason MUST be `TaskAbortCreatorCancelled`.
+9. Abort succeeds only when every SD/LLM member under the ClientTask is finished without `ResultDownloaded`. TaskEngine MUST then mark the `ClientTask` `failed` with the creator-cancel mark and return the logical failed task view.
+10. If any Relay abort item returns `not_cancellable`, `not_found`, `permanent_error`, or `temporary_error` after cancel requests were sent, the ClientTask abort MUST fail. Successfully cancelled commitments MUST remain cancelled. TaskEngine MUST persist local `EndAborted` with `TaskAbortCreatorCancelled` for those successful items, MUST leave the `ClientTask` `running`, and MUST NOT mark it failed. A `temporary_error` or whole-request transport failure MUST be reported as `temporary_error` so the caller may retry. A `not_cancellable` item MUST be reported as `not_cancellable`.
+
+Creator abort is distinct from heartbeat queued-wait abort and from VSS sibling cancellation. Heartbeat queued-wait abort MAY set local `EndAborted` before Relay cancel succeeds. ClientTask creator abort MUST NOT mark the `ClientTask` failed while any member can still run or still produce `ResultDownloaded`.
 
 ## Relay State Synchronization
 

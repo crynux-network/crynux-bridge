@@ -151,7 +151,9 @@ func computeClientTaskPhase(clientTask models.ClientTask, tasks []models.Inferen
 	if len(unfinished) == 0 {
 		if clientTask.Status == models.ClientTaskStatusFailed || failed != nil || len(tasks) > 0 {
 			info := clientTaskPhaseInfo{Phase: ClientTaskPhaseFailed, ErrorMessage: "failed"}
-			if failed != nil {
+			if clientTask.CreatorCancelled {
+				info.ErrorMessage = ClientTaskAbortErrorMessage
+			} else if failed != nil {
 				info.ErrorMessage = taskErrorMessage(*failed)
 			}
 			return info
