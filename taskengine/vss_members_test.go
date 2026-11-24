@@ -73,6 +73,8 @@ func TestExecutionAssignedRequiresModelFilesAndLLMGPU(t *testing.T) {
 	}{
 		{"sd without files", models.TaskTypeSD, relay.BatchStatusItem{}, false},
 		{"sd with files", models.TaskTypeSD, relay.BatchStatusItem{ExecutionModelFiles: files}, true},
+		{"video without files", models.TaskTypeVideo, relay.BatchStatusItem{}, false},
+		{"video with files", models.TaskTypeVideo, relay.BatchStatusItem{ExecutionModelFiles: files}, true},
 		{"llm gpu only", models.TaskTypeLLM, relay.BatchStatusItem{SelectedExecutionGPU: "gpu"}, false},
 		{"llm files only", models.TaskTypeLLM, relay.BatchStatusItem{ExecutionModelFiles: files}, false},
 		{"llm gpu and files", models.TaskTypeLLM, relay.BatchStatusItem{SelectedExecutionGPU: "gpu", ExecutionModelFiles: files}, true},
@@ -171,6 +173,42 @@ func TestNewVSSMembersKeepSubmittedGPUForSD(t *testing.T) {
 	for i := range members {
 		if members[i].RequiredGPU != "submitted" || members[i].RequiredGPUVram != 16 {
 			t.Fatalf("member %d gpu = %q/%d", i, members[i].RequiredGPU, members[i].RequiredGPUVram)
+		}
+	}
+}
+
+func TestNewVSSMembersKeepSubmittedGPUForVideo(t *testing.T) {
+	task := &models.InferenceTask{
+		TaskType:        models.TaskTypeVideo,
+		TaskID:          "0x01",
+		RequiredGPU:     "submitted",
+		RequiredGPUVram: 24,
+		TaskArgs:        `{"version":"3.8.0","base_model":{"name":"org/model"},"prompt":"p","task_config":{"num_frames":16,"steps":20}}`,
+	}
+	status := relay.BatchStatusItem{
+		SelectedExecutionGPU: "other",
+		ExecutionModelFiles: models.ModelFileEntries{{
+			SourceType: "huggingface",
+			Repository: "org/model",
+			Revision:   "0123456789abcdef0123456789abcdef01234567",
+			Format:     "diffusers",
+		}},
+	}
+	members, err := newVSSMembers(task, status, "0x03", "0x04")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range members {
+		if members[i].RequiredGPU != "submitted" || members[i].RequiredGPUVram != 24 {
+			t.Fatalf("member %d gpu = %q/%d", i, members[i].RequiredGPU, members[i].RequiredGPUVram)
+		}
+		var args map[string]any
+		if err := json.Unmarshal([]byte(members[i].TaskArgs), &args); err != nil {
+			t.Fatal(err)
+		}
+		base := args["base_model"].(map[string]any)
+		if base["revision"] != status.ExecutionModelFiles[0].Revision {
+			t.Fatalf("member %d revision = %#v", i, base["revision"])
 		}
 	}
 }

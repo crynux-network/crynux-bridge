@@ -15,7 +15,7 @@ import (
 
 func TestResolveTaskTimeoutNormalTasks(t *testing.T) {
 	appConfig := &config.AppConfig{}
-	for _, taskType := range []models.ChainTaskType{models.TaskTypeSD, models.TaskTypeLLM} {
+	for _, taskType := range []models.ChainTaskType{models.TaskTypeSD, models.TaskTypeLLM, models.TaskTypeVideo} {
 		timeout, err := resolveTaskTimeout(taskType, nil, appConfig)
 		if err != nil {
 			t.Fatalf("task type %d: %v", taskType, err)
@@ -31,7 +31,7 @@ func TestResolveTaskTimeoutNormalTasks(t *testing.T) {
 }
 
 func TestResolveQueueTimeout(t *testing.T) {
-	for _, taskType := range []models.ChainTaskType{models.TaskTypeSD, models.TaskTypeLLM} {
+	for _, taskType := range []models.ChainTaskType{models.TaskTypeSD, models.TaskTypeLLM, models.TaskTypeVideo} {
 		got, err := resolveQueueTimeout(taskType, nil)
 		if err != nil || got != 0 {
 			t.Fatalf("task type %d omit = (%d, %v), want (0, nil)", taskType, got, err)
@@ -100,7 +100,7 @@ func TestValidateRawTaskInputRequiresTaskFee(t *testing.T) {
 }
 
 func TestValidateTaskInputRejectsUnsupportedTaskType(t *testing.T) {
-	taskType := models.ChainTaskType(3)
+	taskType := models.ChainTaskType(4)
 	err := validateTaskInput(&TaskInput{TaskType: &taskType})
 	var validationErr *response.ValidationErrorResponse
 	if !errors.As(err, &validationErr) || validationErr.GetFieldName() != "task_type" {

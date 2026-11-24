@@ -206,7 +206,7 @@ func (e *Engine) loadClientTaskMembers(ctx context.Context, clientTaskIDs []uint
 	}
 	var tasks []models.InferenceTask
 	err := e.db.WithContext(ctx).
-		Where("client_task_id IN ? AND task_type IN ?", clientTaskIDs, []models.ChainTaskType{models.TaskTypeSD, models.TaskTypeLLM}).
+		Where("client_task_id IN ? AND task_type IN ?", clientTaskIDs, models.OrdinaryTaskTypes()).
 		Find(&tasks).Error
 	if err != nil {
 		return nil, err
@@ -305,10 +305,7 @@ func (e *Engine) CountSubmittedSince(ctx context.Context, clientID string, since
 func (e *Engine) RegisterTraceTasks(ctx context.Context, clientTaskID uint) error {
 	var tasks []models.InferenceTask
 	if err := e.db.WithContext(ctx).
-		Where("client_task_id = ? AND task_type IN ?", clientTaskID, []models.ChainTaskType{
-			models.TaskTypeSD,
-			models.TaskTypeLLM,
-		}).
+		Where("client_task_id = ? AND task_type IN ?", clientTaskID, models.OrdinaryTaskTypes()).
 		Order("id ASC").
 		Find(&tasks).Error; err != nil {
 		return err

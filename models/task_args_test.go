@@ -74,6 +74,32 @@ func TestGetLLMTaskConfigModelIDsIgnoresRevision(t *testing.T) {
 	}
 }
 
+func TestGetVideoTaskConfigModelIDs(t *testing.T) {
+	shaUpper := "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
+	shaLower := "abcdef0123456789abcdef0123456789abcdef01"
+	jsonStr := `{"base_model":{"name":"Org/Video"},"loras":[{"model":"Org/LoRA","revision":"` + shaUpper + `","weight_file_name":"Weight.safetensors","weight":100},{"model":"https://Example.com/Models/MyLora.safetensors","revision":"ignored","weight_file_name":"ignored","weight":50}],"components":{"vae":{"format":"diffusers","repo":"Org/VAE"},"transformer":{"format":"diffusers","repo":"Org/Transformer"}},"prompt":"p","task_config":{"num_frames":16,"steps":20}}`
+	modelIDs, err := models.GetTaskConfigModelIDs(jsonStr, models.TaskTypeVideo)
+	if err != nil {
+		t.Fatalf("failed to get model ids: %v", err)
+	}
+	want := []string{
+		"base:org/video",
+		"lora:org/lora@" + shaLower + "#Weight.safetensors",
+		"lora:https://Example.com/Models/MyLora.safetensors",
+		"component:transformer:org/transformer",
+		"component:vae:org/vae",
+	}
+	if !slices.Equal(modelIDs, want) {
+		t.Fatalf("model ids = %v, want %v", modelIDs, want)
+	}
+}
+
+func TestGetTaskConfigModelIDsRejectsUnknownType(t *testing.T) {
+	if _, err := models.GetTaskConfigModelIDs(`{}`, models.ChainTaskType(99)); err == nil {
+		t.Fatal("expected unsupported task type error")
+	}
+}
+
 func TestGetTaskConfigNumImages(t *testing.T) {
 	num, err := models.GetTaskConfigNumImages(sdTaskArgsJSON)
 	if err != nil || num != 2 {

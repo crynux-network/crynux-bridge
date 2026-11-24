@@ -9,14 +9,20 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strings"
+	"sync"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	_ "github.com/santhosh-tekuri/jsonschema/v5/httploader"
 )
 
-var sdInferenceTaskSchema *jsonschema.Schema
-var gptInferenceTaskSchema *jsonschema.Schema
-var sdFinetuneLoraTaskSchema *jsonschema.Schema
+var (
+	taskArgsSchemaMu         sync.Mutex
+	sdInferenceTaskSchema    *jsonschema.Schema
+	gptInferenceTaskSchema   *jsonschema.Schema
+	sdFinetuneLoraTaskSchema *jsonschema.Schema
+	videoInferenceTaskSchema *jsonschema.Schema
+)
 
 // IsNil checks if an interface{} value is nil
 func IsNil(v interface{}) bool {
@@ -33,81 +39,52 @@ func IsNil(v interface{}) bool {
 }
 
 func ValidateTaskArgsJsonStr(jsonStr string, taskType ChainTaskType) (validationError, err error) {
-	if taskType == TaskTypeSD {
-		return validateSDTaskArgs(jsonStr)
-	} else if taskType == TaskTypeLLM {
-		return validateGPTTaskArgs(jsonStr)
-	} else {
-		return validateSDFinetuneLoraTaskArgs(jsonStr)
+	switch taskType {
+	case TaskTypeSD:
+		return validateTaskArgsAgainstSchema(jsonStr, &sdInferenceTaskSchema, func() string {
+			return config.GetConfig().TaskSchema.StableDiffusionInference
+		})
+	case TaskTypeLLM:
+		return validateTaskArgsAgainstSchema(jsonStr, &gptInferenceTaskSchema, func() string {
+			return config.GetConfig().TaskSchema.GPTInference
+		})
+	case TaskTypeSDFTLora:
+		return validateTaskArgsAgainstSchema(jsonStr, &sdFinetuneLoraTaskSchema, func() string {
+			return config.GetConfig().TaskSchema.StableDiffusionFinetuneLora
+		})
+	case TaskTypeVideo:
+		return validateTaskArgsAgainstSchema(jsonStr, &videoInferenceTaskSchema, func() string {
+			return config.GetConfig().TaskSchema.VideoInference
+		})
+	default:
+		return nil, fmt.Errorf("unsupported task type %d", taskType)
 	}
 }
 
-func validateSDTaskArgs(jsonStr string) (validationError, err error) {
-	if sdInferenceTaskSchema == nil {
-		schemaJson := config.GetConfig().TaskSchema.StableDiffusionInference
-
+func validateTaskArgsAgainstSchema(
+	jsonStr string,
+	cached **jsonschema.Schema,
+	schemaURL func() string,
+) (validationError, err error) {
+	taskArgsSchemaMu.Lock()
+	defer taskArgsSchemaMu.Unlock()
+	if *cached == nil {
+		schemaJson := schemaURL()
 		if !isValidUrl(schemaJson) {
 			return nil, errors.New("invalid URL for task json schema")
 		}
-
-		sdInferenceTaskSchema, err = jsonschema.Compile(schemaJson)
-
-		if err != nil {
-			return nil, err
+		compiled, compileErr := jsonschema.Compile(schemaJson)
+		if compileErr != nil {
+			return nil, compileErr
 		}
+		*cached = compiled
 	}
 
 	var v interface{}
 	if err := json.Unmarshal([]byte(jsonStr), &v); err != nil {
 		return nil, err
 	}
-
-	return sdInferenceTaskSchema.Validate(v), nil
-}
-
-func validateGPTTaskArgs(jsonStr string) (validationError, err error) {
-	if gptInferenceTaskSchema == nil {
-		schemaJson := config.GetConfig().TaskSchema.GPTInference
-
-		if !isValidUrl(schemaJson) {
-			return nil, errors.New("invalid URL for task json schema")
-		}
-
-		gptInferenceTaskSchema, err = jsonschema.Compile(schemaJson)
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	var v interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &v); err != nil {
-		return nil, err
-	}
-
-	return gptInferenceTaskSchema.Validate(v), nil
-}
-
-func validateSDFinetuneLoraTaskArgs(jsonStr string) (validationError, err error) {
-	if sdFinetuneLoraTaskSchema == nil {
-		schemaJson := config.GetConfig().TaskSchema.StableDiffusionFinetuneLora
-
-		if !isValidUrl(schemaJson) {
-			return nil, errors.New("invalid URL for task json schema")
-		}
-
-		sdFinetuneLoraTaskSchema, err = jsonschema.Compile(schemaJson)
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	var v interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &v); err != nil {
-		return nil, err
-	}
-	return sdFinetuneLoraTaskSchema.Validate(v), nil
+	return (*cached).Validate(v), nil
 }
 
 // sdTaskArgsModels holds the model related fields of image TaskArgs 3.7.0.
@@ -251,13 +228,69 @@ func getSDFTTaskConfigModelIDs(taskArgs string) ([]string, error) {
 	return modelIDs, nil
 }
 
+func getVideoTaskConfigModelIDs(taskArgs string) ([]string, error) {
+	var args struct {
+		BaseModel struct {
+			Name string `json:"name"`
+		} `json:"base_model"`
+		Loras []struct {
+			Model          string  `json:"model"`
+			Revision       *string `json:"revision"`
+			WeightFileName string  `json:"weight_file_name"`
+		} `json:"loras"`
+		Components map[string]struct {
+			Repo string `json:"repo"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal([]byte(taskArgs), &args); err != nil {
+		return nil, err
+	}
+	if args.BaseModel.Name == "" {
+		return nil, errors.New("base_model.name is missing or empty")
+	}
+	ids := []string{"base:" + args.BaseModel.Name}
+	for i, lora := range args.Loras {
+		if lora.Model == "" {
+			return nil, fmt.Errorf("loras[%d].model is missing or empty", i)
+		}
+		loraID := "lora:" + lora.Model
+		if !strings.HasPrefix(lora.Model, "http://") && !strings.HasPrefix(lora.Model, "https://") {
+			if lora.Revision != nil && *lora.Revision != "" {
+				loraID += "@" + NormalizeCommitRevision(*lora.Revision)
+			}
+			if lora.WeightFileName != "" {
+				loraID += "#" + lora.WeightFileName
+			}
+		}
+		ids = append(ids, loraID)
+	}
+	names := make([]string, 0, len(args.Components))
+	for name := range args.Components {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		repo := args.Components[name].Repo
+		if repo == "" {
+			return nil, fmt.Errorf("components.%s.repo is missing or empty", name)
+		}
+		ids = append(ids, "component:"+name+":"+repo)
+	}
+	return NormalizeModelIDs(ids), nil
+}
+
 func GetTaskConfigModelIDs(taskArgs string, taskType ChainTaskType) ([]string, error) {
-	if taskType == TaskTypeSD {
+	switch taskType {
+	case TaskTypeSD:
 		return getSDTaskConfigModelIDs(taskArgs)
-	} else if taskType == TaskTypeLLM {
+	case TaskTypeLLM:
 		return getGPTTaskConfigModelIDs(taskArgs)
-	} else {
+	case TaskTypeSDFTLora:
 		return getSDFTTaskConfigModelIDs(taskArgs)
+	case TaskTypeVideo:
+		return getVideoTaskConfigModelIDs(taskArgs)
+	default:
+		return nil, fmt.Errorf("unsupported task type %d", taskType)
 	}
 }
 

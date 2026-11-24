@@ -14,15 +14,17 @@ The raw task endpoint MUST authenticate the application API key and MUST require
 
 The heartbeat path MUST read configured CNX fees as ordinary decimal strings with at most 9 fractional digits. Bridge MUST calculate Wei with exact integer arithmetic and MUST reject results outside the unsigned 256-bit integer range. Every `InferenceTask.TaskFee` MUST contain a base-10 Wei string, and Bridge MUST forward that stored value to Relay without another unit conversion. Validation and repeat tasks MUST copy the Wei value unchanged.
 
-Normal SD and LLM tasks MUST NOT carry a creator-supplied execution timeout. The direct inference-task API MUST reject `timeout` for these task types. Relay MUST calculate the execution timeout for a normal task after node assignment.
+Normal SD, LLM, and video tasks MUST NOT carry a creator-supplied execution timeout. The direct inference-task API MUST reject `timeout` for these task types. Relay MUST calculate the execution timeout for a normal task after node assignment.
 
-Normal SD and LLM tasks MAY include optional `queue_timeout` as an unsigned integer number of seconds. When present, the value MUST be greater than zero. Bridge MUST store it on the `ClientTask` submission and each expanded `InferenceTask`, and MUST forward it to Relay create. When omitted, Bridge MUST omit the field so Relay applies its configured default queue wait. SDFT create MUST reject `queue_timeout`.
+Normal SD, LLM, and video tasks MAY include optional `queue_timeout` as an unsigned integer number of seconds. When present, the value MUST be greater than zero. Bridge MUST store it on the `ClientTask` submission and each expanded `InferenceTask`, and MUST forward it to Relay create. When omitted, Bridge MUST omit the field so Relay applies its configured default queue wait. SDFT create MUST reject `queue_timeout`.
+
+The raw task create API MUST accept `task_type` values `0` (SD), `1` (LLM), `2` (SDFT LoRA), and `3` (video). Video tasks MUST use `TaskSize` equal to `1`.
 
 SDFT processing is outside the TaskEngine lifecycle specified by this document. Its existing flow and required component boundary are specified in [sdft_tasks.md](./sdft_tasks.md).
 
 ## Background Processing
 
-Bridge MUST process ordinary SD and LLM tasks through the database-driven TaskEngine main loop specified in [task_engine.md](./task_engine.md). The main loop MUST use bounded indexed due-task queries and MUST NOT load every unfinished task or run one long-lived worker per task.
+Bridge MUST process ordinary SD, LLM, and video tasks through the database-driven TaskEngine main loop specified in [task_engine.md](./task_engine.md). The main loop MUST use bounded indexed due-task queries and MUST NOT load every unfinished task or run one long-lived worker per task.
 
 Bounded request workers MUST execute Relay batch creation, batch status, batch validation, batch cancellation, and whole-task result download. A transient database, network, or Relay error MUST be persisted as an operation result, and the main loop MUST schedule the retry through `next_action_at`.
 
@@ -51,14 +53,14 @@ Abort success means the logical task can no longer produce a downloaded result a
 TaskEngine MUST implement abort as follows:
 
 1. When the `ClientTask` is already `failed` with the creator-cancel mark, abort MUST succeed idempotently and return the current logical task view.
-2. When the `ClientTask` is `success`, or any SD/LLM member under it has reached `ResultDownloaded`, abort MUST fail as `not_cancellable` and MUST NOT cancel any member.
+2. When the `ClientTask` is `success`, or any SD/LLM/video member under it has reached `ResultDownloaded`, abort MUST fail as `not_cancellable` and MUST NOT cancel any member.
 3. When the `ClientTask` is still unexpanded, TaskEngine MUST mark it `failed` with the creator-cancel mark in one database transaction and MUST NOT expand it later. Repeat expansion MUST select only `running` client tasks.
-4. When the `ClientTask` is expanded, TaskEngine MUST load every SD and LLM `InferenceTask` under that `ClientTaskID`, including every repeat primary and every created VSS member. Cancel identity on Relay is each member's `TaskIDCommitment`. Abort MUST NOT rely on VSS sibling cancellation to cover other members or other repeat primaries.
+4. When the `ClientTask` is expanded, TaskEngine MUST load every SD, LLM, and video `InferenceTask` under that `ClientTaskID`, including every repeat primary and every created VSS member. Cancel identity on Relay is each member's `TaskIDCommitment`. Abort MUST NOT rely on VSS sibling cancellation to cover other members or other repeat primaries.
 5. TaskEngine MUST group those members by `TaskID`. A group is whole-group cancellable only when every non-terminal member is still locally eligible for creator cancel (Pending without a commitment, or Pending/Created pending a Relay queued check) and no member is in a local post-queue non-terminal state such as Started, parameters uploaded, score ready, error reported, validated, or local `EndSuccess`. Members already finished without `ResultDownloaded` do not block the group.
 6. If any `TaskID` group is not whole-group cancellable, abort MUST fail as `not_cancellable` and MUST NOT send any Relay cancel and MUST NOT locally terminate any Pending member for that ClientTask.
 7. When every group passes the local check, TaskEngine MUST preflight Relay batch status for every still-unfinished member that has a commitment. Every such commitment MUST still be `TaskQueued`, or already `TaskEndAborted` with `TaskAbortCreatorCancelled`. Any other Relay status MUST fail the abort as `not_cancellable` with no cancel requests sent.
 8. After preflight succeeds, TaskEngine MUST locally set every Pending member without a commitment to `EndAborted` with `TaskAbortCreatorCancelled`, and MUST submit Relay batch creator cancel for every remaining unfinished commitment, using as few Relay batch abort requests as the Relay batch limit allows. Cancel reason MUST be `TaskAbortCreatorCancelled`.
-9. Abort succeeds only when every SD/LLM member under the ClientTask is finished without `ResultDownloaded`. TaskEngine MUST then mark the `ClientTask` `failed` with the creator-cancel mark and return the logical failed task view.
+9. Abort succeeds only when every SD/LLM/video member under the ClientTask is finished without `ResultDownloaded`. TaskEngine MUST then mark the `ClientTask` `failed` with the creator-cancel mark and return the logical failed task view.
 10. If any Relay abort item returns `not_cancellable`, `not_found`, `permanent_error`, or `temporary_error` after cancel requests were sent, the ClientTask abort MUST fail. Successfully cancelled commitments MUST remain cancelled. TaskEngine MUST persist local `EndAborted` with `TaskAbortCreatorCancelled` for those successful items, MUST leave the `ClientTask` `running`, and MUST NOT mark it failed. A `temporary_error` or whole-request transport failure MUST be reported as `temporary_error` so the caller may retry. A `not_cancellable` item MUST be reported as `not_cancellable`.
 
 Creator abort is distinct from heartbeat queued-wait abort and from VSS sibling cancellation. Heartbeat queued-wait abort MAY set local `EndAborted` before Relay cancel succeeds. ClientTask creator abort MUST NOT mark the `ClientTask` failed while any member can still run or still produce `ResultDownloaded`.
@@ -77,13 +79,13 @@ The Relay terminal statuses visible to Bridge are:
 - `TaskEndSuccess`
 - `TaskEndGroupSuccess`
 
-Bridge MUST map both Relay success statuses to local `EndSuccess`. Bridge MUST download the single JSON result for an LLM task or all result images for an SD task only after Relay reports success. Bridge MUST not download output for any Relay abort, including queue timeout, execution timeout, creator-validation timeout, or result-upload timeout.
+Bridge MUST map both Relay success statuses to local `EndSuccess`. Bridge MUST download the single JSON result for an LLM task, all result images for an SD task, or the single MP4 result for a video task only after Relay reports success. Bridge MUST not download output for any Relay abort, including queue timeout, execution timeout, creator-validation timeout, or result-upload timeout.
 
 After a non-success terminal status is synchronized, the main loop MUST stop active-stage processing and recalculate the owning client task. After success is synchronized, the main loop MUST schedule one whole-task result download and persist `ResultDownloaded` only after the complete response is verified and atomically installed.
 
 When recalculating the owning client task after a member finishes, the main loop MUST inspect every `InferenceTask` with the same `ClientTaskID` in one transaction. Bridge MUST mark the client task `Failed` only when every such inference task is finished and none has reached `ResultDownloaded`. Bridge MUST NOT mark the client task `Failed` because only the current `TaskID` validation group has finished unsuccessfully while another inference task under the same client task is still unfinished. When any inference task under the client task reaches `ResultDownloaded` while the client task is still `Running`, Bridge MUST mark the client task `Success`.
 
-TaskEngine status and result reads for ordinary SD and LLM client tasks MUST select one member from the current database snapshot in this order:
+TaskEngine status and result reads for ordinary SD, LLM, and video client tasks MUST select one member from the current database snapshot in this order:
 
 1. The earliest `ResultDownloaded` member.
 2. An unfinished member when no result has been downloaded.

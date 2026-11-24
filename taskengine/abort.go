@@ -281,7 +281,7 @@ func (e *Engine) applyCreatorAbortLocalState(
 		if err := tx.Where(
 			"client_task_id = ? AND task_type IN ?",
 			clientTaskID,
-			[]models.ChainTaskType{models.TaskTypeSD, models.TaskTypeLLM},
+			models.OrdinaryTaskTypes(),
 		).Find(&members).Error; err != nil {
 			return err
 		}
@@ -317,7 +317,7 @@ func (e *Engine) applyCreatorAbortLocalState(
 		if err := tx.Where(
 			"client_task_id = ? AND task_type IN ?",
 			clientTaskID,
-			[]models.ChainTaskType{models.TaskTypeSD, models.TaskTypeLLM},
+			models.OrdinaryTaskTypes(),
 		).Find(&members).Error; err != nil {
 			return err
 		}

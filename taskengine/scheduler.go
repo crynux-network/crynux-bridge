@@ -179,7 +179,7 @@ func (e *Engine) recalculateClientTask(ctx context.Context, tx *gorm.DB, clientT
 	}
 	var tasks []models.InferenceTask
 	if err := tx.WithContext(ctx).
-		Where("client_task_id = ? AND task_type IN ?", clientTaskID, []models.ChainTaskType{models.TaskTypeSD, models.TaskTypeLLM}).
+		Where("client_task_id = ? AND task_type IN ?", clientTaskID, models.OrdinaryTaskTypes()).
 		Find(&tasks).Error; err != nil {
 		return err
 	}

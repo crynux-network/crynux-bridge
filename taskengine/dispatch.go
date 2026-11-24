@@ -20,6 +20,43 @@ type operationDecision struct {
 	group     []models.InferenceTask
 }
 
+// maxCreateBatchBytes caps one Relay create-batch body below Relay's
+// http.max_body_bytes (32 MiB), leaving room for JSON wrapping and signatures.
+const maxCreateBatchBytes = 24 * 1024 * 1024
+
+// createBatchItemOverheadBytes estimates non-task_args JSON fields per create item.
+const createBatchItemOverheadBytes = 512
+
+func estimateCreateBatchItemBytes(task models.InferenceTask) int {
+	return len(task.TaskArgs) + createBatchItemOverheadBytes
+}
+
+// takeCreateBatch returns the next create batch limited by both item count and
+// estimated body bytes. A single item larger than maxBytes is sent alone.
+func takeCreateBatch(values []operationDecision, maxItems int, maxBytes int) ([]operationDecision, []operationDecision) {
+	if len(values) == 0 {
+		return nil, values
+	}
+	if maxItems <= 0 {
+		maxItems = 1
+	}
+	count := 0
+	bytes := 0
+	for count < len(values) && count < maxItems {
+		itemBytes := estimateCreateBatchItemBytes(values[count].task)
+		if count > 0 && bytes+itemBytes > maxBytes {
+			break
+		}
+		bytes += itemBytes
+		count++
+		if count == 1 && itemBytes > maxBytes {
+			break
+		}
+	}
+	batch := append([]operationDecision(nil), values[:count]...)
+	return batch, values[count:]
+}
+
 func (e *Engine) dispatchDueTasks(ctx context.Context) error {
 	if e.allWorkerPoolsFull() {
 		return nil
@@ -58,7 +95,7 @@ func (e *Engine) loadDueTasks(ctx context.Context) ([]models.InferenceTask, erro
 			Where("operation_status = ? AND next_action_at <= ? AND task_type IN ?",
 				models.TaskOperationStatusNone,
 				time.Now(),
-				[]models.ChainTaskType{models.TaskTypeSD, models.TaskTypeLLM})
+				models.OrdinaryTaskTypes())
 	}
 	queries := []func(*gorm.DB) *gorm.DB{
 		func(query *gorm.DB) *gorm.DB {
@@ -191,11 +228,25 @@ func (e *Engine) dispatchDecisions(
 	for _, decision := range decisions {
 		byType[decision.operation] = append(byType[decision.operation], decision)
 	}
+	createValues := byType[models.TaskOperationCreate]
+	createCapacity := e.capacityFor(models.TaskOperationCreate)
+	createAvailable := cap(createCapacity) - len(createCapacity)
+	for len(createValues) > 0 && createAvailable > 0 {
+		batch, remaining := takeCreateBatch(createValues, e.config.CreateBatchSize, maxCreateBatchBytes)
+		createValues = remaining
+		createCapacity <- struct{}{}
+		if err := e.markRunning(ctx, batch); err != nil {
+			<-createCapacity
+			return err
+		}
+		go e.runRequestWorker(ctx, models.TaskOperationCreate, batch)
+		createAvailable--
+	}
+
 	batches := []struct {
 		operation models.TaskOperationType
 		size      int
 	}{
-		{models.TaskOperationCreate, e.config.CreateBatchSize},
 		{models.TaskOperationSyncStatus, e.config.StatusBatchSize},
 		{models.TaskOperationValidate, e.config.ValidationBatchSize},
 		{models.TaskOperationCancel, e.config.CancellationBatchSize},

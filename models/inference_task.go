@@ -58,7 +58,19 @@ const (
 	TaskTypeSD ChainTaskType = iota
 	TaskTypeLLM
 	TaskTypeSDFTLora
+	TaskTypeVideo
 )
+
+// OrdinaryTaskTypes returns the TaskEngine-managed task types that share the
+// same create, status, validation, abort, and result paths.
+func OrdinaryTaskTypes() []ChainTaskType {
+	return []ChainTaskType{TaskTypeSD, TaskTypeLLM, TaskTypeVideo}
+}
+
+// IsSupportedTaskType reports whether taskType is a known Bridge task type.
+func IsSupportedTaskType(taskType ChainTaskType) bool {
+	return taskType == TaskTypeSD || taskType == TaskTypeLLM || taskType == TaskTypeSDFTLora || taskType == TaskTypeVideo
+}
 
 type TaskAbortReason uint8
 
@@ -136,12 +148,12 @@ func (arr *StringArray) UnmarshalJSON(b []byte) error {
 
 type InferenceTask struct {
 	RootModel
-	ClientID        uint          `json:"client_id" gorm:"index:idx_inference_task_pending_quant,priority:1"`
-	Client          Client        `json:"-"`
-	ClientTaskID    uint          `json:"client_task_id" gorm:"index:idx_inference_task_client_status,priority:1"`
-	ClientTask      ClientTask    `json:"-"`
-	TaskArgs        string        `json:"task_args"`
-	TaskType        ChainTaskType `json:"task_type" gorm:"index:idx_inference_task_pending_quant,priority:2"`
+	ClientID           uint             `json:"client_id" gorm:"index:idx_inference_task_pending_quant,priority:1"`
+	Client             Client           `json:"-"`
+	ClientTaskID       uint             `json:"client_task_id" gorm:"index:idx_inference_task_client_status,priority:1"`
+	ClientTask         ClientTask       `json:"-"`
+	TaskArgs           string           `json:"task_args"`
+	TaskType           ChainTaskType    `json:"task_type" gorm:"index:idx_inference_task_pending_quant,priority:2"`
 	TaskModelIDs       StringArray      `json:"task_model_ids"`
 	TaskVersion        string           `json:"task_version"`
 	TaskFee            string           `json:"task_fee" gorm:"type:varchar(78)"`

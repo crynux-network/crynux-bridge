@@ -20,6 +20,8 @@ TaskEngine MUST use separately bounded request workers for Relay batch creation,
 
 The main loop MUST group due create, status, validation, and cancellation operations by creator and operation type, split them by configured batch limits, persist every included item as running, and submit one HTTP request job per batch. It MUST NOT create one long-running goroutine per task or wait beyond the normal scan iteration to fill a batch.
 
+Create batches MUST also stay below a 24 MiB estimated body-size limit so the Relay create request remains under Relay `http.max_body_bytes`. The estimate MUST count each item's `task_args` length plus a fixed per-item overhead for the other create fields. When one item alone exceeds 24 MiB and the current batch is empty, TaskEngine MUST send that item as a single-item create batch.
+
 One task MUST have at most one running external operation. A request timeout, response loss, process interruption, or whole-request error MUST leave mutation results unknown until TaskEngine reconciles every affected commitment through batch status. TaskEngine MUST retry only operations that Relay confirms did not take effect and still remain required.
 
 A batch mutation MUST allow partial success. The request worker MUST persist one outcome per task or validation unit, and the main loop MUST apply those outcomes independently. One item failure MUST NOT roll back, retry, or locally fail another successful item.
@@ -32,7 +34,7 @@ Waiting for Relay progress and retry backoff MUST be represented by `next_action
 
 ## Restart Recovery
 
-TaskEngine MUST treat every persisted running operation as interrupted after restart. It MUST reconcile interrupted mutations with Relay before retrying them and MUST verify or discard incomplete LLM result files and SD result archives before another download.
+TaskEngine MUST treat every persisted running operation as interrupted after restart. It MUST reconcile interrupted mutations with Relay before retrying them and MUST verify or discard incomplete LLM result files, SD result archives, and video `0.mp4` result directories before another download.
 
 TaskEngine MUST recalculate every `Running` ClientTask whose members may already be finished. A process exit between member completion and client-task aggregation MUST therefore not leave the client task permanently running.
 

@@ -21,7 +21,7 @@ admin:
 http:
   host: "0.0.0.0"
   port: "5028"
-  max_body_bytes: 2097152
+  max_body_bytes: 33554432
 data_dir:
   inference_tasks: "/app/data/inference_tasks"
   inference_tasks_retention_days: 7
@@ -71,3 +71,4 @@ task_schema:
   stable_diffusion_inference: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/image-task.json"
   gpt_inference: "https://raw.githubusercontent.com/crynux-network/gpt-task/main/schema/gpt-inference-task.json"
   stable_diffusion_finetune_lora: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/stable-diffusion-finetune-lora-task.json"
+  video_inference: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/main/schema/video-task.json"

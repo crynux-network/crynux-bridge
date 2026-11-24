@@ -547,6 +547,8 @@ func taskTypeName(taskType models.ChainTaskType) string {
 		return "llm"
 	case models.TaskTypeSDFTLora:
 		return "sd_finetune_lora"
+	case models.TaskTypeVideo:
+		return "video"
 	default:
 		return fmt.Sprintf("unknown_%d", taskType)
 	}

@@ -15,6 +15,73 @@ func NormalizeModelName(name string) string {
 	return strings.ToLower(name)
 }
 
+// IsCommitSHA reports whether revision is a 40-character hexadecimal Git commit.
+func IsCommitSHA(revision string) bool {
+	if len(revision) != 40 {
+		return false
+	}
+	for i := 0; i < len(revision); i++ {
+		c := revision[i]
+		switch {
+		case c >= '0' && c <= '9':
+		case c >= 'a' && c <= 'f':
+		case c >= 'A' && c <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// NormalizeCommitRevision lowercases a 40-character hex commit SHA. Branch, tag,
+// main, and empty revisions are returned unchanged.
+func NormalizeCommitRevision(revision string) string {
+	if IsCommitSHA(revision) {
+		return strings.ToLower(revision)
+	}
+	return revision
+}
+
+// NormalizeModelID lowercases a model ID prefix and repository name. URL-based
+// repository names keep their original case. Component names are lowercased.
+// A 40-character hex commit in @revision is lowercased; weight file names after
+// # keep their original case.
+func NormalizeModelID(modelID string) string {
+	prefix, rest, ok := strings.Cut(modelID, ":")
+	if !ok {
+		return strings.ToLower(modelID)
+	}
+	lowerPrefix := strings.ToLower(prefix)
+	if strings.HasPrefix(rest, "http://") || strings.HasPrefix(rest, "https://") {
+		return lowerPrefix + ":" + rest
+	}
+	if lowerPrefix == "component" {
+		compName, repo, hasRepo := strings.Cut(rest, ":")
+		if hasRepo {
+			return "component:" + strings.ToLower(compName) + ":" + NormalizeModelName(repo)
+		}
+	}
+	repoAndMeta, weightFile, hasWeight := strings.Cut(rest, "#")
+	repoPart, revPart, hasRev := strings.Cut(repoAndMeta, "@")
+	normalized := lowerPrefix + ":" + strings.ToLower(repoPart)
+	if hasRev && revPart != "" {
+		normalized += "@" + NormalizeCommitRevision(revPart)
+	}
+	if hasWeight && weightFile != "" {
+		normalized += "#" + weightFile
+	}
+	return normalized
+}
+
+// NormalizeModelIDs applies NormalizeModelID to every entry.
+func NormalizeModelIDs(modelIDs []string) []string {
+	normalized := make([]string, 0, len(modelIDs))
+	for _, modelID := range modelIDs {
+		normalized = append(normalized, NormalizeModelID(modelID))
+	}
+	return normalized
+}
+
 // NormalizeTaskArgsModelNames rewrites the model name fields inside the task
 // args JSON string with NormalizeModelName, so persisted TaskArgs, model IDs,
 // Relay create, and VSS pin matching use the same casing.
@@ -46,6 +113,10 @@ func NormalizeTaskArgsModelNames(taskArgs string, taskType ChainTaskType) (strin
 		}
 	case TaskTypeSDFTLora:
 		normalizeObjectModelName(argsMap, "model", "name")
+	case TaskTypeVideo:
+		normalizeObjectModelName(argsMap, "base_model", "name")
+		normalizeComponentsRepos(argsMap)
+		normalizeVideoLoras(argsMap)
 	}
 
 	normalized, err := json.Marshal(argsMap)
@@ -83,6 +154,22 @@ func normalizeComponentsRepos(argsMap map[string]interface{}) {
 		}
 		if repo, ok := object["repo"].(string); ok {
 			object["repo"] = NormalizeModelName(repo)
+		}
+	}
+}
+
+func normalizeVideoLoras(argsMap map[string]interface{}) {
+	loras, ok := argsMap["loras"].([]interface{})
+	if !ok {
+		return
+	}
+	for _, item := range loras {
+		object, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if modelName, ok := object["model"].(string); ok {
+			object["model"] = NormalizeModelName(modelName)
 		}
 	}
 }

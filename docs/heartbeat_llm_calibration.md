@@ -56,7 +56,7 @@ Each entry MUST contain exactly two prompts that share the same input class and 
 | Output class | Generation instruction | Actual completion tokens |
 |---|---|---|
 | stop-early | `Ticket {{hb_rand}} is a random hex id. In one short sentence, give an integer score from 0 to 100 for how much you like that id, and name the two hex digits that most influenced the score.` | far below `max_new_tokens` |
-| fill-cap | `Ticket {{hb_rand}} is a random hex id. Write continuously until the maximum output length is reached. The first character of your output must be the last hex character of that ticket. Keep inventing new concrete plot details that depend on different pairs of hex digits from the ticket; do not follow a fixed outline.` | equal to `max_new_tokens` |
+| fill-cap | `Ticket {{hb_rand}} is a random hex id. Write a short story as several paragraphs. Paragraph 1 must start with the 1st hex character of the ticket, paragraph 2 with the 2nd, paragraph 3 with the 3rd, and so on in order through the ticket characters you use. Each paragraph should add a new concrete scene that depends on that character (for example what kind of place, object, or obstacle it suggests). Keep going paragraph by paragraph in that order until you run out of output room; do not summarize early and do not skip characters.` | equal to `max_new_tokens` |
 
 For `tool-call`, the stop-early last user message MUST be:
 
@@ -67,7 +67,7 @@ Ticket {{hb_rand}} needs a follow-up search. If the last hex digit of that ticke
 The fill-cap last user message MUST be:
 
 ```
-Ticket {{hb_rand}} needs a follow-up search. If the last hex digit of that ticket is 0, 2, 4, 6, or 8, call search_docs with query equal to the ticket and limit 1. Otherwise call search_docs with query execution timeout {{hb_rand}} and limit 3. Then write the full investigation for that ticket, start every paragraph with the ticket number, and do not stop until the maximum output length is reached.
+Ticket {{hb_rand}} needs a follow-up search. If the last hex digit of that ticket is 0, 2, 4, 6, or 8, call search_docs with query equal to the ticket and limit 1. Otherwise call search_docs with query execution timeout {{hb_rand}} and limit 3. After the tool call, write the investigation as several paragraphs. Paragraph 1 must start with the 1st hex character of the ticket, paragraph 2 with the 2nd, and so on. Each paragraph should cover a concrete check or finding tied to that character. Continue paragraph by paragraph in that order until you run out of output room; do not stop after one paragraph.
 ```
 
 The `tool-call` system message MUST be:

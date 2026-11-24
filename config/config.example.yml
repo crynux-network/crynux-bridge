@@ -21,7 +21,7 @@ admin:
 http:
   host: "0.0.0.0"
   port: "5028"
-  max_body_bytes: 2097152
+  max_body_bytes: 33554432
 data_dir:
   inference_tasks: "/app/data/inference_tasks"
   inference_tasks_retention_days: 7
@@ -63,7 +63,7 @@ task:
   heartbeat_tasks:
     batch_size: 0
     max_tasks_per_hour: 0
-    max_total_pending_tasks: 0
+    max_total_pending_tasks: 2
     # When greater than 0, heartbeat tasks still Queued on Relay for this long
     # are aborted locally and best-effort cancelled on Relay. 0 disables the limit.
     max_queued_duration: 3m
@@ -75,3 +75,4 @@ task_schema:
   stable_diffusion_inference: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/refs/tags/v3.7.1/schema/image-task.json"
   gpt_inference: "https://raw.githubusercontent.com/crynux-network/gpt-task/refs/tags/v3.7.0/schema/gpt-inference-task.json"
   stable_diffusion_finetune_lora: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/refs/tags/v3.7.1/schema/stable-diffusion-finetune-lora-task.json"
+  video_inference: "https://raw.githubusercontent.com/crynux-network/stable-diffusion-task/refs/tags/v3.8.0/schema/video-task.json"

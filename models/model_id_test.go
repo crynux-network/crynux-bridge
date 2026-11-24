@@ -65,6 +65,26 @@ func TestNormalizeTaskArgsModelNamesSDFTLora(t *testing.T) {
 	assertTaskArgsJSON(t, taskArgs, TaskTypeSDFTLora, wantArgs)
 }
 
+func TestNormalizeTaskArgsModelNamesVideo(t *testing.T) {
+	taskArgs := `{"version":"3.8.0","base_model":{"name":"Org/Video-Base"},"loras":[{"model":"Org/LoRA","weight":100},{"model":"https://Example.com/Models/MyLora.safetensors","weight":50}],"components":{"transformer":{"format":"diffusers","repo":"Org/Transformer"}},"prompt":"p","task_config":{"num_frames":16,"steps":20}}`
+	wantArgs := `{"version":"3.8.0","base_model":{"name":"org/video-base"},"loras":[{"model":"org/lora","weight":100},{"model":"https://Example.com/Models/MyLora.safetensors","weight":50}],"components":{"transformer":{"format":"diffusers","repo":"org/transformer"}},"prompt":"p","task_config":{"num_frames":16,"steps":20}}`
+	assertTaskArgsJSON(t, taskArgs, TaskTypeVideo, wantArgs)
+}
+
+func TestNormalizeModelID(t *testing.T) {
+	shaUpper := "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
+	shaLower := "abcdef0123456789abcdef0123456789abcdef01"
+	got := NormalizeModelID("Lora:Org/Repo@" + shaUpper + "#Weight.safetensors")
+	want := "lora:org/repo@" + shaLower + "#Weight.safetensors"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	urlID := "lora:https://Example.com/Models/MyLora.safetensors"
+	if NormalizeModelID(urlID) != urlID {
+		t.Fatalf("url model id changed: %q", NormalizeModelID(urlID))
+	}
+}
+
 func TestNormalizeTaskArgsModelNamesPreservesNumberLiterals(t *testing.T) {
 	taskArgs := `{"model":"Org/LLM","quantization_config":{"quant_method":"bitsandbytes","quant_kwargs":{"llm_int8_threshold":6.0,"load_in_8bit":true}}}`
 	got, err := NormalizeTaskArgsModelNames(taskArgs, TaskTypeLLM)

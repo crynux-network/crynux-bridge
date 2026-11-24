@@ -49,10 +49,14 @@ func populateClientTaskPhase(ctx context.Context, db *gorm.DB, clientTask *model
 	if err != nil {
 		return err
 	}
+	ordinary := models.OrdinaryTaskTypes()
 	filtered := make([]models.InferenceTask, 0, len(tasks))
 	for i := range tasks {
-		if tasks[i].TaskType == models.TaskTypeSD || tasks[i].TaskType == models.TaskTypeLLM {
-			filtered = append(filtered, tasks[i])
+		for _, taskType := range ordinary {
+			if tasks[i].TaskType == taskType {
+				filtered = append(filtered, tasks[i])
+				break
+			}
 		}
 	}
 	taskengine.ApplyClientTaskPhase(clientTask, filtered)

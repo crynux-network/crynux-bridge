@@ -23,7 +23,7 @@ import (
 
 type TaskInput struct {
 	TaskArgs        string                `json:"task_args" description:"Task args" validate:"required"`
-	TaskType        *models.ChainTaskType `json:"task_type" description:"Task type. 0 - SD task, 1 - LLM task, 2 - SD Finetune task" validate:"required"`
+	TaskType        *models.ChainTaskType `json:"task_type" description:"Task type. 0 - SD task, 1 - LLM task, 2 - SD Finetune task, 3 - Video task" validate:"required"`
 	MinVram         *uint64               `json:"min_vram,omitempty" description:"Task minimal vram requirement" validate:"omitempty"`
 	RequiredGPU     string                `json:"required_gpu,omitempty" description:"Task required GPU name" validate:"omitempty"`
 	RequiredGPUVram uint64                `json:"required_gpu_vram,omitempty" description:"Task required GPU Vram" validate:"omitempty"`
@@ -43,7 +43,8 @@ type TaskResponse struct {
 }
 
 func getDefaultMinVram(taskType models.ChainTaskType, taskArgs string) (uint64, error) {
-	if taskType == models.TaskTypeSD {
+	switch taskType {
+	case models.TaskTypeSD:
 		baseModel, err := models.GetSDTaskConfigBaseModel(taskArgs)
 		if err != nil {
 			return 0, err
@@ -56,20 +57,25 @@ func getDefaultMinVram(taskType models.ChainTaskType, taskArgs string) (uint64, 
 		default:
 			return 10, nil
 		}
-	} else {
+	case models.TaskTypeLLM, models.TaskTypeSDFTLora, models.TaskTypeVideo:
 		return 24, nil
+	default:
+		return 0, fmt.Errorf("unsupported task type %d", taskType)
 	}
 }
 
 func getTaskSize(taskType models.ChainTaskType, taskArgs string) (uint64, error) {
-	if taskType == models.TaskTypeSD {
+	switch taskType {
+	case models.TaskTypeSD:
 		num, err := models.GetTaskConfigNumImages(taskArgs)
 		if err != nil {
 			return 0, err
 		}
 		return uint64(num), nil
-	} else {
+	case models.TaskTypeLLM, models.TaskTypeSDFTLora, models.TaskTypeVideo:
 		return 1, nil
+	default:
+		return 0, fmt.Errorf("unsupported task type %d", taskType)
 	}
 }
 
@@ -140,7 +146,7 @@ func resolveTaskTimeout(taskType models.ChainTaskType, requested *uint64, appCon
 func resolveQueueTimeout(taskType models.ChainTaskType, requested *uint64) (uint64, error) {
 	if taskType == models.TaskTypeSDFTLora {
 		if requested != nil {
-			return 0, response.NewValidationErrorResponse("queue_timeout", "queue_timeout is only supported for ordinary SD and LLM tasks")
+			return 0, response.NewValidationErrorResponse("queue_timeout", "queue_timeout is only supported for ordinary SD, LLM, and video tasks")
 		}
 		return 0, nil
 	}
@@ -385,8 +391,8 @@ func validateRawTaskInput(in *TaskInput) error {
 }
 
 func validateTaskInput(in *TaskInput) error {
-	if in.TaskType == nil || *in.TaskType > models.TaskTypeSDFTLora {
-		return response.NewValidationErrorResponse("task_type", "task_type must be 0, 1, or 2")
+	if in.TaskType == nil || !models.IsSupportedTaskType(*in.TaskType) {
+		return response.NewValidationErrorResponse("task_type", "task_type must be 0, 1, 2, or 3")
 	}
 	if result, err := models.ValidateTaskArgsJsonStr(in.TaskArgs, *in.TaskType); err != nil {
 		if isTaskArgsJSONError(err) {

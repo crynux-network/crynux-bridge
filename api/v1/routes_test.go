@@ -18,6 +18,7 @@ func TestTaskResultOpenAPIResponseContent(t *testing.T) {
 	}{
 		{"/v1/inference_tasks/{client_task_id}/images/{index}", "image/png", "string", "binary"},
 		{"/v1/inference_tasks/{client_task_id}/llm", "application/json", "object", ""},
+		{"/v1/inference_tasks/{client_task_id}/video", "video/mp4", "string", "binary"},
 	}
 	for _, tt := range tests {
 		path := r.Generator().API().Paths[tt.path]

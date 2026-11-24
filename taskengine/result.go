@@ -56,7 +56,8 @@ func (e *Engine) downloadResult(ctx context.Context, task *models.InferenceTask)
 	}
 	defer os.RemoveAll(tempDirectory)
 
-	if task.TaskType == models.TaskTypeLLM {
+	switch task.TaskType {
+	case models.TaskTypeLLM:
 		if task.TaskSize != 1 {
 			return fmt.Errorf("LLM task size is %d, want 1", task.TaskSize)
 		}
@@ -71,7 +72,7 @@ func (e *Engine) downloadResult(ctx context.Context, task *models.InferenceTask)
 		if !json.Valid(content) {
 			return fmt.Errorf("LLM result is not valid JSON")
 		}
-	} else if task.TaskType == models.TaskTypeSD {
+	case models.TaskTypeSD:
 		if task.TaskSize == 0 {
 			return fmt.Errorf("SD task size is 0")
 		}
@@ -80,12 +81,8 @@ func (e *Engine) downloadResult(ctx context.Context, task *models.InferenceTask)
 			if err := relay.DownloadWholeTaskResult(ctx, task.TaskIDCommitment, tempFile); err != nil {
 				return err
 			}
-			info, err := os.Stat(tempFile)
-			if err != nil {
+			if err := verifyNonEmptyRegularFile(tempFile, "SD result 0.png"); err != nil {
 				return err
-			}
-			if !info.Mode().IsRegular() || info.Size() == 0 {
-				return fmt.Errorf("SD result 0.png is empty or not a regular file")
 			}
 		} else {
 			archiveFile := filepath.Join(tempDirectory, "result.zip")
@@ -99,14 +96,37 @@ func (e *Engine) downloadResult(ctx context.Context, task *models.InferenceTask)
 				return err
 			}
 		}
-	} else {
+	case models.TaskTypeVideo:
+		if task.TaskSize != 1 {
+			return fmt.Errorf("video task size is %d, want 1", task.TaskSize)
+		}
+		tempFile := filepath.Join(tempDirectory, "0.mp4")
+		if err := relay.DownloadWholeTaskResult(ctx, task.TaskIDCommitment, tempFile); err != nil {
+			return err
+		}
+		if err := verifyNonEmptyRegularFile(tempFile, "video result 0.mp4"); err != nil {
+			return err
+		}
+	default:
 		return fmt.Errorf("unsupported result task type %d", task.TaskType)
 	}
 	return os.Rename(tempDirectory, finalDirectory)
 }
 
+func verifyNonEmptyRegularFile(path, label string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() || info.Size() == 0 {
+		return fmt.Errorf("%s is empty or not a regular file", label)
+	}
+	return nil
+}
+
 func verifyResultDirectory(directory string, task *models.InferenceTask) error {
-	if task.TaskType == models.TaskTypeLLM {
+	switch task.TaskType {
+	case models.TaskTypeLLM:
 		content, err := os.ReadFile(filepath.Join(directory, "0.json"))
 		if err != nil {
 			return err
@@ -115,18 +135,38 @@ func verifyResultDirectory(directory string, task *models.InferenceTask) error {
 			return fmt.Errorf("LLM result is not valid JSON")
 		}
 		return nil
-	}
-	if task.TaskType != models.TaskTypeSD {
+	case models.TaskTypeVideo:
+		if task.TaskSize != 1 {
+			return fmt.Errorf("video task size is %d, want 1", task.TaskSize)
+		}
+		return verifySingleResultFile(directory, "0.mp4", task.TaskSize)
+	case models.TaskTypeSD:
+		return verifySDResultDirectory(directory, task.TaskSize)
+	default:
 		return fmt.Errorf("unsupported result task type %d", task.TaskType)
 	}
+}
+
+func verifySingleResultFile(directory, filename string, taskSize uint64) error {
 	entries, err := os.ReadDir(directory)
 	if err != nil {
 		return err
 	}
-	if uint64(len(entries)) != task.TaskSize {
-		return fmt.Errorf("result directory has %d entries, want %d", len(entries), task.TaskSize)
+	if uint64(len(entries)) != taskSize {
+		return fmt.Errorf("result directory has %d entries, want %d", len(entries), taskSize)
 	}
-	for index := uint64(0); index < task.TaskSize; index++ {
+	return verifyNonEmptyRegularFile(filepath.Join(directory, filename), filename)
+}
+
+func verifySDResultDirectory(directory string, taskSize uint64) error {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return err
+	}
+	if uint64(len(entries)) != taskSize {
+		return fmt.Errorf("result directory has %d entries, want %d", len(entries), taskSize)
+	}
+	for index := uint64(0); index < taskSize; index++ {
 		info, err := os.Stat(filepath.Join(directory, fmt.Sprintf("%d.png", index)))
 		if err != nil {
 			return err

@@ -42,7 +42,7 @@ func PinTaskArgsRevisions(taskArgs string, taskType ChainTaskType, files ModelFi
 			matched[i] = struct{}{}
 			pinned = true
 		}
-	case TaskTypeSD:
+	case TaskTypeSD, TaskTypeVideo:
 		baseModel, _ := args["base_model"].(map[string]any)
 		if baseModel == nil {
 			return "", errors.New("task args base_model is missing")

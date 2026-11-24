@@ -79,6 +79,7 @@ type AppConfig struct {
 		StableDiffusionInference    string `mapstructure:"stable_diffusion_inference"`
 		GPTInference                string `mapstructure:"gpt_inference"`
 		StableDiffusionFinetuneLora string `mapstructure:"stable_diffusion_finetune_lora"`
+		VideoInference              string `mapstructure:"video_inference"`
 	} `mapstructure:"task_schema"`
 
 	Test struct {

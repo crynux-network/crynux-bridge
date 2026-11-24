@@ -25,12 +25,21 @@ type GetLLMResultInput struct {
 	Authorization string `header:"Authorization" validate:"required" description:"API key"`
 }
 
+type GetVideoResultInput struct {
+	ClientTaskID  uint   `path:"client_task_id" description:"Client task id" validate:"required"`
+	Authorization string `header:"Authorization" validate:"required" description:"API key"`
+}
+
 func GetAuthenticatedTaskImage(c *gin.Context, in *GetAuthenticatedTaskImageInput) error {
 	return getTaskResult(c, in.ClientTaskID, in.Authorization, *in.Index, models.TaskTypeSD)
 }
 
 func GetLLMResult(c *gin.Context, in *GetLLMResultInput) error {
 	return getTaskResult(c, in.ClientTaskID, in.Authorization, 0, models.TaskTypeLLM)
+}
+
+func GetVideoResult(c *gin.Context, in *GetVideoResultInput) error {
+	return getTaskResult(c, in.ClientTaskID, in.Authorization, 0, models.TaskTypeVideo)
 }
 
 func getTaskResult(c *gin.Context, clientTaskID uint, authorization string, index uint64, expectedTaskType models.ChainTaskType) error {
@@ -70,9 +79,13 @@ func getTaskResult(c *gin.Context, clientTaskID uint, authorization string, inde
 func serveAuthenticatedTaskResultFile(c *gin.Context, task *models.InferenceTask, index uint64) error {
 	extension := "png"
 	contentType := "image/png"
-	if task.TaskType == models.TaskTypeLLM {
+	switch task.TaskType {
+	case models.TaskTypeLLM:
 		extension = "json"
 		contentType = "application/json"
+	case models.TaskTypeVideo:
+		extension = "mp4"
+		contentType = "video/mp4"
 	}
 	filename := fmt.Sprintf("%d.%s", index, extension)
 	resultFile := filepath.Join(
@@ -96,7 +109,7 @@ func serveAuthenticatedTaskResultFile(c *gin.Context, task *models.InferenceTask
 func classifyResultFileError(taskType models.ChainTaskType, err error) error {
 	if os.IsNotExist(err) {
 		field := "index"
-		if taskType == models.TaskTypeLLM {
+		if taskType == models.TaskTypeLLM || taskType == models.TaskTypeVideo {
 			field = "client_task_id"
 		}
 		return response.NewValidationErrorResponse(field, "Result not found")

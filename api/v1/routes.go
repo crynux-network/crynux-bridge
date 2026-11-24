@@ -72,6 +72,12 @@ func InitRoutes(r *fizz.Fizz) {
 		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
 		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
 	}, tonic.Handler(inference_tasks.GetLLMResult, 200))
+
+	tasksGroup.GET("/:client_task_id/video", []fizz.OperationOption{
+		fizz.Summary("Download video task MP4 result with API key authentication"),
+		fizz.Response("400", "validation errors", response.ValidationErrorResponse{}, nil, nil),
+		fizz.Response("500", "exception", response.ExceptionResponse{}, nil, nil),
+	}, tonic.Handler(inference_tasks.GetVideoResult, 200))
 	setTaskResultResponseContent(r)
 
 	modelsGroup := v1g.Group("models", "Models", "Models related APIs")
@@ -169,6 +175,7 @@ func setTaskResultResponseContent(r *fizz.Fizz) {
 	}{
 		{"/v1/inference_tasks/{client_task_id}/images/{index}", "image/png", "string", "binary"},
 		{"/v1/inference_tasks/{client_task_id}/llm", "application/json", "object", ""},
+		{"/v1/inference_tasks/{client_task_id}/video", "video/mp4", "string", "binary"},
 	}
 	for _, item := range responses {
 		pathItem := r.Generator().API().Paths[item.path]
